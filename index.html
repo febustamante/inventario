@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<title>San Jose Inventario</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --vino:#7B2D2D;--vino2:#5e2121;--vino3:#9d3b3b;
+  --vino-glow:rgba(123,45,45,.15);--gold:#C4933F;
+  --bg:#f7f3f0;--surf:#fff;--surf2:#faf7f5;--surf3:#f2ece8;
+  --bd:#e8ddd8;--bd2:#d4c4bc;
+  --tx:#1a0f0f;--tx2:#6b4f4f;--tx3:#a8908a;
+  --green:#2d6b2d;--green-bg:#e8f5e8;
+  --amber:#8a5e00;--amber-bg:#fff3d4;
+  --red:#8a1a1a;--red-bg:#fce8e8;
+  --blue:#1a4a8a;--blue-bg:#e8f0fc;
+  --purple:#4a1a8a;--purple-bg:#f0e8fc;
+  --r:10px;--rl:16px;--rx:20px;
+  --shadow:0 1px 3px rgba(0,0,0,.08),0 4px 16px rgba(123,45,45,.06);
+  --shadow-lg:0 4px 24px rgba(0,0,0,.12),0 12px 40px rgba(123,45,45,.1);
+  --safe-b:env(safe-area-inset-bottom,0px);
+  --safe-t:env(safe-area-inset-top,0px);
+}
+html{height:100%;background:var(--vino)}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--tx);font-size:15px;min-height:100%;overflow-x:hidden}
+input,select,textarea,button{font-family:'Inter',system-ui,sans-serif;font-size:16px}
+
+.screen{display:none;min-height:100vh}.screen.active{display:block}
+
+/* LOGIN */
+#sl{min-height:100vh;background:linear-gradient(160deg,var(--vino2) 0%,var(--vino) 40%,#a04040 100%);display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:calc(var(--safe-t) + 2rem) 1.25rem 2rem}
+.login-hero{text-align:center;margin-bottom:2rem;color:#fff}
+.login-grape{font-size:52px;margin-bottom:.5rem}
+.login-ag{font-size:11px;letter-spacing:.2em;text-transform:uppercase;opacity:.7;margin-bottom:4px}
+.login-name{font-size:34px;font-weight:700;letter-spacing:-1px;text-shadow:0 2px 12px rgba(0,0,0,.3)}
+.login-tagline{font-size:13px;opacity:.6;margin-top:6px}
+.login-card{background:var(--surf);border-radius:var(--rx);padding:1.5rem;width:100%;max-width:420px;box-shadow:var(--shadow-lg)}
+.login-section-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--tx3);margin-bottom:.75rem}
+.user-btn{display:flex;align-items:center;gap:12px;padding:13px 14px;border-radius:var(--r);border:1.5px solid var(--bd);background:var(--surf2);cursor:pointer;width:100%;margin-bottom:8px;text-align:left;transition:all .15s;min-height:58px}
+.user-btn:active,.user-btn.sel{border-color:var(--vino);background:var(--vino-glow);box-shadow:0 0 0 3px var(--vino-glow)}
+.user-btn.sel .av{box-shadow:0 0 0 2px var(--surf),0 0 0 4px var(--vino)}
+.av{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;flex-shrink:0;color:#fff;transition:box-shadow .15s}
+.av-m{background:linear-gradient(135deg,var(--vino),#c04040)}
+.av-b{background:linear-gradient(135deg,#3d5a80,#5b7fa0)}
+.av-d{background:linear-gradient(135deg,#2d6b3a,#4a9a5a)}
+.av-g{background:linear-gradient(135deg,var(--gold),#e0aa55)}
+.user-name{font-size:14px;font-weight:600;color:var(--tx)}
+.user-desc{font-size:12px;color:var(--tx3);margin-top:1px}
+.pin-section{margin-top:1.25rem}
+.pin-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--tx3);display:block;margin-bottom:.5rem}
+.pin-dots{display:flex;gap:10px;justify-content:center;margin-bottom:.875rem}
+.pin-dot{width:14px;height:14px;border-radius:50%;border:2px solid var(--bd2);background:transparent;transition:all .2s}
+.pin-dot.filled{background:var(--vino);border-color:var(--vino);transform:scale(1.1)}
+.pin-numpad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:1rem}
+.pin-key{padding:16px;border-radius:var(--r);border:1px solid var(--bd);background:var(--surf2);font-size:20px;font-weight:500;cursor:pointer;text-align:center;color:var(--tx);transition:all .1s;min-height:56px;display:flex;align-items:center;justify-content:center}
+.pin-key:active{background:var(--vino-glow);border-color:var(--vino);transform:scale(.96)}
+.pin-key.del{font-size:16px;color:var(--tx2)}
+.pin-key.enter{background:var(--vino);color:#fff;border-color:var(--vino);font-size:14px;font-weight:600}
+.pin-key.enter:active{background:var(--vino2)}
+.pin-error{font-size:13px;color:var(--red);text-align:center;min-height:18px;font-weight:500}
+
+/* APP */
+#sa{display:none;flex-direction:column;height:100vh;max-height:100vh;overflow:hidden}
+#sa.active{display:flex}
+.topbar{background:var(--vino);padding:calc(var(--safe-t) + .75rem) 1rem .75rem;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;position:relative;z-index:50;box-shadow:0 2px 12px rgba(0,0,0,.2)}
+.topbar-brand{display:flex;align-items:center;gap:10px}
+.topbar-grape{font-size:22px;color:rgba(255,255,255,.9)}
+.topbar-name{font-size:16px;font-weight:700;color:#fff;letter-spacing:-.3px}
+.topbar-user{font-size:11px;color:rgba(255,255,255,.6);margin-top:1px}
+.topbar-right{display:flex;align-items:center;gap:8px}
+.role-chip{font-size:10px;padding:3px 9px;border-radius:20px;font-weight:600;background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.2);max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.btn-out{padding:7px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.1);color:#fff;font-size:12px;cursor:pointer;font-weight:500;min-height:34px}
+.btn-out:active{background:rgba(255,255,255,.2)}
+
+/* SYNC BAR */
+.sync-bar{background:#1a2a1a;padding:8px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-shrink:0;border-bottom:1px solid #2a4a2a}
+.sync-status{display:flex;align-items:center;gap:8px;font-size:12px}
+.sync-dot{width:8px;height:8px;border-radius:50%;background:#e74c3c;flex-shrink:0;transition:background .3s}
+.sync-dot.on{background:#2ecc71}
+.sync-dot.loading{background:#f39c12;animation:pulse 1s infinite}
+.sync-txt{color:#aaa}
+.sync-txt.on{color:#2ecc71}
+.btn-sync{padding:5px 12px;border-radius:6px;border:1px solid #2ecc71;background:transparent;color:#2ecc71;font-size:11px;cursor:pointer;font-weight:500;white-space:nowrap}
+.btn-sync:active{background:#2ecc7120}
+.btn-sync:disabled{opacity:.4;cursor:not-allowed}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+.app-scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:1rem 1rem calc(80px + var(--safe-b)) 1rem}
+.panel{display:none}.panel.active{display:block}
+
+.bottom-nav{background:var(--surf);border-top:1px solid var(--bd);padding:6px 0 calc(6px + var(--safe-b));display:flex;flex-shrink:0;position:relative;z-index:50;box-shadow:0 -4px 16px rgba(0,0,0,.06)}
+.nav-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:4px 2px;cursor:pointer;border:none;background:transparent;color:var(--tx3);min-height:52px;position:relative;transition:color .15s}
+.nav-item:active{background:var(--surf3)}
+.nav-item.active{color:var(--vino)}
+.nav-item.active::before{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:24px;height:3px;background:var(--vino);border-radius:0 0 3px 3px}
+.nav-icon{font-size:22px;line-height:1;transition:transform .15s}
+.nav-item.active .nav-icon{transform:scale(1.1)}
+.nav-label{font-size:9px;font-weight:600;letter-spacing:.02em;text-transform:uppercase}
+
+.section-header{margin-bottom:1rem}
+.section-title{font-size:20px;font-weight:700;color:var(--tx);letter-spacing:-.3px}
+.section-sub{font-size:13px;color:var(--tx3);margin-top:2px}
+
+.stats-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:1.25rem}
+.stat-card{background:var(--surf);border-radius:var(--rl);padding:1rem;box-shadow:var(--shadow);border:1px solid var(--bd)}
+.stat-icon{font-size:20px;margin-bottom:6px}
+.stat-label{font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.05em;color:var(--tx3);margin-bottom:4px}
+.stat-value{font-size:26px;font-weight:700;line-height:1;letter-spacing:-.5px}
+.sv-vino{color:var(--vino)}.sv-green{color:var(--green)}.sv-amber{color:var(--amber)}.sv-red{color:var(--red)}.sv-blue{color:var(--blue)}.sv-purple{color:var(--purple)}
+
+.loc-row{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:1.25rem}
+.loc-card{background:var(--surf);border-radius:var(--r);padding:.875rem 1rem;box-shadow:var(--shadow);border:1px solid var(--bd);display:flex;align-items:center;gap:10px}
+.loc-icon{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.loc-name{font-size:11px;font-weight:500;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em}
+.loc-val{font-size:18px;font-weight:700;color:var(--tx);letter-spacing:-.3px}
+
+.card{background:var(--surf);border-radius:var(--rl);border:1px solid var(--bd);box-shadow:var(--shadow);overflow:hidden;margin-bottom:1rem}
+.card-header{padding:12px 14px;background:var(--surf2);border-bottom:1px solid var(--bd);display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.card-title{font-size:13px;font-weight:600;color:var(--vino);display:flex;align-items:center;gap:6px}
+
+.prod-item{padding:12px 14px;border-bottom:1px solid var(--bd);display:flex;align-items:center;justify-content:space-between;gap:8px}
+.prod-item:last-child{border-bottom:none}
+.prod-item:active{background:var(--surf2)}
+.prod-info{flex:1;min-width:0}
+.prod-name{font-size:14px;font-weight:500;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prod-fam{font-size:11px;color:var(--tx3);margin-top:1px}
+.prod-stocks{display:flex;gap:6px;align-items:center;flex-shrink:0}
+.prod-total{font-size:16px;font-weight:700;color:var(--tx);min-width:40px;text-align:right}
+
+.badge{display:inline-flex;align-items:center;gap:3px;padding:3px 8px;border-radius:20px;font-size:10px;font-weight:600;white-space:nowrap}
+.b-ok{background:var(--green-bg);color:var(--green)}
+.b-low{background:var(--amber-bg);color:var(--amber)}
+.b-out{background:var(--red-bg);color:var(--red)}
+.b-venc{background:var(--purple-bg);color:var(--purple)}
+.b-info{background:var(--blue-bg);color:var(--blue)}
+
+.search-wrap{position:relative;margin-bottom:10px}
+.search-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--tx3);font-size:16px;pointer-events:none}
+.search-input{width:100%;padding:12px 12px 12px 38px;border:1.5px solid var(--bd2);border-radius:var(--r);background:var(--surf);color:var(--tx);font-size:15px;outline:none}
+.search-input:focus{border-color:var(--vino)}
+.filter-row{display:flex;gap:8px;margin-bottom:1rem;overflow-x:auto;padding-bottom:2px}
+.filter-chip{padding:6px 12px;border-radius:20px;border:1.5px solid var(--bd2);background:var(--surf);color:var(--tx2);font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;flex-shrink:0}
+.filter-chip.active{background:var(--vino);color:#fff;border-color:var(--vino)}
+
+.form-box{background:var(--surf);border-radius:var(--rl);padding:1.25rem;box-shadow:var(--shadow);border:1px solid var(--bd);margin-bottom:1rem}
+.form-title{font-size:16px;font-weight:600;color:var(--tx);margin-bottom:1.25rem;display:flex;align-items:center;gap:8px}
+.form-title-icon{width:32px;height:32px;border-radius:8px;background:var(--vino-glow);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.form-group{margin-bottom:12px}
+.form-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3);display:block;margin-bottom:6px}
+.required{color:var(--red)}
+.form-control{width:100%;padding:13px 14px;border:1.5px solid var(--bd2);border-radius:var(--r);background:var(--surf3);color:var(--tx);font-size:15px;outline:none;transition:border-color .15s,box-shadow .15s;-webkit-appearance:none;appearance:none}
+.form-control:focus{border-color:var(--vino);box-shadow:0 0 0 3px var(--vino-glow);background:var(--surf)}
+.form-control::placeholder{color:var(--tx3)}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.form-avail{font-size:13px;color:var(--green);font-weight:500;margin-top:4px}
+.form-avail.warn{color:var(--amber)}
+.form-avail.err{color:var(--red)}
+
+.btn-primary{width:100%;padding:16px;border-radius:var(--r);border:none;background:var(--vino);color:#fff;font-size:16px;font-weight:600;cursor:pointer;margin-top:1rem;box-shadow:0 4px 12px rgba(123,45,45,.3);transition:all .15s;display:flex;align-items:center;justify-content:center;gap:8px;min-height:52px}
+.btn-primary:active{background:var(--vino2);transform:scale(.98)}
+.btn-sec{padding:10px 16px;border-radius:var(--r);border:1.5px solid var(--bd2);background:var(--surf);color:var(--tx2);font-size:14px;font-weight:500;cursor:pointer}
+.btn-sec:active{background:var(--surf3)}
+
+.orden-line{background:var(--surf3);border:1px solid var(--bd);border-radius:var(--r);padding:10px 12px;margin-bottom:8px;display:grid;grid-template-columns:1fr 90px 36px;gap:8px;align-items:center}
+.orden-line select,.orden-line input{padding:10px;border:1.5px solid var(--bd2);border-radius:8px;background:var(--surf);color:var(--tx);font-size:14px;outline:none;-webkit-appearance:none;appearance:none}
+.orden-line select:focus,.orden-line input:focus{border-color:var(--vino)}
+
+.orden-card{background:var(--surf);border:1px solid var(--bd);border-radius:var(--rl);padding:1rem;margin-bottom:10px;box-shadow:var(--shadow)}
+.orden-card-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:.75rem}
+.orden-num-badge{background:var(--vino);color:#fff;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:700}
+.orden-date{font-size:12px;color:var(--tx3)}
+.orden-campo-chip{display:inline-flex;align-items:center;gap:4px;background:var(--vino-glow);color:var(--vino);padding:3px 10px;border-radius:20px;font-size:12px;font-weight:500;margin-bottom:.5rem}
+.orden-prod-line{font-size:13px;color:var(--tx2);padding:3px 0;border-bottom:1px solid var(--bd);display:flex;gap:8px}
+.orden-prod-line:last-child{border-bottom:none}
+.orden-prod-qty{font-weight:600;color:var(--tx);min-width:30px}
+
+.move-item{padding:12px 14px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:12px}
+.move-item:last-child{border-bottom:none}
+.move-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.move-body{flex:1;min-width:0}
+.move-prod{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.move-detail{font-size:11px;color:var(--tx3);margin-top:1px}
+.move-right{text-align:right;flex-shrink:0}
+.move-qty{font-size:14px;font-weight:600}
+.move-date{font-size:10px;color:var(--tx3);margin-top:2px}
+
+.alert-item{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:var(--r);margin-bottom:6px;border:1px solid}
+.alert-item.crit{background:var(--red-bg);border-color:#f0a0a0;color:var(--red)}
+.alert-item.warn{background:var(--amber-bg);border-color:#f0c878;color:var(--amber)}
+
+.chart-container{padding:1rem;position:relative}
+.chart-wrap{position:relative;width:100%;height:200px}
+.chart-wrap-sm{position:relative;width:100%;height:160px}
+
+.kpi-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:1rem}
+.kpi-card{background:var(--surf);border:1px solid var(--bd);border-radius:var(--rl);padding:1rem;box-shadow:var(--shadow)}
+.kpi-icon{font-size:20px;margin-bottom:.5rem}
+.kpi-val{font-size:24px;font-weight:700;letter-spacing:-.5px}
+.kpi-label{font-size:11px;color:var(--tx3);margin-top:2px}
+
+#toast{position:fixed;bottom:calc(72px + var(--safe-b));left:1rem;right:1rem;padding:14px 16px;border-radius:var(--r);font-size:14px;font-weight:500;z-index:9999;display:none;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,.2)}
+#toast.ok{background:var(--green-bg);border:1.5px solid #78b878;color:var(--green)}
+#toast.err{background:var(--red-bg);border:1.5px solid #e07070;color:var(--red)}
+#toast.info{background:var(--blue-bg);border:1.5px solid #78a0e0;color:var(--blue)}
+
+.empty-state{text-align:center;padding:2.5rem 1rem;color:var(--tx3)}
+.empty-icon{font-size:40px;margin-bottom:.75rem;opacity:.4}
+.empty-text{font-size:14px}
+.divider{height:1px;background:var(--bd);margin:1rem 0}
+.section-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3);margin-bottom:.75rem}
+
+/* LOADING OVERLAY */
+.loading-overlay{position:fixed;inset:0;background:rgba(123,45,45,.85);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;gap:16px}
+.loading-spinner{width:48px;height:48px;border:4px solid rgba(255,255,255,.2);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite}
+.loading-text{color:#fff;font-size:14px;font-weight:500}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="sl" class="screen active">
+  <div class="login-hero">
+    <div class="login-grape">🍇</div>
+    <div class="login-ag">Agricola</div>
+    <div class="login-name">San Jose</div>
+    <div class="login-tagline">Sistema de inventario fitosanitario</div>
+  </div>
+  <div class="login-card">
+    <div class="login-section-label">Selecciona tu usuario</div>
+    <div id="user-list"></div>
+    <div class="pin-section" id="pin-section" style="display:none">
+      <span class="pin-label">Ingresa tu PIN</span>
+      <div class="pin-dots" id="pin-dots">
+        <div class="pin-dot" id="d0"></div>
+        <div class="pin-dot" id="d1"></div>
+        <div class="pin-dot" id="d2"></div>
+        <div class="pin-dot" id="d3"></div>
+      </div>
+      <div class="pin-numpad" id="numpad"></div>
+      <div class="pin-error" id="pin-error"></div>
+    </div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="sa" class="screen">
+  <div class="topbar">
+    <div class="topbar-brand">
+      <span class="topbar-grape">🍇</span>
+      <div>
+        <div class="topbar-name">San Jose</div>
+        <div class="topbar-user" id="topbar-user"></div>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <span class="role-chip" id="role-chip"></span>
+      <button class="btn-out" onclick="doLogout()">Salir</button>
+    </div>
+  </div>
+
+  <div class="sync-bar">
+    <div class="sync-status">
+      <div class="sync-dot" id="sync-dot"></div>
+      <span class="sync-txt" id="sync-txt">Conectando con Google Sheets...</span>
+    </div>
+    <button class="btn-sync" id="btn-sync" onclick="syncData()" disabled>Sincronizar</button>
+  </div>
+
+  <div class="app-scroll" id="app-scroll">
+    <div id="panels-container"></div>
+  </div>
+  <nav class="bottom-nav" id="bottom-nav"></nav>
+</div>
+
+<div id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+// =====================================================
+// CONFIG - URL de Google Sheets ya conectada
+// =====================================================
+const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbxRnV6_Bf98oST7cEgDgLxDQ82xhv3MDnuJpE34A5RwhIz_NxJCgzwrarMo-dnn5Q/exec';
+
+const LOCS = ['Bodega Central','Caseta Cerrillos','Rulo','Paine'];
+const LOC_ICONS = {'Bodega Central':'🏭','Caseta Cerrillos':'🏠','Rulo':'🌿','Paine':'🌾'};
+const LOC_COLORS = {'Bodega Central':'#7B2D2D','Caseta Cerrillos':'#3d5a80','Rulo':'#2d6b3a','Paine':'#8a5e00'};
+
+const USERS = [
+  {id:'maestro',name:'Felipe',     full:'Felipe · Maestro',  role:'maestro',    pin:'1234',av:'av-m',desc:'Acceso total'},
+  {id:'bodeg',  name:'Bodeguero',  full:'Carlos · Bodeguero',role:'bodeguero',  pin:'2222',av:'av-b',desc:'Bodega Central'},
+  {id:'rulo',   name:'Rulo',       full:'Rulo · Campo 1',    role:'dosificador',pin:'3333',av:'av-d',desc:'Dosificador Rulo'},
+  {id:'paine',  name:'Ana',        full:'Ana · Paine',       role:'dosificador',pin:'4444',av:'av-d',desc:'Dosificador Paine'},
+  {id:'geren',  name:'Gerencia',   full:'Vista Gerencial',   role:'gerencia',   pin:'5555',av:'av-g',desc:'Vista ejecutiva'},
+];
+
+// Estado
+let stockByLoc = {};
+let products = [];
+let movimientos = [], ordenes = [];
+let nextMov = 1, nextOrden = 1;
+let curUser = null, selUser = null, curTab = 0;
+let chartInst = {}, extraLines = 4;
+let pinBuffer = '';
+let sheetsConnected = false;
+
+// ── HELPERS ──
+function totalStock(pid){return Object.values(stockByLoc[pid]||{}).reduce((a,b)=>a+b,0)}
+function stockAt(pid,loc){return(stockByLoc[pid]||{})[loc]||0}
+function addStock(pid,loc,delta){
+  if(!stockByLoc[pid])stockByLoc[pid]={};
+  stockByLoc[pid][loc]=(stockByLoc[pid][loc]||0)+delta;
+  if(stockByLoc[pid][loc]<0)stockByLoc[pid][loc]=0;
+}
+function statusOf(pid){
+  const p=products.find(x=>x.id===pid);
+  if(!p)return['?',''];
+  if(p.vencido)return['Vencido','b-venc'];
+  const t=totalStock(pid);
+  if(t<=0)return['Agotado','b-out'];
+  if(t<=p.minimo)return['Stock bajo','b-low'];
+  return['En stock','b-ok'];
+}
+function fmt(n){return parseFloat(parseFloat(n||0).toFixed(2))}
+function hoy(){return new Date().toLocaleDateString('es-CL')}
+function prodOpts(){return products.map(p=>`<option value="${p.id}">${p.nombre}</option>`).join('')}
+function locOpts(def){return LOCS.map(l=>`<option${l===def?' selected':''}>${l}</option>`).join('')}
+function fieldLocsExclude(ex,def){return LOCS.filter(l=>l!==ex).map(l=>`<option${l===def?' selected':''}>${l}</option>`).join('')}
+
+// ── GOOGLE SHEETS ──
+async function fetchSheets(params) {
+  const url = SHEETS_URL + '?' + new URLSearchParams(params).toString();
+  const r = await fetch(url);
+  const j = await r.json();
+  return j.data;
+}
+
+async function postSheets(body) {
+  try {
+    await fetch(SHEETS_URL, {
+      method: 'POST',
+      body: JSON.stringify(body),
+      headers: {'Content-Type':'application/json'}
+    });
+  } catch(e) { console.warn('Post failed', e); }
+}
+
+async function syncData() {
+  setSyncStatus('loading', 'Sincronizando...');
+  document.getElementById('btn-sync').disabled = true;
+  try {
+    const data = await fetchSheets({action:'stock'});
+    if (data && data.length) {
+      // Rebuild products from sheet
+      products = [];
+      stockByLoc = {};
+      data.forEach((row, i) => {
+        const id = parseInt(row['ID']) || (i + 1);
+        const nombre = String(row['NOMBRE'] || row['Nombre'] || '').trim();
+        const familia = String(row['FAMILIA'] || row['Familia'] || '').trim();
+        if (!nombre) return;
+        products.push({
+          id,
+          nombre,
+          familia: familia || 'SIN FAMILIA',
+          vencido: String(row['VENCIDO']||row['Vencido']||'').toUpperCase() === 'TRUE',
+          minimo: parseFloat(row['MINIMO_ALERTA']||row['Minimo']||5) || 5,
+        });
+        stockByLoc[id] = {
+          'Bodega Central':   parseFloat(row['BODEGA_CENTRAL']||row['Bodega Central']||0)||0,
+          'Caseta Cerrillos': parseFloat(row['CASETA_CERRILLOS']||row['Caseta Cerrillos']||0)||0,
+          'Rulo':             parseFloat(row['RULO']||row['Rulo']||0)||0,
+          'Paine':            parseFloat(row['PAINE']||row['Paine']||0)||0,
+        };
+      });
+      sheetsConnected = true;
+      setSyncStatus('on', 'Conectado · ' + products.length + ' productos');
+      showToast('Sincronizado: ' + products.length + ' productos cargados');
+      refresh();
+    } else {
+      setSyncStatus('off', 'Sheet vacio o sin datos en STOCK');
+      showToast('La hoja STOCK esta vacia. Agrega productos primero.', 'err');
+    }
+  } catch(e) {
+    setSyncStatus('off', 'Error de conexion');
+    showToast('No se pudo conectar. Revisa tu conexion a internet.', 'err');
+  }
+  document.getElementById('btn-sync').disabled = false;
+}
+
+function setSyncStatus(state, txt) {
+  const dot = document.getElementById('sync-dot');
+  const t   = document.getElementById('sync-txt');
+  dot.className = 'sync-dot' + (state==='on'?' on':state==='loading'?' loading':'');
+  t.className   = 'sync-txt' + (state==='on'?' on':'');
+  t.textContent = txt;
+}
+
+// ── LOGIN ──
+function initLogin() {
+  document.getElementById('user-list').innerHTML = USERS.map(u=>`
+    <button class="user-btn" onclick="selectUser('${u.id}')" id="ub-${u.id}">
+      <div class="av ${u.av}">${u.name[0]}</div>
+      <div><div class="user-name">${u.full}</div><div class="user-desc">${u.desc}</div></div>
+    </button>`).join('');
+  buildNumpad();
+}
+
+function selectUser(id) {
+  selUser = USERS.find(u=>u.id===id);
+  document.querySelectorAll('.user-btn').forEach(b=>b.classList.remove('sel'));
+  document.getElementById('ub-'+id).classList.add('sel');
+  pinBuffer = '';
+  updatePinDots();
+  document.getElementById('pin-section').style.display = 'block';
+  document.getElementById('pin-error').textContent = '';
+}
+
+function buildNumpad() {
+  const keys = ['1','2','3','4','5','6','7','8','9','X','0','OK'];
+  document.getElementById('numpad').innerHTML = keys.map(k=>`
+    <button class="pin-key${k==='X'?' del':k==='OK'?' enter':''}" onclick="pinKey('${k}')">${k==='X'?'&#9003;':k==='OK'?'Entrar':k}</button>`).join('');
+}
+
+function pinKey(k) {
+  if(k==='X'){ pinBuffer=pinBuffer.slice(0,-1); }
+  else if(k==='OK'){ attemptLogin(); return; }
+  else if(pinBuffer.length<4){ pinBuffer+=k; }
+  updatePinDots();
+  if(pinBuffer.length===4) setTimeout(attemptLogin,150);
+}
+
+function updatePinDots() {
+  for(let i=0;i<4;i++) document.getElementById('d'+i)?.classList.toggle('filled',i<pinBuffer.length);
+}
+
+function attemptLogin() {
+  if(!selUser) return;
+  if(pinBuffer===selUser.pin) {
+    curUser = selUser;
+    document.getElementById('sl').classList.remove('active');
+    document.getElementById('sa').classList.add('active');
+    document.getElementById('topbar-user').textContent = curUser.full;
+    document.getElementById('role-chip').textContent = curUser.desc;
+    buildApp();
+    // Auto sync on login
+    document.getElementById('btn-sync').disabled = false;
+    syncData();
+  } else {
+    document.getElementById('pin-error').textContent = 'PIN incorrecto. Intenta de nuevo.';
+    pinBuffer = '';
+    updatePinDots();
+    setTimeout(()=>{ document.getElementById('pin-error').textContent=''; },2000);
+  }
+}
+
+function doLogout() {
+  curUser=null; selUser=null; pinBuffer='';
+  document.getElementById('sa').classList.remove('active');
+  document.getElementById('sl').classList.add('active');
+  document.querySelectorAll('.user-btn').forEach(b=>b.classList.remove('sel'));
+  document.getElementById('pin-section').style.display='none';
+  updatePinDots();
+  Object.values(chartInst).forEach(c=>{try{c.destroy()}catch(e){}});
+  chartInst={};
+  setSyncStatus('off','Sin conectar');
+  sheetsConnected=false;
+}
+
+// ── TABS ──
+function getTabs(role) {
+  const all = [
+    {k:'stock',    icon:'📦',label:'Stock',    roles:['maestro','bodeguero','gerencia'], render:renderStock},
+    {k:'recibir',  icon:'📥',label:'Recibir',  roles:['maestro','bodeguero'],            render:renderRecibir},
+    {k:'transfer', icon:'↔️',label:'Mover',    roles:['maestro','bodeguero'],            render:renderTransferir},
+    {k:'devol',    icon:'↩️',label:'Devolver', roles:['maestro','bodeguero','dosificador'],render:renderDevolucion},
+    {k:'orden',    icon:'💧',label:'Aplicar',  roles:['maestro','dosificador'],          render:renderOrden},
+    {k:'historial',icon:'📋',label:'Historial',roles:['maestro','bodeguero','gerencia'], render:renderHistorial},
+    {k:'gerencia', icon:'📊',label:'Gerencia', roles:['maestro','gerencia'],             render:renderGerencia},
+    {k:'admin',    icon:'⚙️',label:'Admin',    roles:['maestro'],                        render:renderAdmin},
+  ];
+  return all.filter(t=>t.roles.includes(role));
+}
+
+function buildApp() {
+  const tabs = getTabs(curUser.role);
+  curTab = 0;
+  document.getElementById('bottom-nav').innerHTML = tabs.map((t,i)=>`
+    <button class="nav-item${i===0?' active':''}" onclick="switchTab(${i})" aria-label="${t.label}">
+      <span class="nav-icon">${t.icon}</span>
+      <span class="nav-label">${t.label}</span>
+    </button>`).join('');
+  document.getElementById('panels-container').innerHTML = tabs.map((t,i)=>`<div class="panel${i===0?' active':''}" id="p-${i}"></div>`).join('');
+  renderPanel(0);
+}
+
+function switchTab(i) {
+  curTab=i;
+  document.querySelectorAll('.nav-item').forEach((t,j)=>t.classList.toggle('active',j===i));
+  document.querySelectorAll('.panel').forEach((p,j)=>p.classList.toggle('active',j===i));
+  document.getElementById('app-scroll').scrollTop=0;
+  renderPanel(i);
+}
+
+function renderPanel(i) {
+  const tabs=getTabs(curUser.role);
+  if(!tabs[i]) return;
+  const el=document.getElementById('p-'+i);
+  if(el){
+    el.innerHTML=tabs[i].render();
+    if(tabs[i].k==='gerencia') setTimeout(buildCharts,150);
+  }
+}
+
+function refresh(){ renderPanel(curTab); }
+
+// ══ STOCK ══
+let activeFam='';
+function renderStock(){
+  if(!products.length) return `<div class="section-header"><div class="section-title">Inventario</div></div><div class="empty-state"><div class="empty-icon">🔄</div><div class="empty-text">Sincronizando con Google Sheets...<br><br><button onclick="syncData()" style="padding:10px 20px;background:var(--vino);color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer">Sincronizar ahora</button></div></div>`;
+  const ok=products.filter(p=>!p.vencido&&totalStock(p.id)>p.minimo).length;
+  const low=products.filter(p=>!p.vencido&&totalStock(p.id)>0&&totalStock(p.id)<=p.minimo).length;
+  const out=products.filter(p=>!p.vencido&&totalStock(p.id)<=0).length;
+  const venc=products.filter(p=>p.vencido).length;
+  const fams=[...new Set(products.map(p=>p.familia))].sort();
+  return `
+  <div class="section-header"><div class="section-title">Inventario</div><div class="section-sub">${products.length} productos cargados desde Google Sheets</div></div>
+  <div class="stats-grid">
+    <div class="stat-card"><div class="stat-icon">✅</div><div class="stat-label">Vigentes</div><div class="stat-value sv-green">${ok}</div></div>
+    <div class="stat-card"><div class="stat-icon">⚠️</div><div class="stat-label">Stock bajo</div><div class="stat-value sv-amber">${low}</div></div>
+    <div class="stat-card"><div class="stat-icon">🔴</div><div class="stat-label">Agotados</div><div class="stat-value sv-red">${out}</div></div>
+    <div class="stat-card"><div class="stat-icon">⏰</div><div class="stat-label">Vencidos</div><div class="stat-value sv-purple">${venc}</div></div>
+  </div>
+  <div class="loc-row">${LOCS.map(l=>{
+    const t=products.reduce((s,p)=>s+stockAt(p.id,l),0);
+    return`<div class="loc-card"><div class="loc-icon" style="background:${LOC_COLORS[l]}20">${LOC_ICONS[l]}</div><div><div class="loc-name">${l.replace('Bodega Central','Bodega').replace('Caseta Cerrillos','Cerrillos')}</div><div class="loc-val">${fmt(t)}</div></div></div>`;
+  }).join('')}</div>
+  <div class="search-wrap">
+    <span class="search-icon">🔍</span>
+    <input class="search-input" id="sq" placeholder="Buscar producto..." oninput="filtStock()" autocomplete="off"/>
+  </div>
+  <div class="filter-row" id="fam-filters">
+    <button class="filter-chip${activeFam===''?' active':''}" onclick="setFamFilter('',this)">Todos</button>
+    ${fams.map(f=>`<button class="filter-chip${activeFam===f?' active':''}" onclick="setFamFilter('${f}',this)">${f}</button>`).join('')}
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-title">📦 Lista de productos</div></div>
+    <div id="stock-list">${stockList(products)}</div>
+  </div>`;
+}
+
+function setFamFilter(fam,btn){
+  activeFam=fam;
+  document.querySelectorAll('#fam-filters .filter-chip').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  filtStock();
+}
+function filtStock(){
+  const q=(document.getElementById('sq')?.value||'').toLowerCase();
+  const f=products.filter(p=>(!q||p.nombre.toLowerCase().includes(q)||p.familia.toLowerCase().includes(q))&&(!activeFam||p.familia===activeFam));
+  const el=document.getElementById('stock-list');
+  if(el) el.innerHTML=stockList(f);
+}
+function stockList(list){
+  if(!list.length) return`<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-text">Sin resultados</div></div>`;
+  return list.map(p=>{
+    const[st,bc]=statusOf(p.id);
+    return`<div class="prod-item">
+      <div class="prod-info">
+        <div class="prod-name">${p.nombre}${p.vencido?' ⏰':''}</div>
+        <div class="prod-fam">${p.familia} · B:${fmt(stockAt(p.id,'Bodega Central'))} C:${fmt(stockAt(p.id,'Caseta Cerrillos'))} R:${fmt(stockAt(p.id,'Rulo'))} P:${fmt(stockAt(p.id,'Paine'))}</div>
+      </div>
+      <div class="prod-stocks"><div class="prod-total">${fmt(totalStock(p.id))}</div><span class="badge ${bc}">${st}</span></div>
+    </div>`;
+  }).join('');
+}
+
+// ══ RECIBIR ══
+function renderRecibir(){
+  const ents=movimientos.filter(m=>m.tipo==='entrada').slice(-5).reverse();
+  return`
+  <div class="section-header"><div class="section-title">Recibir compra</div><div class="section-sub">Registrar entrada de productos</div></div>
+  <div class="form-box">
+    <div class="form-title"><div class="form-title-icon">📥</div>Nueva entrada</div>
+    <div class="form-group"><label class="form-label">Producto <span class="required">*</span></label><select class="form-control" id="r-p">${prodOpts()}</select></div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Cantidad <span class="required">*</span></label><input type="number" class="form-control" id="r-c" min="0.01" step="0.01" placeholder="0" inputmode="decimal"/></div>
+      <div class="form-group"><label class="form-label">Destino <span class="required">*</span></label><select class="form-control" id="r-loc">${locOpts('Bodega Central')}</select></div>
+    </div>
+    <div class="form-group"><label class="form-label">Proveedor</label><input type="text" class="form-control" id="r-pv" placeholder="Ej: COPESAL" autocomplete="off"/></div>
+    <div class="form-group"><label class="form-label">N° Factura</label><input type="text" class="form-control" id="r-f" placeholder="FAC-001" autocomplete="off"/></div>
+    <button class="btn-primary" onclick="doRecibir()">✓ Registrar entrada</button>
+  </div>
+  <div class="section-label">Ultimas entradas</div>
+  <div class="card">${ents.length?ents.map(m=>`<div class="move-item"><div class="move-dot" style="background:var(--green)"></div><div class="move-body"><div class="move-prod">${m.producto}</div><div class="move-detail">${m.destino||''} · ${m.proveedor||'Sin proveedor'}</div></div><div class="move-right"><div class="move-qty" style="color:var(--green)">+${m.cantidad}</div><div class="move-date">${m.fecha}</div></div></div>`).join(''):`<div class="empty-state"><div class="empty-icon">📥</div><div class="empty-text">Sin entradas registradas</div></div>`}</div>`;
+}
+async function doRecibir(){
+  const pid=parseInt(document.getElementById('r-p').value);
+  const cant=parseFloat(document.getElementById('r-c').value)||0;
+  const loc=document.getElementById('r-loc').value;
+  if(cant<=0) return showToast('Ingresa una cantidad valida','err');
+  const p=products.find(x=>x.id===pid);
+  addStock(pid,loc,cant);
+  const mov={id:nextMov++,tipo:'entrada',producto:p.nombre,cantidad:cant,destino:loc,proveedor:document.getElementById('r-pv').value.trim(),obs:document.getElementById('r-f').value.trim(),fecha:hoy(),usuario:curUser.id};
+  movimientos.push(mov);
+  showToast('Guardando en Google Sheets...','info');
+  await postSheets({action:'entrada',fecha:mov.fecha,producto:p.nombre,cantidad:cant,destino:loc,proveedor:mov.proveedor,factura:mov.obs,usuario:curUser.id,obs:mov.obs});
+  showToast('+'+cant+' de '+p.nombre+' guardado en Sheets');
+  refresh();
+}
+
+// ══ TRANSFERIR ══
+function renderTransferir(){
+  const ts=movimientos.filter(m=>m.tipo==='transferencia').slice(-5).reverse();
+  return`
+  <div class="section-header"><div class="section-title">Transferir stock</div><div class="section-sub">Mover producto entre ubicaciones</div></div>
+  <div class="form-box">
+    <div class="form-title"><div class="form-title-icon">↔️</div>Nueva transferencia</div>
+    <div class="form-group"><label class="form-label">Producto <span class="required">*</span></label><select class="form-control" id="t-p" onchange="updTA()">${prodOpts()}</select></div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Origen <span class="required">*</span></label><select class="form-control" id="t-or" onchange="updTA()">${locOpts('Bodega Central')}</select></div>
+      <div class="form-group"><label class="form-label">Destino <span class="required">*</span></label><select class="form-control" id="t-dst">${locOpts('Rulo')}</select></div>
+    </div>
+    <div class="form-group"><label class="form-label">Cantidad <span class="required">*</span></label><input type="number" class="form-control" id="t-c" min="0.01" step="0.01" placeholder="0" inputmode="decimal"/><div id="t-av" class="form-avail"></div></div>
+    <button class="btn-primary" onclick="doTransferir()">↔️ Confirmar transferencia</button>
+  </div>
+  <div class="section-label">Ultimas transferencias</div>
+  <div class="card">${ts.length?ts.map(m=>`<div class="move-item"><div class="move-dot" style="background:var(--blue)"></div><div class="move-body"><div class="move-prod">${m.producto}</div><div class="move-detail">${m.origen} → ${m.destino}</div></div><div class="move-right"><div class="move-qty" style="color:var(--blue)">${m.cantidad}</div><div class="move-date">${m.fecha}</div></div></div>`).join(''):`<div class="empty-state"><div class="empty-icon">↔️</div><div class="empty-text">Sin transferencias</div></div>`}</div>`;
+}
+function updTA(){
+  const pid=parseInt(document.getElementById('t-p')?.value);
+  const loc=document.getElementById('t-or')?.value;
+  const el=document.getElementById('t-av');
+  if(el&&pid&&loc){const d=stockAt(pid,loc);el.className='form-avail'+(d<=5?' warn':'');el.textContent='Disponible en '+loc+': '+fmt(d)+' unidades';}
+}
+async function doTransferir(){
+  const pid=parseInt(document.getElementById('t-p').value);
+  const cant=parseFloat(document.getElementById('t-c').value)||0;
+  const origen=document.getElementById('t-or').value;
+  const dest=document.getElementById('t-dst').value;
+  if(origen===dest) return showToast('Origen y destino deben ser distintos','err');
+  if(cant<=0) return showToast('Ingresa una cantidad valida','err');
+  const disp=stockAt(pid,origen);
+  if(cant>disp) return showToast('Insuficiente en '+origen+': '+fmt(disp)+' disp.','err');
+  const p=products.find(x=>x.id===pid);
+  addStock(pid,origen,-cant); addStock(pid,dest,cant);
+  const mov={id:nextMov++,tipo:'transferencia',producto:p.nombre,cantidad:cant,origen,destino:dest,fecha:hoy(),usuario:curUser.id};
+  movimientos.push(mov);
+  showToast('Guardando...','info');
+  await postSheets({action:'transferencia',fecha:mov.fecha,producto:p.nombre,cantidad:cant,origen,destino:dest,usuario:curUser.id,instrucciones:''});
+  showToast(cant+' de '+p.nombre+': '+origen+' → '+dest);
+  refresh();
+}
+
+// ══ DEVOLUCION ══
+function renderDevolucion(){
+  const locDef=curUser.id==='rulo'?'Rulo':curUser.id==='paine'?'Paine':'Caseta Cerrillos';
+  const devs=movimientos.filter(m=>m.tipo==='devolucion').slice(-5).reverse();
+  return`
+  <div class="section-header"><div class="section-title">Devolucion</div><div class="section-sub">Devolver sobrante a Bodega Central</div></div>
+  <div class="form-box">
+    <div class="form-title"><div class="form-title-icon">↩️</div>Registrar devolucion</div>
+    <div class="form-group"><label class="form-label">Producto <span class="required">*</span></label><select class="form-control" id="dv-p">${prodOpts()}</select></div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Cantidad <span class="required">*</span></label><input type="number" class="form-control" id="dv-c" min="0.01" step="0.01" placeholder="0" inputmode="decimal"/></div>
+      <div class="form-group"><label class="form-label">Desde <span class="required">*</span></label><select class="form-control" id="dv-or">${fieldLocsExclude('Bodega Central',locDef)}</select></div>
+    </div>
+    <div class="form-group"><label class="form-label">Motivo</label><textarea class="form-control" id="dv-obs" rows="2" placeholder="Sobrante, buen estado..." style="resize:none"></textarea></div>
+    <button class="btn-primary" onclick="doDevolucion()">↩️ Registrar devolucion</button>
+  </div>
+  <div class="section-label">Ultimas devoluciones</div>
+  <div class="card">${devs.length?devs.map(m=>`<div class="move-item"><div class="move-dot" style="background:var(--purple)"></div><div class="move-body"><div class="move-prod">${m.producto}</div><div class="move-detail">${m.origen} → Bodega Central</div></div><div class="move-right"><div class="move-qty" style="color:var(--purple)">${m.cantidad}</div><div class="move-date">${m.fecha}</div></div></div>`).join(''):`<div class="empty-state"><div class="empty-icon">↩️</div><div class="empty-text">Sin devoluciones</div></div>`}</div>`;
+}
+async function doDevolucion(){
+  const pid=parseInt(document.getElementById('dv-p').value);
+  const cant=parseFloat(document.getElementById('dv-c').value)||0;
+  const origen=document.getElementById('dv-or').value;
+  const obs=document.getElementById('dv-obs').value.trim();
+  if(cant<=0) return showToast('Ingresa una cantidad valida','err');
+  const disp=stockAt(pid,origen);
+  if(cant>disp) return showToast('Insuficiente en '+origen+': '+fmt(disp)+' disp.','err');
+  const p=products.find(x=>x.id===pid);
+  addStock(pid,origen,-cant); addStock(pid,'Bodega Central',cant);
+  movimientos.push({id:nextMov++,tipo:'devolucion',producto:p.nombre,cantidad:cant,origen,destino:'Bodega Central',obs,fecha:hoy(),usuario:curUser.id});
+  showToast('Guardando...','info');
+  await postSheets({action:'devolucion',fecha:hoy(),producto:p.nombre,cantidad:cant,origen,usuario:curUser.id,motivo:obs});
+  showToast('Devuelto '+cant+' de '+p.nombre+' a Bodega');
+  refresh();
+}
+
+// ══ ORDENES ══
+function renderOrden(){
+  extraLines=4;
+  const locDef=curUser.id==='rulo'?'Rulo':curUser.id==='paine'?'Paine':'Rulo';
+  const mias=ordenes.filter(o=>o.usuario===curUser.id||curUser.role==='maestro').slice(-8).reverse();
+  return`
+  <div class="section-header"><div class="section-title">Aplicaciones</div><div class="section-sub">Registrar orden de aplicacion en campo</div></div>
+  <div class="form-box">
+    <div class="form-title"><div class="form-title-icon">💧</div>Nueva orden</div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">N° Orden <span class="required">*</span></label><input type="text" class="form-control" id="ord-n" placeholder="Auto (${nextOrden})" inputmode="numeric" style="font-weight:700;font-size:18px"/></div>
+      <div class="form-group"><label class="form-label">Fecha</label><input type="date" class="form-control" id="ord-f" value="${new Date().toISOString().slice(0,10)}"/></div>
+    </div>
+    <div class="form-group"><label class="form-label">Ubicacion de aplicacion <span class="required">*</span></label><select class="form-control" id="ord-campo" style="font-size:16px;font-weight:500">${fieldLocsExclude('Bodega Central',locDef)}</select></div>
+    <div class="divider"></div>
+    <div class="section-label">Productos de esta orden</div>
+    <div id="ord-lines">${[0,1,2,3].map(i=>lineHTML(i)).join('')}</div>
+    <div id="ord-extra"></div>
+    <button class="btn-sec" onclick="addOrdLine()" style="width:100%;margin-bottom:.75rem">+ Agregar producto</button>
+    <div class="form-group"><label class="form-label">Observaciones</label><textarea class="form-control" id="ord-obs" rows="2" style="resize:none" placeholder="Condiciones, incidencias..."></textarea></div>
+    <button class="btn-primary" onclick="guardarOrden()">💧 Guardar orden de aplicacion</button>
+  </div>
+  ${mias.length?`<div class="section-label">Ordenes registradas</div>${mias.map(o=>`<div class="orden-card"><div class="orden-card-header"><span class="orden-num-badge">Orden N°${o.num}</span><span class="orden-date">${o.fecha}</span></div><div class="orden-campo-chip">📍 ${o.campo}</div><div class="divider" style="margin:.5rem 0"></div>${o.lineas.map(l=>`<div class="orden-prod-line"><span class="orden-prod-qty">${l.cantidad}</span><span>${l.producto}</span></div>`).join('')}${o.obs?`<div style="font-size:12px;color:var(--tx3);margin-top:.5rem;font-style:italic">💬 ${o.obs}</div>`:''}</div>`).join('')}`:`<div class="empty-state"><div class="empty-icon">💧</div><div class="empty-text">Sin ordenes registradas aun</div></div>`}`;
+}
+function lineHTML(i){
+  return`<div class="orden-line" id="ol-${i}">
+    <select id="ol-p-${i}" style="-webkit-appearance:none"><option value="">— Producto —</option>${prodOpts()}</select>
+    <input type="number" id="ol-c-${i}" inputmode="decimal" min="0.01" step="0.01" placeholder="Cant."/>
+    <button onclick="removeOrdLine(${i})" style="padding:10px;border:1px solid var(--bd2);border-radius:8px;background:var(--surf2);color:var(--tx2);cursor:pointer;font-size:14px">✕</button>
+  </div>`;
+}
+function addOrdLine(){const i=extraLines++;const d=document.getElementById('ord-extra');const div=document.createElement('div');div.innerHTML=lineHTML(i);d.appendChild(div.firstElementChild);}
+function removeOrdLine(i){const el=document.getElementById('ol-'+i);if(el)el.remove();}
+async function guardarOrden(){
+  const campo=document.getElementById('ord-campo').value;
+  const obs=document.getElementById('ord-obs').value.trim();
+  const numInput=document.getElementById('ord-n').value.trim();
+  const num=numInput||nextOrden;
+  const lineas=[];
+  for(let i=0;i<extraLines+10;i++){
+    const pEl=document.getElementById('ol-p-'+i);
+    const cEl=document.getElementById('ol-c-'+i);
+    if(!pEl||!cEl)continue;
+    const pid=parseInt(pEl.value);const cant=parseFloat(cEl.value)||0;
+    if(!pid||cant<=0)continue;
+    const p=products.find(x=>x.id===pid);
+    const disp=stockAt(pid,campo);
+    if(cant>disp){showToast('Stock insuficiente: '+p.nombre+' en '+campo+' ('+fmt(disp)+' disp.)','err');return;}
+    lineas.push({prodId:pid,producto:p.nombre,cantidad:cant});
+  }
+  if(!lineas.length) return showToast('Agrega al menos 1 producto con cantidad','err');
+  lineas.forEach(l=>{
+    addStock(l.prodId,campo,-l.cantidad);
+    movimientos.push({id:nextMov++,tipo:'aplicacion',producto:l.producto,cantidad:l.cantidad,campo,ordenNum:num,fecha:hoy(),usuario:curUser.id});
+  });
+  ordenes.push({num,campo,lineas,obs,fecha:hoy(),usuario:curUser.id});
+  if(!numInput)nextOrden++;
+  extraLines=4;
+  showToast('Guardando en Sheets...','info');
+  await postSheets({action:'aplicacion',fecha:hoy(),ordenNum:num,campo,lineas,usuario:curUser.id,obs});
+  showToast('Orden N°'+num+' guardada · '+lineas.length+' productos · '+campo);
+  refresh();
+}
+
+// ══ HISTORIAL ══
+function renderHistorial(){
+  const TYPE_STYLES={entrada:{color:'var(--green)',dot:'#2d6b2d',label:'Entrada'},transferencia:{color:'var(--blue)',dot:'#1a4a8a',label:'Transferencia'},aplicacion:{color:'var(--amber)',dot:'#8a5e00',label:'Aplicacion'},devolucion:{color:'var(--purple)',dot:'#4a1a8a',label:'Devolucion'}};
+  const list=[...movimientos].reverse();
+  return`
+  <div class="section-header"><div class="section-title">Historial</div><div class="section-sub">${list.length} movimientos totales</div></div>
+  <div class="card">${list.length?list.map(m=>{const s=TYPE_STYLES[m.tipo]||{color:'var(--tx3)',dot:'#999',label:m.tipo};const detail=m.origen?m.origen+' → '+m.destino:m.destino||m.campo||'';const extra=m.ordenNum?' · Orden #'+m.ordenNum:'';return`<div class="move-item"><div class="move-dot" style="background:${s.dot}"></div><div class="move-body"><div class="move-prod">${m.producto}</div><div class="move-detail">${s.label}${detail?' · '+detail:''}${extra}</div></div><div class="move-right"><div class="move-qty" style="color:${s.color}">${fmt(m.cantidad)}</div><div class="move-date">${m.fecha}</div></div></div>`;}).join(''):`<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-text">Sin movimientos registrados aun</div></div>`}</div>`;
+}
+
+// ══ GERENCIA ══
+function renderGerencia(){
+  const apls=movimientos.filter(m=>m.tipo==='aplicacion');
+  const transfers=movimientos.filter(m=>m.tipo==='transferencia');
+  const totalU=products.reduce((s,p)=>s+totalStock(p.id),0);
+  const vigU=products.filter(p=>!p.vencido).reduce((s,p)=>s+totalStock(p.id),0);
+  const vencU=products.filter(p=>p.vencido).reduce((s,p)=>s+totalStock(p.id),0);
+  const alertas=products.filter(p=>!p.vencido&&totalStock(p.id)>0&&totalStock(p.id)<=p.minimo);
+  const agotados=products.filter(p=>!p.vencido&&totalStock(p.id)<=0);
+  return`
+  <div class="section-header"><div class="section-title">Gerencia</div><div class="section-sub">Vista ejecutiva · ${hoy()}</div></div>
+  <div class="kpi-grid">
+    <div class="kpi-card"><div class="kpi-icon">📦</div><div class="kpi-val sv-vino">${products.length}</div><div class="kpi-label">Productos totales</div></div>
+    <div class="kpi-card"><div class="kpi-icon">📊</div><div class="kpi-val sv-blue">${fmt(totalU)}</div><div class="kpi-label">Unidades en stock</div></div>
+    <div class="kpi-card"><div class="kpi-icon">✅</div><div class="kpi-val sv-green">${fmt(vigU)}</div><div class="kpi-label">Stock vigente</div></div>
+    <div class="kpi-card"><div class="kpi-icon">⏰</div><div class="kpi-val sv-purple">${fmt(vencU)}</div><div class="kpi-label">Stock vencido</div></div>
+    <div class="kpi-card"><div class="kpi-icon">💧</div><div class="kpi-val sv-amber">${apls.length}</div><div class="kpi-label">Aplicaciones</div></div>
+    <div class="kpi-card"><div class="kpi-icon">↔️</div><div class="kpi-val sv-blue">${transfers.length}</div><div class="kpi-label">Transferencias</div></div>
+    <div class="kpi-card"><div class="kpi-icon">⚠️</div><div class="kpi-val sv-red">${alertas.length+agotados.length}</div><div class="kpi-label">Alertas activas</div></div>
+    <div class="kpi-card"><div class="kpi-icon">📋</div><div class="kpi-val sv-vino">${movimientos.length}</div><div class="kpi-label">Movimientos</div></div>
+  </div>
+  <div class="card"><div class="card-header"><div class="card-title">🏭 Stock por ubicacion</div></div><div class="chart-container"><div class="chart-wrap"><canvas id="cLoc"></canvas></div></div></div>
+  <div class="card"><div class="card-header"><div class="card-title">💧 Consumo por campo</div></div><div class="chart-container"><div class="chart-wrap-sm"><canvas id="cCampo"></canvas></div></div></div>
+  ${alertas.length||agotados.length?`<div class="section-label" style="color:var(--red)">Alertas de stock</div>${agotados.slice(0,3).map(p=>`<div class="alert-item crit">🔴 <strong>${p.nombre}</strong> — Agotado</div>`).join('')}${alertas.slice(0,5).map(p=>`<div class="alert-item warn">🟡 <strong>${p.nombre}</strong> — Stock: ${fmt(totalStock(p.id))} (min: ${p.minimo})</div>`).join('')}`:''}
+  <div class="section-label">Ultimos movimientos</div>
+  <div class="card">${[...movimientos].reverse().slice(0,8).map(m=>{const dots={entrada:'var(--green)',transferencia:'var(--blue)',aplicacion:'var(--amber)',devolucion:'var(--purple)'};return`<div class="move-item"><div class="move-dot" style="background:${dots[m.tipo]||'#999'}"></div><div class="move-body"><div class="move-prod">${m.producto}</div><div class="move-detail">${m.tipo}${m.campo?' · '+m.campo:''}${m.ordenNum?' · Orden #'+m.ordenNum:''}</div></div><div class="move-right"><div class="move-qty">${fmt(m.cantidad)}</div><div class="move-date">${m.fecha}</div></div></div>`;}).join('')||`<div class="empty-state"><div class="empty-text">Sin movimientos aun</div></div>`}</div>`;
+}
+function buildCharts(){
+  const COLORS=['#7B2D2D','#3d5a80','#2d6b3a','#8a5e00'];
+  function dc(id){if(chartInst[id]){try{chartInst[id].destroy()}catch(e){}delete chartInst[id]}}
+  const cLoc=document.getElementById('cLoc');
+  if(cLoc){dc('cLoc');const d=LOCS.map(l=>products.reduce((s,p)=>s+stockAt(p.id,l),0));chartInst['cLoc']=new Chart(cLoc,{type:'doughnut',data:{labels:LOCS,datasets:[{data:d,backgroundColor:COLORS,borderWidth:3,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{boxWidth:12,font:{size:11}}}}}})}
+  const cCampo=document.getElementById('cCampo');
+  if(cCampo){dc('cCampo');const camps=LOCS.filter(l=>l!=='Bodega Central');const d=camps.map(l=>movimientos.filter(m=>m.tipo==='aplicacion'&&m.campo===l).reduce((s,m)=>s+m.cantidad,0));chartInst['cCampo']=new Chart(cCampo,{type:'bar',data:{labels:camps,datasets:[{data:d,backgroundColor:COLORS,borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{font:{size:11}}},x:{ticks:{font:{size:11}}}}}})}
+}
+
+// ══ ADMIN ══
+function renderAdmin(){
+  return`
+  <div class="section-header"><div class="section-title">Administracion</div><div class="section-sub">Usuarios y configuracion</div></div>
+  <div class="card" style="margin-bottom:1rem">${USERS.map(u=>`<div class="move-item"><div class="av ${u.av}" style="width:36px;height:36px;font-size:13px;flex-shrink:0">${u.name[0]}</div><div class="move-body"><div class="move-prod">${u.full}</div><div class="move-detail">${u.desc} · PIN: ${u.pin}</div></div><span class="badge b-info">${u.role}</span></div>`).join('')}</div>
+  <div class="form-box">
+    <div class="form-title"><div class="form-title-icon">🔗</div>Google Sheets conectado</div>
+    <div style="background:var(--green-bg);border:1px solid #78b878;border-radius:var(--r);padding:12px 14px;font-size:13px;color:var(--green);margin-bottom:12px">
+      ✅ URL configurada y activa.<br><span style="font-size:11px;word-break:break-all;opacity:.8">script.google.com/macros/s/AKfycbxR...</span>
+    </div>
+    <button class="btn-primary" onclick="syncData()" style="margin-top:0">🔄 Sincronizar ahora con Google Sheets</button>
+  </div>
+  <div class="form-box">
+    <div class="form-title"><div class="form-title-icon">👤</div>Agregar usuario</div>
+    <div class="form-group"><label class="form-label">Nombre completo</label><input type="text" class="form-control" id="nu-n" placeholder="Nombre" autocomplete="off"/></div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Rol</label><select class="form-control" id="nu-r"><option value="bodeguero">Bodeguero</option><option value="dosificador">Dosificador</option><option value="gerencia">Gerencia</option></select></div>
+      <div class="form-group"><label class="form-label">PIN (4 digitos)</label><input type="text" class="form-control" id="nu-p" maxlength="4" inputmode="numeric" pattern="[0-9]*" placeholder="0000"/></div>
+    </div>
+    <div class="form-group"><label class="form-label">Zona / Campo</label><input type="text" class="form-control" id="nu-z" placeholder="Campo 3" autocomplete="off"/></div>
+    <button class="btn-primary" onclick="addUser()" style="margin-top:.5rem">+ Agregar usuario</button>
+  </div>`;
+}
+function addUser(){
+  const n=document.getElementById('nu-n').value.trim();
+  const r=document.getElementById('nu-r').value;
+  const z=document.getElementById('nu-z').value.trim();
+  const p=document.getElementById('nu-p').value.trim();
+  if(!n||p.length<4) return showToast('Completa nombre y PIN de 4 digitos','err');
+  const av={bodeguero:'av-b',dosificador:'av-d',gerencia:'av-g'}[r];
+  USERS.push({id:'u'+Date.now(),name:n[0].toUpperCase(),full:n,role:r,pin:p,av,desc:z||r});
+  showToast('Usuario '+n+' creado');
+  refresh();
+}
+
+// ══ TOAST ══
+function showToast(msg,type='ok'){
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.className=type; el.style.display='block';
+  setTimeout(()=>el.style.display='none',3000);
+}
+
+// ══ INIT ══
+initLogin();
+</script>
+</body>
+</html>
