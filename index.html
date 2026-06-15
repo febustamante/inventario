@@ -333,6 +333,14 @@ function locOpts(def){return LOCS.map(l=>`<option${l===def?' selected':''}>${l}<
 function fieldLocsExclude(ex,def){return LOCS.filter(l=>l!==ex).map(l=>`<option${l===def?' selected':''}>${l}</option>`).join('')}
 
 // ── GOOGLE SHEETS ──
+  
+async function fetchSheets(params) {
+  const url = SHEETS_URL + '?' + new URLSearchParams(params).toString();
+  const r = await fetch(url);
+  const j = await r.json();
+  return j.data;
+}
+
 async function postSheets(body) {
   try {
     await fetch(SHEETS_URL, {
