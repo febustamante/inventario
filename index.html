@@ -362,17 +362,20 @@ async function postSheets(body) {
 async function syncData() {
   setSyncStatus('loading', 'Sincronizando...');
   document.getElementById('btn-sync').disabled = true;
+
   try {
-    const data = await fetchSheets({action:'stock'});
+    const data = await fetchSheets({action:'recalcular'});
+
+    products = [];
+    stockByLoc = {};
+
     if (data && data.length) {
-      // Rebuild products from sheet
-      products = [];
-      stockByLoc = {};
       data.forEach((row, i) => {
         const id = parseInt(row['ID']) || (i + 1);
         const nombre = String(row['NOMBRE'] || row['Nombre'] || '').trim();
         const familia = String(row['FAMILIA'] || row['Familia'] || '').trim();
         if (!nombre) return;
+
         products.push({
           id,
           nombre,
@@ -380,6 +383,7 @@ async function syncData() {
           vencido: String(row['VENCIDO']||row['Vencido']||'').toUpperCase() === 'TRUE',
           minimo: parseFloat(row['MINIMO_ALERTA']||row['Minimo']||5) || 5,
         });
+
         stockByLoc[id] = {
           'Bodega Central':   parseFloat(row['BODEGA_CENTRAL']||row['Bodega Central']||0)||0,
           'Caseta Cerrillos': parseFloat(row['CASETA_CERRILLOS']||row['Caseta Cerrillos']||0)||0,
@@ -387,18 +391,37 @@ async function syncData() {
           'Paine':            parseFloat(row['PAINE']||row['Paine']||0)||0,
         };
       });
+
+      movimientos = await fetchSheets({action:'historial'}) || [];
+
+      movimientos = movimientos.map((m, i) => ({
+        id: i + 1,
+        idRegistro: m.ID_REGISTRO || '',
+        tipo: String(m.TIPO || '').toLowerCase(),
+        producto: m.PRODUCTO || '',
+        cantidad: parseFloat(m.CANTIDAD || 0) || 0,
+        origen: m.ORIGEN || '',
+        destino: m.DESTINO || '',
+        usuario: m.USUARIO || '',
+        ordenNum: m.ORDEN_NUM || '',
+        obs: m.OBSERVACIONES || '',
+        fecha: m.FECHA || '',
+        estado: m.ESTADO || 'ACTIVO'
+      })).filter(m => String(m.estado).toUpperCase() !== 'ANULADO');
+
       sheetsConnected = true;
       setSyncStatus('on', 'Conectado · ' + products.length + ' productos');
-      showToast('Sincronizado: ' + products.length + ' productos cargados');
       refresh();
     } else {
       setSyncStatus('off', 'Sheet vacio o sin datos en STOCK');
-      showToast('La hoja STOCK esta vacia. Agrega productos primero.', 'err');
+      showToast('La hoja STOCK esta vacia.', 'err');
     }
   } catch(e) {
+    console.error(e);
     setSyncStatus('off', 'Error de conexion');
-    showToast('No se pudo conectar. Revisa tu conexion a internet.', 'err');
+    showToast('No se pudo conectar con Google Sheets.', 'err');
   }
+
   document.getElementById('btn-sync').disabled = false;
 }
 
