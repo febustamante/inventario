@@ -932,11 +932,69 @@ function hojaPorTipo(tipo){
 }
 
 async function editarMovimiento(idRegistro, tipo){
-  alert('Editar movimiento ID: ' + idRegistro);
+  if(!idRegistro){
+    showToast('Este registro no tiene ID. No se puede editar.', 'err');
+    return;
+  }
+
+  const m = movimientos.find(x => String(x.idRegistro) === String(idRegistro));
+
+  if(!m){
+    showToast('No encontre el movimiento.', 'err');
+    return;
+  }
+
+  const nuevaCantidad = prompt('Nueva cantidad:', m.cantidad);
+  if(nuevaCantidad === null) return;
+
+  const cant = parseFloat(nuevaCantidad);
+  if(!cant || cant <= 0){
+    showToast('Cantidad no valida.', 'err');
+    return;
+  }
+
+  const hoja = hojaPorTipo(tipo);
+
+  let datos = {};
+
+  if(tipo === 'entrada') datos = { CANTIDAD: cant };
+  if(tipo === 'transferencia') datos = { CANTIDAD: cant };
+  if(tipo === 'aplicacion') datos = { CANTIDAD_APLICADA: cant };
+  if(tipo === 'devolucion') datos = { CANTIDAD: cant };
+
+  showToast('Guardando edicion...', 'info');
+
+  await postSheets({
+    action: 'editar',
+    hoja: hoja,
+    idRegistro: idRegistro,
+    datos: datos,
+    usuario: curUser ? curUser.id : ''
+  });
+
+  showToast('Registro editado correctamente');
 }
 
 async function anularMovimiento(idRegistro, tipo){
-  alert('Anular movimiento ID: ' + idRegistro);
+  if(!idRegistro){
+    showToast('Este registro no tiene ID. No se puede anular.', 'err');
+    return;
+  }
+
+  if(!confirm('¿Seguro que quieres anular este movimiento?')) return;
+
+  const hoja = hojaPorTipo(tipo);
+
+  showToast('Anulando...', 'info');
+
+  await postSheets({
+    action: 'anular',
+    hoja: hoja,
+    idRegistro: idRegistro,
+    usuario: curUser ? curUser.id : ''
+  });
+
+  showToast('Movimiento anulado');
 }
 // ══ INIT ══
 initLogin();
