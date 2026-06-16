@@ -337,9 +337,21 @@ function fieldLocsExclude(ex,def){return LOCS.filter(l=>l!==ex).map(l=>`<option$
   
 async function fetchSheets(params) {
   const url = SHEETS_URL + '?' + new URLSearchParams(params).toString();
-  const r = await fetch(url);
-  const j = await r.json();
-  return j.data;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
+  try {
+    const r = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    const j = await r.json();
+    if (j.error) throw new Error(j.error);
+    return j.data;
+  } catch (e) {
+    clearTimeout(timeoutId);
+    if (e.name === 'AbortError') {
+      throw new Error('Tiempo de espera agotado (10s). El script de Google no respondio.');
+    }
+    throw e;
+  }
 }
 
 async function postSheets(body) {
@@ -350,13 +362,12 @@ async function postSheets(body) {
       body: JSON.stringify(body)
     });
 
-    await new Promise(resolve => setTimeout(resolve, 1200));
     await syncData();
 
     return true;
   } catch(e) {
     console.error('Error guardando en Google Sheets:', e);
-    showToast('Error guardando en Google Sheets', 'err');
+    showToast('Error guardando: ' + (e.message || 'desconocido'), 'err');
     return false;
   }
 }
@@ -365,7 +376,7 @@ async function syncData() {
   document.getElementById('btn-sync').disabled = true;
 
   try {
-    const data = await fetchSheets({action:'recalcular'});
+    const data = await fetchSheets({action:'stock'});
 
     products = [];
     stockByLoc = {};
@@ -420,10 +431,25 @@ async function syncData() {
   } catch(e) {
     console.error(e);
     setSyncStatus('off', 'Error de conexion');
-    showToast('No se pudo conectar con Google Sheets.', 'err');
+    showToast(e.message || 'No se pudo conectar con Google Sheets.', 'err');
   }
 
   document.getElementById('btn-sync').disabled = false;
+}
+
+async function forzarRecalculo() {
+  setSyncStatus('loading', 'Recalculando todo (puede tardar)...');
+  showToast('Recalculando stock completo desde Google Sheets...', 'info');
+  document.getElementById('btn-sync').disabled = true;
+  try {
+    await fetchSheets({action:'recalcular'});
+    await syncData();
+    showToast('Recalculo completo terminado');
+  } catch(e) {
+    setSyncStatus('off', 'Error de conexion');
+    showToast(e.message || 'Error al recalcular.', 'err');
+    document.getElementById('btn-sync').disabled = false;
+  }
 }
 
 function setSyncStatus(state, txt) {
@@ -891,6 +917,7 @@ function renderAdmin(){
       ✅ URL configurada y activa.<br><span style="font-size:11px;word-break:break-all;opacity:.8">script.google.com/macros/s/AKfycbxR...</span>
     </div>
     <button class="btn-primary" onclick="syncData()" style="margin-top:0">🔄 Sincronizar ahora con Google Sheets</button>
+    <button class="btn-sec" onclick="forzarRecalculo()" style="width:100%;margin-top:10px">🧮 Forzar recalculo completo (lento, usar solo si editaste el Excel a mano)</button>
   </div>
   <div class="form-box">
     <div class="form-title"><div class="form-title-icon">👤</div>Agregar usuario</div>
