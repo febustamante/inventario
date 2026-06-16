@@ -310,6 +310,56 @@ let chartInst = {}, extraLines = 4;
 let pinBuffer = '';
 let sheetsConnected = false;
 
+// ── CACHE LOCAL (carga instantanea, sin esperar a Sheets) ──
+const CACHE_KEY = 'sanjose_cache_v1';
+
+function guardarCacheLocal() {
+  try {
+    const payload = {
+      products,
+      stockByLoc,
+      movimientos,
+      ordenes,
+      guardadoEn: Date.now()
+    };
+    localStorage.setItem(CACHE_KEY, JSON.stringify(payload));
+  } catch (e) {
+    console.warn('No se pudo guardar cache local:', e);
+  }
+}
+
+function cargarCacheLocal() {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return false;
+    const payload = JSON.parse(raw);
+    products    = payload.products    || [];
+    stockByLoc  = payload.stockByLoc   || {};
+    movimientos = payload.movimientos  || [];
+    ordenes     = payload.ordenes      || [];
+    return products.length > 0;
+  } catch (e) {
+    console.warn('No se pudo leer cache local:', e);
+    return false;
+  }
+}
+
+function edadCacheTexto() {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return '';
+    const payload = JSON.parse(raw);
+    const segs = Math.floor((Date.now() - payload.guardadoEn) / 1000);
+    if (segs < 60) return 'hace ' + segs + 's';
+    const mins = Math.floor(segs / 60);
+    if (mins < 60) return 'hace ' + mins + ' min';
+    const horas = Math.floor(mins / 60);
+    return 'hace ' + horas + ' h';
+  } catch (e) {
+    return '';
+  }
+}
+
 // ── HELPERS ──
 function totalStock(pid){return Object.values(stockByLoc[pid]||{}).reduce((a,b)=>a+b,0)}
 function stockAt(pid,loc){return(stockByLoc[pid]||{})[loc]||0}
@@ -378,17 +428,17 @@ async function syncData() {
   try {
     const data = await fetchSheets({action:'stock'});
 
-    products = [];
-    stockByLoc = {};
-
     if (data && data.length) {
+      const nuevosProducts = [];
+      const nuevoStockByLoc = {};
+
       data.forEach((row, i) => {
         const id = parseInt(row['ID']) || (i + 1);
         const nombre = String(row['NOMBRE'] || row['Nombre'] || '').trim();
         const familia = String(row['FAMILIA'] || row['Familia'] || '').trim();
         if (!nombre) return;
 
-        products.push({
+        nuevosProducts.push({
           id,
           nombre,
           familia: familia || 'SIN FAMILIA',
@@ -396,7 +446,7 @@ async function syncData() {
           minimo: parseFloat(row['MINIMO_ALERTA']||row['Minimo']||5) || 5,
         });
 
-        stockByLoc[id] = {
+        nuevoStockByLoc[id] = {
           'Bodega Central':   parseFloat(row['BODEGA_CENTRAL']||row['Bodega Central']||0)||0,
           'Caseta Cerrillos': parseFloat(row['CASETA_CERRILLOS']||row['Caseta Cerrillos']||0)||0,
           'Rulo':             parseFloat(row['RULO']||row['Rulo']||0)||0,
@@ -404,9 +454,9 @@ async function syncData() {
         };
       });
 
-      movimientos = await fetchSheets({action:'historial'}) || [];
+      let nuevosMovimientos = await fetchSheets({action:'historial'}) || [];
 
-      movimientos = movimientos.map((m, i) => ({
+      nuevosMovimientos = nuevosMovimientos.map((m, i) => ({
         id: i + 1,
         idRegistro: m.ID_REGISTRO || '',
         tipo: String(m.TIPO || '').toLowerCase(),
@@ -421,17 +471,32 @@ async function syncData() {
         estado: m.ESTADO || 'ACTIVO'
       })).filter(m => String(m.estado).toUpperCase() !== 'ANULADO');
 
+      // Solo reemplazamos el estado una vez que TODO llego bien
+      products = nuevosProducts;
+      stockByLoc = nuevoStockByLoc;
+      movimientos = nuevosMovimientos;
+
       sheetsConnected = true;
       setSyncStatus('on', 'Conectado · ' + products.length + ' productos');
+      guardarCacheLocal();
       refresh();
+    } else if (products.length) {
+      // No llegaron datos nuevos pero ya teniamos cache local cargado: seguir mostrandolo
+      setSyncStatus('off', 'Sin datos nuevos · usando ' + edadCacheTexto());
     } else {
       setSyncStatus('off', 'Sheet vacio o sin datos en STOCK');
       showToast('La hoja STOCK esta vacia.', 'err');
     }
   } catch(e) {
     console.error(e);
-    setSyncStatus('off', 'Error de conexion');
-    showToast(e.message || 'No se pudo conectar con Google Sheets.', 'err');
+    if (products.length) {
+      // Ya hay datos locales mostrados: solo avisar, no bloquear nada
+      setSyncStatus('off', 'Sin conexion · usando datos ' + edadCacheTexto());
+      showToast('No se pudo sincronizar. Mostrando datos guardados.', 'info');
+    } else {
+      setSyncStatus('off', 'Error de conexion');
+      showToast(e.message || 'No se pudo conectar con Google Sheets.', 'err');
+    }
   }
 
   document.getElementById('btn-sync').disabled = false;
@@ -506,9 +571,20 @@ function attemptLogin() {
     document.getElementById('sa').classList.add('active');
     document.getElementById('topbar-user').textContent = curUser.full;
     document.getElementById('role-chip').textContent = curUser.desc;
+
+    // 1. Cargar cache local al instante (sin esperar a Sheets)
+    const hayCache = cargarCacheLocal();
     buildApp();
-    // Auto sync on login
     document.getElementById('btn-sync').disabled = false;
+
+    if (hayCache) {
+      sheetsConnected = true;
+      setSyncStatus('on', 'Datos locales (' + edadCacheTexto() + ') · actualizando...');
+    } else {
+      setSyncStatus('loading', 'Cargando por primera vez...');
+    }
+
+    // 2. Sincronizar en segundo plano, sin bloquear la pantalla
     syncData();
   } else {
     document.getElementById('pin-error').textContent = 'PIN incorrecto. Intenta de nuevo.';
