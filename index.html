@@ -791,13 +791,58 @@ async function guardarOrden(){
 
 // ══ HISTORIAL ══
 function renderHistorial(){
-  const TYPE_STYLES={entrada:{color:'var(--green)',dot:'#2d6b2d',label:'Entrada'},transferencia:{color:'var(--blue)',dot:'#1a4a8a',label:'Transferencia'},aplicacion:{color:'var(--amber)',dot:'#8a5e00',label:'Aplicacion'},devolucion:{color:'var(--purple)',dot:'#4a1a8a',label:'Devolucion'}};
-  const list=[...movimientos].reverse();
-  return`
-  <div class="section-header"><div class="section-title">Historial</div><div class="section-sub">${list.length} movimientos totales</div></div>
-  <div class="card">${list.length?list.map(m=>{const s=TYPE_STYLES[m.tipo]||{color:'var(--tx3)',dot:'#999',label:m.tipo};const detail=m.origen?m.origen+' → '+m.destino:m.destino||m.campo||'';const extra=m.ordenNum?' · Orden #'+m.ordenNum:'';return`<div class="move-item"><div class="move-dot" style="background:${s.dot}"></div><div class="move-body"><div class="move-prod">${m.producto}</div><div class="move-detail">${s.label}${detail?' · '+detail:''}${extra}</div></div><div class="move-right"><div class="move-qty" style="color:${s.color}">${fmt(m.cantidad)}</div><div class="move-date">${m.fecha}</div></div></div>`;}).join(''):`<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-text">Sin movimientos registrados aun</div></div>`}</div>`;
-}
+  const TYPE_STYLES = {
+    entrada:{color:'var(--green)',dot:'#2d6b2d',label:'Entrada'},
+    transferencia:{color:'var(--blue)',dot:'#1a4a8a',label:'Transferencia'},
+    aplicacion:{color:'var(--amber)',dot:'#8a5e00',label:'Aplicacion'},
+    devolucion:{color:'var(--purple)',dot:'#4a1a8a',label:'Devolucion'}
+  };
 
+  const list = [...movimientos].reverse();
+
+  return `
+  <div class="section-header">
+    <div class="section-title">Historial</div>
+    <div class="section-sub">${list.length} movimientos totales</div>
+  </div>
+
+  <div class="card">
+    ${list.length ? list.map(m => {
+      const s = TYPE_STYLES[m.tipo] || {color:'var(--tx3)',dot:'#999',label:m.tipo};
+      const detail = m.origen ? m.origen + ' → ' + m.destino : m.destino || '';
+      const extra = m.ordenNum ? ' · Orden #' + m.ordenNum : '';
+
+      return `
+      <div class="move-item">
+        <div class="move-dot" style="background:${s.dot}"></div>
+
+        <div class="move-body">
+          <div class="move-prod">${m.producto}</div>
+          <div class="move-detail">${s.label}${detail ? ' · ' + detail : ''}${extra}</div>
+
+          <button onclick="editarMovimiento('${m.idRegistro}','${m.tipo}')"
+            style="margin-top:6px;padding:5px 9px;border:1px solid var(--bd2);border-radius:7px;background:white;color:var(--blue);font-size:12px">
+            Editar
+          </button>
+
+          <button onclick="anularMovimiento('${m.idRegistro}','${m.tipo}')"
+            style="margin-top:6px;padding:5px 9px;border:1px solid var(--bd2);border-radius:7px;background:white;color:var(--red);font-size:12px">
+            Anular
+          </button>
+        </div>
+
+        <div class="move-right">
+          <div class="move-qty" style="color:${s.color}">${fmt(m.cantidad)}</div>
+          <div class="move-date">${m.fecha}</div>
+        </div>
+      </div>`;
+    }).join('') : `
+      <div class="empty-state">
+        <div class="empty-icon">📋</div>
+        <div class="empty-text">Sin movimientos registrados aun</div>
+      </div>`}
+  </div>`;
+}
 // ══ GERENCIA ══
 function renderGerencia(){
   const apls=movimientos.filter(m=>m.tipo==='aplicacion');
