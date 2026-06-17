@@ -673,10 +673,11 @@ function refresh(){ renderPanel(curTab); }
 let activeFam='';
 function renderStock(){
   if(!products.length) return `<div class="section-header"><div class="section-title">Inventario</div></div><div class="empty-state"><div class="empty-icon">🔄</div><div class="empty-text">Sincronizando con Google Sheets...<br><br><button onclick="syncData()" style="padding:10px 20px;background:var(--vino);color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer">Sincronizar ahora</button></div></div>`;
-  const ok=products.filter(p=>!p.vencido&&totalStock(p.id)>p.minimo).length;
-  const low=products.filter(p=>!p.vencido&&totalStock(p.id)>0&&totalStock(p.id)<=p.minimo).length;
-  const out=products.filter(p=>!p.vencido&&totalStock(p.id)<=0).length;
-  const venc=products.filter(p=>p.vencido).length;
+ const ok=products.filter(p=>!p.vencido&&totalStock(p.id)>p.minimo).length;
+const low=products.filter(p=>!p.vencido&&totalStock(p.id)>0&&totalStock(p.id)<=p.minimo).length;
+const out=products.filter(p=>!p.vencido&&totalStock(p.id)<=0).length;
+const ordenesCurso=ordenes.filter(o=>String(o.estado||'').trim().toUpperCase()==='EN CURSO').length;
+const ordenesTerminadas=ordenes.filter(o=>String(o.estado||'').trim().toUpperCase()==='TERMINADA').length;
   const fams=[...new Set(products.map(p=>p.familia))].sort();
   return `
   <div class="section-header"><div class="section-title">Inventario</div><div class="section-sub">${products.length} productos cargados desde Google Sheets</div></div>
@@ -684,7 +685,8 @@ function renderStock(){
     <div class="stat-card"><div class="stat-icon">✅</div><div class="stat-label">Vigentes</div><div class="stat-value sv-green">${ok}</div></div>
     <div class="stat-card"><div class="stat-icon">⚠️</div><div class="stat-label">Stock bajo</div><div class="stat-value sv-amber">${low}</div></div>
     <div class="stat-card"><div class="stat-icon">🔴</div><div class="stat-label">Agotados</div><div class="stat-value sv-red">${out}</div></div>
-    <div class="stat-card"><div class="stat-icon">⏰</div><div class="stat-label">Vencidos</div><div class="stat-value sv-purple">${venc}</div></div>
+<div class="stat-card"><div class="stat-icon">📋</div><div class="stat-label">Órdenes en curso</div><div class="stat-value sv-blue">${ordenesCurso}</div></div>
+<div class="stat-card"><div class="stat-icon">✅</div><div class="stat-label">Órdenes terminadas</div><div class="stat-value sv-green">${ordenesTerminadas}</div></div>
   </div>
   <div class="loc-row">${LOCS.map(l=>{
     const t=products.reduce((s,p)=>s+stockAt(p.id,l),0);
