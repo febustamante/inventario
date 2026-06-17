@@ -1114,36 +1114,6 @@ function lineHTML(i){
 }
 function addOrdLine(){const i=extraLines++;const d=document.getElementById('ord-extra');const div=document.createElement('div');div.innerHTML=lineHTML(i);d.appendChild(div.firstElementChild);}
 function removeOrdLine(i){const el=document.getElementById('ol-'+i);if(el)el.remove();}
-async function guardarOrden(){
-  const campo=document.getElementById('ord-campo').value;
-  const obs=document.getElementById('ord-obs').value.trim();
-  const numInput=document.getElementById('ord-n').value.trim();
-  const num=numInput||nextOrden;
-  const lineas=[];
-  for(let i=0;i<extraLines+10;i++){
-    const pEl=document.getElementById('ol-p-'+i);
-    const cEl=document.getElementById('ol-c-'+i);
-    if(!pEl||!cEl)continue;
-    const pid=parseInt(pEl.value);const cant=parseFloat(cEl.value)||0;
-    if(!pid||cant<=0)continue;
-    const p=products.find(x=>x.id===pid);
-    const disp=stockAt(pid,campo);
-    if(cant>disp){showToast('Stock insuficiente: '+p.nombre+' en '+campo+' ('+fmt(disp)+' disp.)','err');return;}
-    lineas.push({prodId:pid,producto:p.nombre,cantidad:cant});
-  }
-  if(!lineas.length) return showToast('Agrega al menos 1 producto con cantidad','err');
-  lineas.forEach(l=>{
-    addStock(l.prodId,campo,-l.cantidad);
-    movimientos.push({id:nextMov++,tipo:'aplicacion',producto:l.producto,cantidad:l.cantidad,campo,ordenNum:num,fecha:hoy(),usuario:curUser.id});
-  });
-  ordenes.push({num,campo,lineas,obs,fecha:hoy(),usuario:curUser.id});
-  if(!numInput)nextOrden++;
-  extraLines=4;
-  showToast('Guardando en Sheets...','info');
-  await postSheets({action:'aplicacion',fecha:hoy(),ordenNum:num,campo,lineas,usuario:curUser.id,obs});
-  showToast('Orden N°'+num+' guardada · '+lineas.length+' productos · '+campo);
-  refresh();
-}
 
 // ══ HISTORIAL ══
 function renderHistorial(){
