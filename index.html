@@ -915,43 +915,37 @@ async function crearOrdenNueva(){
   const campo = document.getElementById('ord-campo').value;
   const dosificador = document.getElementById('ord-dosificador').value;
   const obs = document.getElementById('ord-obs').value.trim();
-const numeroOrden = document.getElementById('ord-num').value.trim();
-
-const productosOrden = [];
-document.querySelectorAll('[id^="op-prod-"]').forEach(sel => {
-  if(sel.value){
-    const p = products.find(x => x.id === parseInt(sel.value));
-    if(p) productosOrden.push(p.nombre);
-  }
-});
   const numeroOrden = document.getElementById('ord-num').value.trim();
 
-const productosOrden = [];
-document.querySelectorAll('[id^="op-prod-"]').forEach(sel => {
-  if(sel.value){
-    const p = products.find(x => x.id === parseInt(sel.value));
-    if(p) productosOrden.push(p.nombre);
-  }
-});
+  const productosOrden = [];
+  document.querySelectorAll('[id^="op-prod-"]').forEach(sel => {
+    if(sel.value){
+      const p = products.find(x => x.id === parseInt(sel.value));
+      if(p) productosOrden.push(p.nombre);
+    }
+  });
+
   if(!campo) return showToast('Selecciona un campo', 'err');
   if(!dosificador) return showToast('Selecciona un dosificador', 'err');
+  if(!numeroOrden) return showToast('Ingresa el numero de orden', 'err');
+  if(!productosOrden.length) return showToast('Agrega al menos un producto', 'err');
 
   showToast('Creando orden...', 'info');
 
-await postSheets({
-  action: 'crearOrden',
-  fecha: hoy(),
-  numeroOrden: numeroOrden,
-  productos: productosOrden,
-  campo: campo,
-  dosificador: dosificador,
-  usuario: curUser ? curUser.id : '',
-  obs: obs
-});
+  await postSheets({
+    action: 'crearOrden',
+    fecha: hoy(),
+    numeroOrden: numeroOrden,
+    productos: productosOrden,
+    campo: campo,
+    dosificador: dosificador,
+    usuario: curUser ? curUser.id : '',
+    obs: obs
+  });
 
   showToast('Orden creada correctamente');
   refresh();
-}  
+}
   let ordenProdIndex = 1;
 
 function addProductoOrden(){
