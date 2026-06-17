@@ -1004,7 +1004,7 @@ function removeProductoOrden(i){
   const el = document.getElementById('op-' + i);
   if(el) el.remove();
 }
-  function abrirCompletarOrden(idOrden){
+ function abrirCompletarOrden(idOrden){
   const o = ordenes.find(x => String(x.idOrden) === String(idOrden));
 
   if(!o){
@@ -1012,7 +1012,39 @@ function removeProductoOrden(i){
     return;
   }
 
-  showToast('Orden ' + idOrden + ' lista para completar. Siguiente paso: formulario de cierre.', 'info');
+  const productos = String(o.productos || '')
+    .split(',')
+    .map(x => x.trim())
+    .filter(Boolean);
+
+  const html = `
+    <div class="section-header">
+      <div class="section-title">Completar Orden N°${o.idOrden}</div>
+      <div class="section-sub">${o.campo} · ${productos.length} productos</div>
+    </div>
+
+    <div class="form-box">
+      ${productos.map((p, i) => `
+        <div class="form-group">
+          <label class="form-label">${p}</label>
+          <input type="number" class="form-control" id="co-cant-${i}" placeholder="Cantidad real aplicada" step="0.01">
+          <input type="hidden" id="co-prod-${i}" value="${p}">
+        </div>
+      `).join('')}
+
+      <button class="btn-sec" onclick="addProductoCierre()" style="width:100%;margin-bottom:.75rem">
+        + Agregar producto
+      </button>
+
+      <div id="productos-extra-cierre"></div>
+
+      <button class="btn-primary" onclick="ordenLista('${o.idOrden}')">
+        Orden lista
+      </button>
+    </div>
+  `;
+
+  document.querySelector('.panel.active').innerHTML = html;
 }
 function lineHTML(i){
   return`<div class="orden-line" id="ol-${i}">
