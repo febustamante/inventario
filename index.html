@@ -1008,6 +1008,16 @@ function removeProductoOrden(i){
   const el = document.getElementById('op-' + i);
   if(el) el.remove();
 }
+  function abrirCompletarOrden(idOrden){
+  const o = ordenes.find(x => String(x.idOrden) === String(idOrden));
+
+  if(!o){
+    showToast('No se encontró la orden', 'err');
+    return;
+  }
+
+  showToast('Orden ' + idOrden + ' lista para completar. Siguiente paso: formulario de cierre.', 'info');
+}
 function lineHTML(i){
   return`<div class="orden-line" id="ol-${i}">
     <select id="ol-p-${i}" style="-webkit-appearance:none"><option value="">— Producto —</option>${prodOpts()}</select>
