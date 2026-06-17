@@ -1092,7 +1092,7 @@ async function ordenLista(idOrden){
 
   showToast('Cerrando orden...', 'info');
 
-  await postSheets({
+  const resp = await postSheets({
     action: 'cerrarOrden',
     idOrden: idOrden,
     campo: o.campo,
