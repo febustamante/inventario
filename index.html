@@ -962,26 +962,22 @@ async function crearOrdenNueva(){
     }
   });
 
-  if(!campo) return showToast('Selecciona un campo', 'err');
-  if(!dosificador) return showToast('Selecciona un dosificador', 'err');
-  if(!numeroOrden) return showToast('Ingresa el numero de orden', 'err');
+  if(!numeroOrden) return showToast('Ingresa N° de orden', 'err');
   if(!productosOrden.length) return showToast('Agrega al menos un producto', 'err');
-
-  showToast('Creando orden...', 'info');
 
   await postSheets({
     action: 'crearOrden',
     fecha: hoy(),
     numeroOrden: numeroOrden,
-    productos: productosOrden,
     campo: campo,
     dosificador: dosificador,
+    productos: productosOrden,
     usuario: curUser ? curUser.id : '',
     obs: obs
   });
 
   showToast('Orden creada correctamente');
-  refresh();
+  await syncData();
 }
   let ordenProdIndex = 1;
 
