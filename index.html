@@ -472,9 +472,24 @@ async function syncData() {
       })).filter(m => String(m.estado).toUpperCase() !== 'ANULADO');
 
       // Solo reemplazamos el estado una vez que TODO llego bien
+      let nuevasOrdenes = await fetchSheets({action:'ordenes'}) || [];
+
+nuevasOrdenes = nuevasOrdenes.map(o => ({
+  idOrden: o.ID_ORDEN || '',
+  fecha: o.FECHA_CREACION || '',
+  campo: o.CAMPO || '',
+  dosificador: o.DOSIFICADOR || '',
+  productos: o.PRODUCTOS || '',
+  estado: o.ESTADO || 'EN CURSO',
+  usuarioCrea: o.USUARIO_CREA || '',
+  usuarioCierra: o.USUARIO_CIERRA || '',
+  fechaCierre: o.FECHA_CIERRE || '',
+  obs: o.OBSERVACIONES || ''
+}));
       products = nuevosProducts;
       stockByLoc = nuevoStockByLoc;
       movimientos = nuevosMovimientos;
+      ordenes = nuevasOrdenes;
 
       sheetsConnected = true;
       setSyncStatus('on', 'Conectado · ' + products.length + ' productos');
