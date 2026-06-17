@@ -910,21 +910,43 @@ async function doDevolucion(){
     `;
   }
 
-  return `
-  <div class="section-header">
-    <div class="section-title">Mis Órdenes</div>
-    <div class="section-sub">Órdenes asignadas</div>
-  </div>
+  const misOrdenes = ordenes.filter(o =>
+  String(o.dosificador).toLowerCase() === String(curUser.id).toLowerCase() &&
+  String(o.estado).toUpperCase() === 'EN CURSO'
+);
 
-  <div id="mis-ordenes">
-    <div class="empty-state">
-      <div class="empty-icon">📋</div>
-      <div class="empty-text">
-        Próximamente aparecerán aquí las órdenes asignadas.
-      </div>
+return `
+<div class="section-header">
+  <div class="section-title">Mis Órdenes</div>
+  <div class="section-sub">${misOrdenes.length} órdenes en curso asignadas</div>
+</div>
+
+${misOrdenes.length ? misOrdenes.map(o => `
+  <div class="orden-card">
+    <div class="orden-card-header">
+      <span class="orden-num-badge">Orden N°${o.idOrden}</span>
+      <span class="orden-date">${o.fecha}</span>
     </div>
+
+    <div class="orden-campo-chip">📍 ${o.campo}</div>
+
+    <div style="font-size:13px;color:var(--tx2);margin-top:8px">
+      <strong>Productos:</strong> ${o.productos || 'Sin productos'}
+    </div>
+
+    ${o.obs ? `<div style="font-size:12px;color:var(--tx3);margin-top:8px;font-style:italic">💬 ${o.obs}</div>` : ''}
+
+    <button class="btn-primary" onclick="abrirCompletarOrden('${o.idOrden}')">
+      Completar orden
+    </button>
   </div>
-  `;
+`).join('') : `
+  <div class="empty-state">
+    <div class="empty-icon">📋</div>
+    <div class="empty-text">No tienes órdenes pendientes.</div>
+  </div>
+`}
+`;
 }
 async function crearOrdenNueva(){
   const campo = document.getElementById('ord-campo').value;
