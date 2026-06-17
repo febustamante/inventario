@@ -1046,6 +1046,64 @@ function removeProductoOrden(i){
 
   document.querySelector('.panel.active').innerHTML = html;
 }
+  let cierreExtraIndex = 100;
+
+function addProductoCierre(){
+  const cont = document.getElementById('productos-extra-cierre');
+  const i = cierreExtraIndex++;
+
+  const div = document.createElement('div');
+  div.className = 'form-group';
+  div.innerHTML = `
+    <select class="form-control" id="co-prod-extra-${i}" style="margin-bottom:8px">
+      <option value="">— Producto —</option>
+      ${prodOpts()}
+    </select>
+    <input type="number" class="form-control" id="co-cant-extra-${i}" placeholder="Cantidad real aplicada" step="0.01">
+  `;
+
+  cont.appendChild(div);
+}
+
+async function ordenLista(idOrden){
+  const o = ordenes.find(x => String(x.idOrden) === String(idOrden));
+  if(!o) return showToast('No se encontró la orden', 'err');
+
+  const lineas = [];
+
+  document.querySelectorAll('[id^="co-prod-"]').forEach(inp => {
+    const idx = inp.id.replace('co-prod-', '');
+    const cant = parseFloat(document.getElementById('co-cant-' + idx)?.value || 0);
+    if(inp.value && cant > 0){
+      lineas.push({ producto: inp.value, cantidad: cant });
+    }
+  });
+
+  document.querySelectorAll('[id^="co-prod-extra-"]').forEach(sel => {
+    const idx = sel.id.replace('co-prod-extra-', '');
+    const cant = parseFloat(document.getElementById('co-cant-extra-' + idx)?.value || 0);
+    if(sel.value && cant > 0){
+      const p = products.find(x => x.id === parseInt(sel.value));
+      if(p) lineas.push({ producto: p.nombre, cantidad: cant });
+    }
+  });
+
+  if(!lineas.length) return showToast('Ingresa al menos una cantidad', 'err');
+
+  showToast('Cerrando orden...', 'info');
+
+  await postSheets({
+    action: 'cerrarOrden',
+    idOrden: idOrden,
+    campo: o.campo,
+    usuario: curUser ? curUser.id : '',
+    obs: o.obs || '',
+    lineas: lineas
+  });
+
+  showToast('Orden terminada correctamente');
+  await syncData();
+}
 function lineHTML(i){
   return`<div class="orden-line" id="ol-${i}">
     <select id="ol-p-${i}" style="-webkit-appearance:none"><option value="">— Producto —</option>${prodOpts()}</select>
