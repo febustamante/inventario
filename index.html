@@ -830,27 +830,66 @@ async function doDevolucion(){
 
 // ══ ORDENES ══
 function renderOrden(){
-  extraLines=4;
-  const locDef=curUser.id==='rulo'?'Rulo':curUser.id==='paine'?'Paine':'Rulo';
-  const mias=ordenes.filter(o=>o.usuario===curUser.id||curUser.role==='maestro').slice(-8).reverse();
-  return`
-  <div class="section-header"><div class="section-title">Aplicaciones</div><div class="section-sub">Registrar orden de aplicacion en campo</div></div>
-  <div class="form-box">
-    <div class="form-title"><div class="form-title-icon">💧</div>Nueva orden</div>
-    <div class="form-row">
-      <div class="form-group"><label class="form-label">N° Orden <span class="required">*</span></label><input type="text" class="form-control" id="ord-n" placeholder="Auto (${nextOrden})" inputmode="numeric" style="font-weight:700;font-size:18px"/></div>
-      <div class="form-group"><label class="form-label">Fecha</label><input type="date" class="form-control" id="ord-f" value="${new Date().toISOString().slice(0,10)}"/></div>
+
+  if(curUser.role === 'maestro'){
+
+    return `
+    <div class="section-header">
+      <div class="section-title">Órdenes</div>
+      <div class="section-sub">Crear orden para dosificadores</div>
     </div>
-    <div class="form-group"><label class="form-label">Ubicacion de aplicacion <span class="required">*</span></label><select class="form-control" id="ord-campo" style="font-size:16px;font-weight:500">${fieldLocsExclude('Bodega Central',locDef)}</select></div>
-    <div class="divider"></div>
-    <div class="section-label">Productos de esta orden</div>
-    <div id="ord-lines">${[0,1,2,3].map(i=>lineHTML(i)).join('')}</div>
-    <div id="ord-extra"></div>
-    <button class="btn-sec" onclick="addOrdLine()" style="width:100%;margin-bottom:.75rem">+ Agregar producto</button>
-    <div class="form-group"><label class="form-label">Observaciones</label><textarea class="form-control" id="ord-obs" rows="2" style="resize:none" placeholder="Condiciones, incidencias..."></textarea></div>
-    <button class="btn-primary" onclick="guardarOrden()">💧 Guardar orden de aplicacion</button>
+
+    <div class="form-box">
+      <div class="form-title">
+        <div class="form-title-icon">📋</div>
+        Nueva Orden
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Campo</label>
+        <select class="form-control" id="ord-campo">
+          <option>Rulo</option>
+          <option>Paine</option>
+          <option>Caseta Cerrillos</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Dosificador</label>
+        <select class="form-control" id="ord-dosificador">
+          <option value="rulo">Rulo</option>
+          <option value="paine">Paine</option>
+          <option value="cerrillos">Eduardo Cerrillos</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Observaciones</label>
+        <textarea class="form-control" id="ord-obs"></textarea>
+      </div>
+
+      <button class="btn-primary" onclick="crearOrdenNueva()">
+        Crear Orden
+      </button>
+    </div>
+    `;
+  }
+
+  return `
+  <div class="section-header">
+    <div class="section-title">Mis Órdenes</div>
+    <div class="section-sub">Órdenes asignadas</div>
   </div>
-  ${mias.length?`<div class="section-label">Ordenes registradas</div>${mias.map(o=>`<div class="orden-card"><div class="orden-card-header"><span class="orden-num-badge">Orden N°${o.num}</span><span class="orden-date">${o.fecha}</span></div><div class="orden-campo-chip">📍 ${o.campo}</div><div class="divider" style="margin:.5rem 0"></div>${o.lineas.map(l=>`<div class="orden-prod-line"><span class="orden-prod-qty">${l.cantidad}</span><span>${l.producto}</span></div>`).join('')}${o.obs?`<div style="font-size:12px;color:var(--tx3);margin-top:.5rem;font-style:italic">💬 ${o.obs}</div>`:''}</div>`).join('')}`:`<div class="empty-state"><div class="empty-icon">💧</div><div class="empty-text">Sin ordenes registradas aun</div></div>`}`;
+
+  <div id="mis-ordenes">
+    <div class="empty-state">
+      <div class="empty-icon">📋</div>
+      <div class="empty-text">
+        Próximamente aparecerán aquí las órdenes asignadas.
+      </div>
+    </div>
+  </div>
+  `;
 }
 function lineHTML(i){
   return`<div class="orden-line" id="ol-${i}">
