@@ -933,6 +933,31 @@ async function crearOrdenNueva(){
   showToast('Orden creada correctamente');
   refresh();
 }  
+  let ordenProdIndex = 1;
+
+function addProductoOrden(){
+  const cont = document.getElementById('orden-productos');
+  const i = ordenProdIndex++;
+
+  const div = document.createElement('div');
+  div.className = 'orden-line';
+  div.id = 'op-' + i;
+
+  div.innerHTML = `
+    <select id="op-prod-${i}">
+      <option value="">— Producto —</option>
+      ${prodOpts()}
+    </select>
+    <button onclick="removeProductoOrden(${i})" style="padding:10px;border:1px solid var(--bd2);border-radius:8px;background:var(--surf2);color:var(--tx2)">✕</button>
+  `;
+
+  cont.appendChild(div);
+}
+
+function removeProductoOrden(i){
+  const el = document.getElementById('op-' + i);
+  if(el) el.remove();
+}
 function lineHTML(i){
   return`<div class="orden-line" id="ol-${i}">
     <select id="ol-p-${i}" style="-webkit-appearance:none"><option value="">— Producto —</option>${prodOpts()}</select>
