@@ -891,6 +891,28 @@ function renderOrden(){
   </div>
   `;
 }
+async function crearOrdenNueva(){
+  const campo = document.getElementById('ord-campo').value;
+  const dosificador = document.getElementById('ord-dosificador').value;
+  const obs = document.getElementById('ord-obs').value.trim();
+
+  if(!campo) return showToast('Selecciona un campo', 'err');
+  if(!dosificador) return showToast('Selecciona un dosificador', 'err');
+
+  showToast('Creando orden...', 'info');
+
+  await postSheets({
+    action: 'crearOrden',
+    fecha: hoy(),
+    campo: campo,
+    dosificador: dosificador,
+    usuario: curUser ? curUser.id : '',
+    obs: obs
+  });
+
+  showToast('Orden creada correctamente');
+  refresh();
+}  
 function lineHTML(i){
   return`<div class="orden-line" id="ol-${i}">
     <select id="ol-p-${i}" style="-webkit-appearance:none"><option value="">— Producto —</option>${prodOpts()}</select>
