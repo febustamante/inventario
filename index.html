@@ -1104,8 +1104,7 @@ async function ordenLista(idOrden){
   showToast('Orden terminada correctamente');
   await syncData();
 }
-  console.log(resp);
-alert('Orden enviada');
+
 function lineHTML(i){
   return`<div class="orden-line" id="ol-${i}">
     <select id="ol-p-${i}" style="-webkit-appearance:none"><option value="">— Producto —</option>${prodOpts()}</select>
