@@ -829,7 +829,7 @@ async function doDevolucion(){
 }
 
 // ══ ORDENES ══
-function renderOrden(){
+  function renderOrden(){
 
   if(curUser.role === 'maestro'){
 
@@ -843,6 +843,11 @@ function renderOrden(){
       <div class="form-title">
         <div class="form-title-icon">📋</div>
         Nueva Orden
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">N° Orden</label>
+        <input type="text" class="form-control" id="ord-num" placeholder="Ej: 1">
       </div>
 
       <div class="form-group">
@@ -862,6 +867,21 @@ function renderOrden(){
           <option value="cerrillos">Eduardo Cerrillos</option>
         </select>
       </div>
+
+      <div class="section-label">Productos de la orden</div>
+      <div id="orden-productos">
+        <div class="orden-line" id="op-0">
+          <select id="op-prod-0">
+            <option value="">— Producto —</option>
+            ${prodOpts()}
+          </select>
+          <button onclick="removeProductoOrden(0)" style="padding:10px;border:1px solid var(--bd2);border-radius:8px;background:var(--surf2);color:var(--tx2)">✕</button>
+        </div>
+      </div>
+
+      <button class="btn-sec" onclick="addProductoOrden()" style="width:100%;margin-bottom:.75rem">
+        + Agregar producto
+      </button>
 
       <div class="form-group">
         <label class="form-label">Observaciones</label>
