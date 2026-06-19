@@ -1089,7 +1089,22 @@ async function ordenLista(idOrden){
       if(p) lineas.push({ producto: p.nombre, cantidad: cant });
     }
   });
+for (const l of lineas) {
+  const p = products.find(x => x.nombre === l.producto);
+  if (!p) continue;
 
+  const disponible = stockAt(p.id, o.campo);
+
+  if (l.cantidad > disponible) {
+    return showToast(
+      'No hay stock suficiente en ' + o.campo +
+      ' para ' + l.producto +
+      '. Disponible: ' + disponible +
+      ', ingresado: ' + l.cantidad,
+      'err'
+    );
+  }
+}
   if(!lineas.length) return showToast('Ingresa al menos una cantidad', 'err');
 
   showToast('Cerrando orden...', 'info');
