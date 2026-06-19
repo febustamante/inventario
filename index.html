@@ -773,12 +773,31 @@ function renderTransferir(){
   <div class="section-header"><div class="section-title">Transferir stock</div><div class="section-sub">Mover producto entre ubicaciones</div></div>
   <div class="form-box">
     <div class="form-title"><div class="form-title-icon">↔️</div>Nueva transferencia</div>
-    <div class="form-group"><label class="form-label">Producto <span class="required">*</span></label><select class="form-control" id="t-p" onchange="updTA()">${prodOpts()}</select></div>
-    <div class="form-row">
-      <div class="form-group"><label class="form-label">Origen <span class="required">*</span></label><select class="form-control" id="t-or" onchange="updTA()">${locOpts('Bodega Central')}</select></div>
-      <div class="form-group"><label class="form-label">Destino <span class="required">*</span></label><select class="form-control" id="t-dst">${locOpts('Rulo')}</select></div>
-    </div>
-    <div class="form-group"><label class="form-label">Cantidad <span class="required">*</span></label><input type="number" class="form-control" id="t-c" min="0.01" step="0.01" placeholder="0" inputmode="decimal"/><div id="t-av" class="form-avail"></div></div>
+ <div class="form-row">
+  <div class="form-group">
+    <label class="form-label">Origen <span class="required">*</span></label>
+    <select class="form-control" id="t-or">
+      ${locOpts('Bodega Central')}
+    </select>
+  </div>
+
+  <div class="form-group">
+    <label class="form-label">Destino <span class="required">*</span></label>
+    <select class="form-control" id="t-dst">
+      ${locOpts('Rulo')}
+    </select>
+  </div>
+</div>
+
+<div class="section-label">Productos a mover</div>
+
+<div id="transfer-productos">
+  ${lineaTransferHTML(0)}
+</div>
+
+<button class="btn-sec" onclick="addLineaTransfer()" style="width:100%;margin-bottom:.75rem">
+  + Agregar producto
+</button>
     <button class="btn-primary" onclick="doTransferir()">↔️ Confirmar transferencia</button>
   </div>
   <div class="section-label">Ultimas transferencias</div>
@@ -790,23 +809,117 @@ function updTA(){
   const el=document.getElementById('t-av');
   if(el&&pid&&loc){const d=stockAt(pid,loc);el.className='form-avail'+(d<=5?' warn':'');el.textContent='Disponible en '+loc+': '+fmt(d)+' unidades';}
 }
+  let transferIndex = 1;
+
+function lineaTransferHTML(i){
+  return `
+    <div class="orden-line" id="tr-line-${i}">
+      <select id="tr-prod-${i}">
+        <option value="">— Producto —</option>
+        ${prodOpts()}
+      </select>
+
+      <input type="number"
+             id="tr-cant-${i}"
+             min="0.01"
+             step="0.01"
+             placeholder="Cant.">
+
+      <button type="button"
+              onclick="removeLineaTransfer(${i})"
+              style="padding:10px;border:1px solid var(--bd2);border-radius:8px;background:var(--surf2);color:var(--tx2)">
+        ✕
+      </button>
+    </div>
+  `;
+}
+
+function addLineaTransfer(){
+  const cont = document.getElementById('transfer-productos');
+  const i = transferIndex++;
+  cont.insertAdjacentHTML('beforeend', lineaTransferHTML(i));
+}
+
+function removeLineaTransfer(i){
+  const el = document.getElementById('tr-line-' + i);
+  if(el) el.remove();
+}
 async function doTransferir(){
-  const pid=parseInt(document.getElementById('t-p').value);
-  const cant=parseFloat(document.getElementById('t-c').value)||0;
-  const origen=document.getElementById('t-or').value;
-  const dest=document.getElementById('t-dst').value;
-  if(origen===dest) return showToast('Origen y destino deben ser distintos','err');
-  if(cant<=0) return showToast('Ingresa una cantidad valida','err');
-  const disp=stockAt(pid,origen);
-  if(cant>disp) return showToast('Insuficiente en '+origen+': '+fmt(disp)+' disp.','err');
-  const p=products.find(x=>x.id===pid);
-  addStock(pid,origen,-cant); addStock(pid,dest,cant);
-  const mov={id:nextMov++,tipo:'transferencia',producto:p.nombre,cantidad:cant,origen,destino:dest,fecha:hoy(),usuario:curUser.id};
-  movimientos.push(mov);
-  showToast('Guardando...','info');
-  await postSheets({action:'transferencia',fecha:mov.fecha,producto:p.nombre,cantidad:cant,origen,destino:dest,usuario:curUser.id,instrucciones:''});
-  showToast(cant+' de '+p.nombre+': '+origen+' → '+dest);
-  refresh();
+async function doTransferir(){
+  const origen = document.getElementById('t-or').value;
+  const dest = document.getElementById('t-dst').value;
+
+  if(origen === dest) {
+    return showToast('Origen y destino deben ser distintos', 'err');
+  }
+
+  const lineas = [];
+
+  document.querySelectorAll('[id^="tr-prod-"]').forEach(sel => {
+    const idx = sel.id.replace('tr-prod-', '');
+    const pid = parseInt(sel.value);
+    const cant = parseFloat(document.getElementById('tr-cant-' + idx)?.value || 0);
+
+    if(pid && cant > 0){
+      const p = products.find(x => x.id === pid);
+      if(p){
+        lineas.push({
+          pid: pid,
+          producto: p.nombre,
+          cantidad: cant
+        });
+      }
+    }
+  });
+
+  if(!lineas.length) {
+    return showToast('Agrega al menos un producto con cantidad', 'err');
+  }
+
+  for(const l of lineas){
+    const disp = stockAt(l.pid, origen);
+
+    if(l.cantidad > disp){
+      return showToast(
+        'Insuficiente en ' + origen + ' para ' + l.producto +
+        '. Disponible: ' + fmt(disp) +
+        ', ingresado: ' + fmt(l.cantidad),
+        'err'
+      );
+    }
+  }
+
+  showToast('Guardando transferencias...', 'info');
+
+  for(const l of lineas){
+    addStock(l.pid, origen, -l.cantidad);
+    addStock(l.pid, dest, l.cantidad);
+
+    movimientos.push({
+      id: nextMov++,
+      tipo: 'transferencia',
+      producto: l.producto,
+      cantidad: l.cantidad,
+      origen: origen,
+      destino: dest,
+      fecha: hoy(),
+      usuario: curUser.id
+    });
+
+    await postSheets({
+      action: 'transferencia',
+      fecha: hoy(),
+      producto: l.producto,
+      cantidad: l.cantidad,
+      origen: origen,
+      destino: dest,
+      usuario: curUser.id,
+      instrucciones: ''
+    });
+  }
+
+  showToast('Transferencia guardada correctamente');
+  await syncData();
 }
 
 // ══ DEVOLUCION ══
