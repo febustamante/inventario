@@ -405,19 +405,48 @@ async function fetchSheets(params) {
 }
 
 async function postSheets(body) {
+  // Token unico por operacion para evitar doble-registro
+  const txnId = 'txn_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
+  const payload = Object.assign({}, body, { txnId });
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
+
   try {
-    await fetch(SHEETS_URL, {
+    const r = await fetch(SHEETS_URL, {
       method: 'POST',
-      mode: 'no-cors',
-      body: JSON.stringify(body)
+      // text/plain evita el preflight CORS pero SI permite leer la respuesta
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload),
+      signal: controller.signal
     });
+    clearTimeout(timeoutId);
 
+    const j = await r.json();
+
+    if (j.error) {
+      showToast('Error guardando: ' + j.error, 'err');
+      return false;
+    }
+
+    if (j.data && j.data.duplicado) {
+      showToast('Esa operacion ya estaba registrada.', 'info');
+      await syncData();
+      return true;
+    }
+
+    // Exito real confirmado por el servidor
     await syncData();
-
     return true;
-  } catch(e) {
+
+  } catch (e) {
+    clearTimeout(timeoutId);
     console.error('Error guardando en Google Sheets:', e);
-    showToast('Error guardando: ' + (e.message || 'desconocido'), 'err');
+    if (e.name === 'AbortError') {
+      showToast('Tiempo de espera agotado. Verifica si se guardo antes de reintentar.', 'err');
+    } else {
+      showToast('Error guardando: ' + (e.message || 'desconocido'), 'err');
+    }
     return false;
   }
 }
