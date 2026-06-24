@@ -134,6 +134,11 @@ input,select,textarea,button{font-family:'Inter',system-ui,sans-serif;font-size:
 .prod-item:active{background:var(--surf2)}
 .prod-info{flex:1;min-width:0}
 .prod-name{font-size:14px;font-weight:500;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.v2item{display:flex;justify-content:space-between;align-items:center;padding:14px 4px;border-bottom:1px solid var(--bd)}
+.v2item:last-child{border-bottom:none}
+.v2name{font-size:15px;font-weight:500;color:var(--tx)}
+.v2fam{font-size:12px;color:var(--tx3);margin-top:2px}
+.v2qty{font-size:17px;font-weight:600;color:var(--tx)}
 .prod-fam{font-size:11px;color:var(--tx3);margin-top:1px}
 .prod-stocks{display:flex;gap:6px;align-items:center;flex-shrink:0}
 .prod-total{font-size:16px;font-weight:700;color:var(--tx);min-width:40px;text-align:right}
@@ -300,6 +305,7 @@ input,select,textarea,button{font-family:'Inter',system-ui,sans-serif;font-size:
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
 <script>
 // =====================================================
 // CONFIG - URL de Google Sheets ya conectada
@@ -909,26 +915,31 @@ const ordenesCurso=ordenes.filter(o=>String(o.estado||'').trim().toUpperCase()==
 const ordenesTerminadas=ordenes.filter(o=>String(o.estado||'').trim().toUpperCase()==='TERMINADA').length;
   const fams=[...new Set(products.map(p=>p.familia))].sort();
   return `
-  <div class="section-header"><div class="section-title">Inventario</div><div class="section-sub">${products.length} productos cargados</div></div>
-  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px">
-    <div style="background:var(--surf2);border-radius:var(--r);padding:.75rem 1rem"><div style="font-size:12px;color:var(--tx3)">Vigentes</div><div style="font-size:20px;font-weight:700;color:var(--green)">${ok}</div></div>
-    <div style="background:var(--surf2);border-radius:var(--r);padding:.75rem 1rem"><div style="font-size:12px;color:var(--tx3)">Stock bajo</div><div style="font-size:20px;font-weight:700;color:var(--amber)">${low}</div></div>
-    <div style="background:var(--surf2);border-radius:var(--r);padding:.75rem 1rem"><div style="font-size:12px;color:var(--tx3)">Agotados</div><div style="font-size:20px;font-weight:700;color:var(--red)">${out}</div></div>
+  <div class="section-header"><div class="section-title">Inventario</div><div class="section-sub">${products.length} productos · 4 bodegas</div></div>
+
+  <div class="card" style="padding:0;overflow:hidden;margin-bottom:12px">
+    <div style="display:flex;text-align:center">
+      <div style="flex:1;padding:14px 8px;border-right:1px solid var(--bd)"><div style="font-size:22px;font-weight:700;color:var(--green)">${ok}</div><div style="font-size:11px;color:var(--tx3);margin-top:2px"><i class="ti ti-circle-check"></i> Vigentes</div></div>
+      <div style="flex:1;padding:14px 8px;border-right:1px solid var(--bd)"><div style="font-size:22px;font-weight:700;color:var(--amber)">${low}</div><div style="font-size:11px;color:var(--tx3);margin-top:2px"><i class="ti ti-alert-triangle"></i> Bajo</div></div>
+      <div style="flex:1;padding:14px 8px"><div style="font-size:22px;font-weight:700;color:var(--red)">${out}</div><div style="font-size:11px;color:var(--tx3);margin-top:2px"><i class="ti ti-circle-x"></i> Agotados</div></div>
+    </div>
   </div>
-  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px">${LOCS.map(l=>{
+
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">${LOCS.map(l=>{
     const t=products.reduce((s,p)=>s+stockAt(p.id,l),0);
-    return`<div style="border:1px solid var(--bd);border-radius:var(--r);padding:.6rem .5rem;text-align:center"><div style="font-size:11px;color:var(--tx3)">${LOC_ICONS[l]} ${l.replace('Bodega Central','Bodega').replace('Caseta Cerrillos','Cerrillos')}</div><div style="font-size:15px;font-weight:700;margin-top:2px">${fmt(t)}</div></div>`;
+    const ic={'Bodega Central':'ti-building-warehouse','Caseta Cerrillos':'ti-home','Rulo':'ti-plant','Paine':'ti-plant-2'}[l]||'ti-map-pin';
+    return`<div class="card" style="margin:0;padding:12px 6px;text-align:center;box-shadow:none"><i class="ti ${ic}" style="font-size:18px;color:var(--vino)"></i><div style="font-size:10px;color:var(--tx3);margin-top:3px">${l.replace('Bodega Central','Bodega').replace('Caseta Cerrillos','Cerrillos')}</div><div style="font-size:15px;font-weight:700;margin-top:2px">${fmt(t)}</div></div>`;
   }).join('')}</div>
+
   <div class="search-wrap">
-    <span class="search-icon">🔍</span>
+    <span class="search-icon"><i class="ti ti-search"></i></span>
     <input class="search-input" id="sq" placeholder="Buscar producto..." oninput="filtStock()" autocomplete="off"/>
   </div>
   <div class="filter-row" id="fam-filters">
     <button class="filter-chip${activeFam===''?' active':''}" onclick="setFamFilter('',this)">Todos</button>
     ${fams.map(f=>`<button class="filter-chip${activeFam===f?' active':''}" onclick="setFamFilter('${f}',this)">${f}</button>`).join('')}
   </div>
-  <div class="card">
-    <div class="card-header"><div class="card-title">📦 Lista de productos</div></div>
+  <div class="card" style="padding:4px 14px">
     <div id="stock-list">${stockList(products)}</div>
   </div>`;
 }
@@ -947,14 +958,20 @@ function filtStock(){
 }
 function stockList(list){
   if(!list.length) return`<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-text">Sin resultados</div></div>`;
+  const colores={'b-ok':'#3B6D11','b-low':'#a87514','b-out':'#A32D2D'};
   return list.map(p=>{
     const[st,bc]=statusOf(p.id);
-    return`<div class="prod-item">
-      <div class="prod-info">
-        <div class="prod-name">${p.nombre}${p.vencido?' ⏰':''}</div>
-        <div class="prod-fam">${p.familia} · B:${fmt(stockAt(p.id,'Bodega Central'))} C:${fmt(stockAt(p.id,'Caseta Cerrillos'))} R:${fmt(stockAt(p.id,'Rulo'))} P:${fmt(stockAt(p.id,'Paine'))}</div>
+    const col=colores[bc]||'#999';
+    const bod=fmt(stockAt(p.id,'Bodega Central'));
+    return`<div class="v2item">
+      <div style="min-width:0;flex:1">
+        <div class="v2name">${p.nombre}${p.vencido?' <i class="ti ti-clock-hour-4" style="color:#a87514"></i>':''}</div>
+        <div class="v2fam">${p.familia} · Bodega ${bod}</div>
       </div>
-      <div class="prod-stocks"><div class="prod-total">${fmt(totalStock(p.id))}</div><span class="badge ${bc}">${st}</span></div>
+      <div style="text-align:right;flex-shrink:0;margin-left:10px">
+        <div class="v2qty">${fmt(totalStock(p.id))}</div>
+        <div style="font-size:11px;color:${col}">${st}</div>
+      </div>
     </div>`;
   }).join('');
 }
