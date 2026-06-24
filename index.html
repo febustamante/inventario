@@ -1668,7 +1668,7 @@ async function crearOrdenNueva(){
   if(!prodsData.length) faltan.push('Al menos un producto');
 
   if(faltan.length){
-    const seguir = confirm('⚠️ Faltan datos por completar:\n\n• ' + faltan.join('\n• ') + '\n\n¿Crear la orden de todas formas?');
+    const seguir = confirm('⚠️ Faltan datos por completar:\n\n• ' + faltan.join('\n• ') + '\n\n¿Continuar de todas formas?');
     if(!seguir) return;
   }
 
@@ -1683,13 +1683,20 @@ async function crearOrdenNueva(){
     }
   });
 
+  // Si falta stock: avisar, ofrecer correo de compra, y NO crear todavía.
   if(faltaStock.length){
     const crearCompra = confirm('⚠️ Falta stock en Bodega Central para:\n\n• ' +
       faltaStock.map(f=>`${f.nombre} (necesita ${f.necesita.toFixed(2)}, hay ${fmt(f.hay)})`).join('\n• ') +
-      '\n\n¿Crear una solicitud de compra?');
+      '\n\n¿Generar una solicitud de compra (correo)?');
     if(crearCompra){
       abrirFormularioCompra(faltaStock);
-      // La orden se crea igual abajo; el correo de compra es paralelo.
+    }
+
+    // Decisión final aparte: crear o volver a editar
+    const crearIgual = confirm('La orden AÚN NO se ha creado.\n\nPuedes cambiar productos o cantidades si quieres.\n\n¿Crear la orden ahora de todas formas?');
+    if(!crearIgual){
+      showToast('Orden no creada. Puedes editar y volver a intentar.', 'info');
+      return;  // vuelve al formulario con todo como estaba
     }
   }
 
