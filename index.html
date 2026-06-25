@@ -1287,7 +1287,7 @@ async function doDevolucion(){
           </div>
           <div>
             <label class="form-label" style="font-size:10px;margin-bottom:2px">Lts/kg máq.</label>
-            <input type="number" class="form-control" id="ord-ltsmaq" placeholder="1500" oninput="recalcOrden()" style="padding:7px 8px;font-size:13px">
+            <select class="form-control" id="ord-ltsmaq" onchange="recalcOrden()" style="padding:7px 8px;font-size:13px"><option value="">— Elegir —</option><option value="1500">1500</option><option value="2000">2000</option></select>
           </div>
         </div>
       </div>
@@ -1379,6 +1379,12 @@ ${misOrdenes.length ? misOrdenes.map(o => {
     </div>
     <div style="font-size:11px;color:var(--tx3);margin-bottom:4px">Escribe el <strong>Real Aplicado</strong> (total por producto). Eso descontará del stock de ${o.campo}.</div>
     ${tabla}
+
+    <div style="margin:8px 0">
+      <div style="font-size:11px;color:var(--tx3);font-weight:600;margin-bottom:4px">Productos adicionales (si hubo cambios)</div>
+      <div id="extra-prods-${o.idOrden}"></div>
+      <button class="btn-sec" onclick="addProdAplicador('${o.idOrden}')" style="width:100%;font-size:12px;padding:8px">+ Agregar producto</button>
+    </div>
 
     <div class="section-label" style="margin-top:10px">Información de la aplicación</div>
     <div style="background:var(--surf2);border:1px solid var(--bd);border-radius:10px;padding:12px;margin-bottom:10px">
@@ -2005,26 +2011,82 @@ function editarOrden(idOrden){
   showToast('Edición de órdenes: próximamente. Por ahora puedes anular y crear de nuevo.', 'info');
 }
 
+let exaSeq = {};
+function addProdAplicador(idOrden){
+  exaSeq[idOrden] = (exaSeq[idOrden]||0)+1;
+  const i = exaSeq[idOrden];
+  const cont = document.getElementById('extra-prods-'+idOrden);
+  const div = document.createElement('div');
+  div.style.cssText='display:flex;gap:6px;margin-bottom:6px;align-items:center';
+  div.innerHTML = `
+    <select id="exa-prod-${idOrden}-${i}" class="form-control" style="font-size:12px;padding:6px;flex:1">
+      <option value="">— Producto —</option>${prodOpts()}
+    </select>
+    <input type="number" id="exa-cant-${idOrden}-${i}" class="form-control" placeholder="Cant." style="font-size:12px;padding:6px;width:70px">
+    <button onclick="this.parentElement.remove()" style="padding:6px 10px;border:1px solid var(--bd2);border-radius:6px;background:var(--surf2);color:var(--tx2)">✕</button>
+  `;
+  cont.appendChild(div);
+}
+
 async function completarOrdenReal(idOrden){
   const o = ordenes.find(x => String(x.idOrden) === String(idOrden));
   if(!o){ showToast('No se encontró la orden', 'err'); return; }
 
-  // Recolectar lo que el aplicador escribio en Real Aplicado
+  // Recolectar Real Aplicado de productos de la orden
   const lineas = [];
   document.querySelectorAll(`[id^="ra-${idOrden}-"]`).forEach(inp => {
     const cant = parseFloat(inp.value)||0;
-    if(cant > 0) lineas.push({ producto: inp.dataset.prod, cantidad: cant });
+    lineas.push({ producto: inp.dataset.prod, cantidad: cant });
   });
 
-  if(!lineas.length){
-    showToast('Ingresa al menos una cantidad real aplicada', 'err');
+  // Recolectar productos adicionales que agregó el dosificador
+  document.querySelectorAll(`[id^="exa-prod-${idOrden}-"]`).forEach(sel => {
+    const n = sel.value;
+    const idx = sel.id.split('-').pop();
+    const cantEl = document.getElementById(`exa-cant-${idOrden}-${idx}`);
+    const cant = parseFloat(cantEl?.value)||0;
+    if(n && cant>0){
+      const p = products.find(x=>String(x.id)===String(n));
+      if(p) lineas.push({ producto: p.nombre, cantidad: cant, extra:true });
+    }
+  });
+
+  // ── VALIDACIÓN: TODOS los campos obligatorios ──
+  const g = (id)=>{ const e=document.getElementById(id+'-'+idOrden); return e?(e.type==='checkbox'?e.checked:e.value):''; };
+  const faltantes = [];
+  // Real aplicado: todos los productos de la orden deben tener cantidad > 0
+  const sinCant = lineas.filter(l=>!l.extra && (!l.cantidad || l.cantidad<=0));
+  if(sinCant.length) faltantes.push('Real Aplicado de todos los productos');
+  if(!lineas.some(l=>l.cantidad>0)) faltantes.push('Al menos un producto con cantidad');
+  if(!g('ap-fi')) faltantes.push('Fecha inicio');
+  if(!g('ap-hi')) faltantes.push('Hora inicio');
+  if(!g('ap-ft')) faltantes.push('Fecha término');
+  if(!g('ap-ht')) faltantes.push('Hora término');
+  if(!g('ap-lav')) faltantes.push('Lavado de máquina');
+  if(!g('ap-exc')) faltantes.push('Eliminación de excedente');
+  if(!g('ap-tra1')) faltantes.push('Tractorista (Equipo 1)');
+  if(!g('ap-trc1')) faltantes.push('Tractor (Equipo 1)');
+  if(!g('ap-pis1')) faltantes.push('Pistonero (Equipo 1)');
+  if(!g('ap-imp1')) faltantes.push('Implemento (Equipo 1)');
+  if(!g('ap-tra2')) faltantes.push('Tractorista (Equipo 2)');
+  if(!g('ap-trc2')) faltantes.push('Tractor (Equipo 2)');
+  if(!g('ap-pis2')) faltantes.push('Pistonero (Equipo 2)');
+  if(!g('ap-imp2')) faltantes.push('Implemento (Equipo 2)');
+  if(!g('ap-tie')) faltantes.push('Tiempo (clima)');
+  if(!g('ap-vie')) faltantes.push('Viento');
+
+  if(faltantes.length){
+    alert('⚠️ No puedes confirmar: faltan campos por completar.\n\nDebes llenar TODO antes de enviar:\n\n• ' + faltantes.join('\n• '));
     return;
   }
 
+  // solo cantidades > 0 para descontar
+  const lineasDesc = lineas.filter(l=>l.cantidad>0);
+
   // Validar stock en el campo destino (de donde se descuenta)
-  const campoDestino = o.campo; // ej. Caseta Cerrillos
+  const campoDestino = o.campo;
   const sinStock = [];
-  lineas.forEach(l => {
+  lineasDesc.forEach(l => {
     const p = products.find(x => x.nombre === l.producto);
     if(p){
       const disp = stockAt(p.id, campoDestino);
@@ -2032,13 +2094,12 @@ async function completarOrdenReal(idOrden){
     }
   });
 
-  let msg = `Vas a descontar de ${campoDestino}:\n\n` + lineas.map(l=>`• ${l.producto}: ${l.cantidad}`).join('\n');
+  let msg = `Vas a descontar de ${campoDestino}:\n\n` + lineasDesc.map(l=>`• ${l.producto}: ${l.cantidad}`).join('\n');
   if(sinStock.length) msg += `\n\n⚠️ Stock insuficiente:\n• ` + sinStock.join('\n• ');
   msg += `\n\n¿Confirmar?`;
   if(!confirm(msg)) return;
 
-  // Recolectar info de la aplicacion que llenó el aplicador
-  const g = (id)=>{ const e=document.getElementById(id+'-'+idOrden); return e?(e.type==='checkbox'?e.checked:e.value):''; };
+  // Info de la aplicacion (ya validada completa)
   const infoAplicacion = {
     fechaInicio:g('ap-fi'), horaInicio:g('ap-hi'), fechaTermino:g('ap-ft'), horaTermino:g('ap-ht'),
     lavado:g('ap-lav'), excedente:g('ap-exc'),
@@ -2047,7 +2108,7 @@ async function completarOrdenReal(idOrden){
       {tractorista:g('ap-tra2'),tractor:g('ap-trc2'),pistonero:g('ap-pis2'),implemento:g('ap-imp2')}
     ],
     clima:{tiempo:g('ap-tie'),viento:g('ap-vie'),trajeCompleto:g('ap-tra')},
-    realAplicado: lineas
+    realAplicado: lineasDesc
   };
 
   // Guardar la info en el detalle de la orden
@@ -2059,7 +2120,7 @@ async function completarOrdenReal(idOrden){
     action: 'cerrarOrden',
     idOrden: o.idOrden,
     campo: campoDestino,
-    lineas: lineas,
+    lineas: lineasDesc,
     usuario: curUser ? curUser.id : '',
     obs: `Orden ${o.detalle?.numeroOrden||o.idOrden} aplicada`
   });
@@ -2334,6 +2395,23 @@ function renderGerencia(){
       </div>
     </div>
   </div>
+
+  ${(()=>{
+    const pend = ordenes.filter(o=>String(o.estado||'').toUpperCase()==='EN CURSO');
+    if(!pend.length) return '';
+    return `<div class="section-label" style="color:var(--amber)">⏳ Órdenes pendientes por aplicar (${pend.length})</div>
+    <div class="card" style="border-left:3px solid var(--amber)">
+      ${pend.sort((a,b)=>(b.idOrden||0)-(a.idOrden||0)).map(o=>{
+        const d=o.detalle;
+        const num=d&&d.numeroOrden?d.numeroOrden:o.idOrden;
+        const campo=d&&d.fundo?d.fundo:o.campo;
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--bd)">
+          <div><span style="font-weight:600;font-size:13px">Orden N°${num}</span> <span style="color:var(--tx3);font-size:12px">· 📍 ${campo}</span></div>
+          <span class="badge b-low">En curso</span>
+        </div>`;
+      }).join('')}
+    </div>`;
+  })()}
 
   <div class="section-label">Órdenes por campo</div>
   ${(()=>{
