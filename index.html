@@ -1681,6 +1681,23 @@ async function crearOrdenNueva(){
     productos: detalleProds, observaciones: obs
   };
 
+  // ── NÚMERO DE ORDEN ÚNICO (bloqueo duro) ──
+  if(numeroOrden){
+    const existe = ordenes.find(o =>
+      String(o.estado||'').toUpperCase()!=='ANULADA' &&
+      o.detalle && String(o.detalle.numeroOrden)===String(numeroOrden)
+    );
+    if(existe){
+      // sugerir siguiente número libre
+      const usados = ordenes
+        .filter(o=>o.detalle && o.detalle.numeroOrden && String(o.estado||'').toUpperCase()!=='ANULADA')
+        .map(o=>parseInt(o.detalle.numeroOrden)).filter(n=>!isNaN(n));
+      const sugerido = usados.length ? Math.max(...usados)+1 : 1;
+      alert(`⚠️ El número de orden "${numeroOrden}" ya existe.\n\nNo se pueden repetir. El siguiente número libre es: ${sugerido}`);
+      return;
+    }
+  }
+
   // ── ADVERTENCIAS (permiten seguir si insiste) ──
   const faltan = [];
   if(!numeroOrden) faltan.push('N° de orden');
@@ -2395,6 +2412,60 @@ function renderGerencia(){
       </div>
     </div>
   </div>
+
+  ${(()=>{
+    // Costo por cuartel, agrupado por campo. Usa órdenes TERMINADAS.
+    // Reparte el real aplicado de cada producto entre cuarteles según proporción teórica.
+    const terminadas = ordenes.filter(o=>String(o.estado||'').toUpperCase()==='TERMINADA' && o.detalle);
+    if(!terminadas.length) return '';
+
+    // estructura: { campo: { cuartel: costo } }
+    const porCampo = {};
+    terminadas.forEach(o=>{
+      const d=o.detalle;
+      const campo = d.fundo || o.campo || 'Sin campo';
+      const ia = d.infoAplicacion;
+      (d.productos||[]).forEach(p=>{
+        const prod = products.find(x=>x.nombre===p.nombre);
+        const precio = prod ? (prod.precio||0) : 0;
+        // cantidad real aplicada de este producto
+        let realTotal = p.totalTeorico||0;
+        if(ia && ia.realAplicado){
+          const ra = ia.realAplicado.find(x=>x.producto===p.nombre);
+          if(ra) realTotal = ra.cantidad;
+        }
+        // reparto por cuartel segun proporcion teorica
+        const teoricoTotal = (p.porCuartel||[]).reduce((s,c)=>s+c.val,0) || 1;
+        (p.porCuartel||[]).forEach(pc=>{
+          const proporcion = pc.val/teoricoTotal;
+          const costoCuartel = realTotal * proporcion * precio;
+          porCampo[campo] = porCampo[campo]||{};
+          porCampo[campo][pc.c] = (porCampo[campo][pc.c]||0) + costoCuartel;
+        });
+      });
+    });
+
+    if(!Object.keys(porCampo).length) return '';
+
+    let html = '<div class="section-label">💰 Costo por cuartel (acumulado)</div>';
+    Object.keys(porCampo).sort().forEach(campo=>{
+      const cuarts = Object.entries(porCampo[campo]).sort((a,b)=>b[1]-a[1]);
+      const totalCampo = cuarts.reduce((s,c)=>s+c[1],0);
+      const maxC = cuarts.length?cuarts[0][1]:1;
+      html += `<div class="card" style="margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <span style="font-size:13px;font-weight:700;color:var(--vino)">📍 ${campo}</span>
+          <span style="font-size:13px;font-weight:700">${plata(totalCampo)}</span>
+        </div>
+        ${cuarts.map(([c,costo])=>`
+          <div style="padding:5px 0">
+            <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span>${c}</span><span style="color:var(--tx2);font-weight:600">${plata(costo)}</span></div>
+            <div style="height:5px;background:var(--surf3);border-radius:3px"><div style="height:100%;width:${Math.max(3,Math.round(costo/maxC*100))}%;background:var(--vino);border-radius:3px"></div></div>
+          </div>`).join('')}
+      </div>`;
+    });
+    return html;
+  })()}
 
   ${(()=>{
     const pend = ordenes.filter(o=>String(o.estado||'').toUpperCase()==='EN CURSO');
