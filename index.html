@@ -1736,8 +1736,13 @@ async function crearOrdenNueva(){
 
   // Ofrecer generar el PDF de inmediato
   const ult = ordenes.find(o => o.detalle && String(o.detalle.numeroOrden)===String(numeroOrden));
-  if(ult && confirm('Orden creada. ¿Generar el PDF para imprimir?')){
-    generarPDFOrden(ult.idOrden);
+  if(ult){
+    if(confirm('Orden creada. ¿Generar el PDF para imprimir?')){
+      generarPDFOrden(ult.idOrden);
+    }
+    if(confirm('¿Generar también el Excel de la orden?')){
+      generarExcelOrden(ult.idOrden);
+    }
   }
 }
 
@@ -1834,15 +1839,40 @@ async function generarExcelOrden(idOrden){
   if(!o || !o.detalle){ showToast('Esta orden no tiene datos para Excel','err'); return; }
   const d = o.detalle;
 
-  try{
-    showToast('Generando Excel...');
-    // Cargar la plantilla
-    const resp = await fetch(PLANTILLA_URL);
-    if(!resp.ok) throw new Error('No se encontró la plantilla. ¿Está subida a GitHub?');
-    const buf = await resp.arrayBuffer();
-    const wb = XLSX.read(buf, {type:'array', cellStyles:true});
-    const ws = wb.Sheets['005'] || wb.Sheets[wb.SheetNames[0]];
+  // DIAGNOSTICO 1: ¿cargó la librería?
+  if(typeof XLSX === 'undefined'){
+    showToast('La librería de Excel no cargó. Revisa tu conexión y recarga la página.','err');
+    return;
+  }
 
+  try{
+    showToast('Paso 1: buscando plantilla...');
+    // DIAGNOSTICO 2: ¿se encuentra la plantilla?
+    let resp;
+    try{
+      resp = await fetch(PLANTILLA_URL);
+    }catch(fe){
+      showToast('No se pudo conectar para buscar la plantilla.','err');
+      return;
+    }
+    if(!resp.ok){
+      showToast('Plantilla no encontrada (error '+resp.status+'). Verifica que plantilla_orden.xlsx esté en GitHub.','err');
+      return;
+    }
+
+    showToast('Paso 2: leyendo plantilla...');
+    const buf = await resp.arrayBuffer();
+    let wb;
+    try{
+      wb = XLSX.read(buf, {type:'array', cellStyles:true});
+    }catch(re){
+      showToast('La plantilla se descargó pero no se pudo leer. ¿Es un Excel válido?','err');
+      return;
+    }
+    const ws = wb.Sheets['005'] || wb.Sheets[wb.SheetNames[0]];
+    if(!ws){ showToast('La plantilla no tiene la hoja esperada.','err'); return; }
+
+    showToast('Paso 3: rellenando datos...');
     const set = (ref,val)=>{ ws[ref] = ws[ref]||{}; ws[ref].v = val; ws[ref].t = (typeof val==='number')?'n':'s'; };
 
     // Datos generales
@@ -1914,11 +1944,17 @@ async function generarExcelOrden(idOrden){
     // Observaciones
     if(d.observaciones) set('E31', d.observaciones);
 
-    XLSX.writeFile(wb, 'Orden_'+numO+'_'+(d.fundo||'')+'.xlsx');
-    showToast('Excel generado');
+    showToast('Paso 4: generando archivo...');
+    try{
+      XLSX.writeFile(wb, 'Orden_'+numO+'_'+(d.fundo||'')+'.xlsx');
+    }catch(we){
+      showToast('No se pudo crear el archivo final: '+(we.message||''),'err');
+      return;
+    }
+    showToast('✓ Excel generado y descargado');
   }catch(e){
     console.error(e);
-    showToast('Error: '+(e.message||'no se pudo generar'),'err');
+    showToast('Error inesperado: '+(e.message||'desconocido'),'err');
   }
 }
 
