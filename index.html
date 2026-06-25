@@ -1963,6 +1963,11 @@ function generarPDFOrden(idOrden){
   const o = ordenes.find(x=>String(x.idOrden)===String(idOrden));
   if(!o || !o.detalle){ showToast('Esta orden no tiene datos para PDF','err'); return; }
   const d = o.detalle;
+  if(typeof window.jspdf === 'undefined'){
+    showToast('La librería de PDF no cargó. Revisa tu conexión y recarga la página.','err');
+    return;
+  }
+  try{
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({unit:'mm', format:'a4'});
   const W = 210;
@@ -2049,6 +2054,10 @@ function generarPDFOrden(idOrden){
 
   doc.save('Orden_'+(d.numeroOrden||o.idOrden)+'_'+(d.fundo||'')+'.pdf');
   showToast('PDF generado');
+  }catch(e){
+    console.error(e);
+    showToast('Error al generar PDF: '+(e.message||'desconocido'),'err');
+  }
 }
 
 async function anularOrden(idOrden, terminada){
