@@ -960,14 +960,18 @@ function filtStock(){
 function stockList(list){
   if(!list.length) return`<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-text">Sin resultados</div></div>`;
   const colores={'b-ok':'#3B6D11','b-low':'#a87514','b-out':'#A32D2D'};
+  const abrev={'Bodega Central':'Bodega','Caseta Cerrillos':'Cerrillos','Rulo':'Rulo','Paine':'Paine'};
   return list.map(p=>{
     const[st,bc]=statusOf(p.id);
     const col=colores[bc]||'#999';
-    const bod=fmt(stockAt(p.id,'Bodega Central'));
+    // Mostrar solo ubicaciones con stock > 0
+    const ubic = LOCS.map(l=>{const c=stockAt(p.id,l);return c>0?`${abrev[l]} ${fmt(c)}`:null;}).filter(Boolean);
+    const detalle = ubic.length ? ubic.join(' · ') : 'Sin stock';
     return`<div class="v2item">
       <div style="min-width:0;flex:1">
         <div class="v2name">${p.nombre}${p.vencido?' <i class="ti ti-clock-hour-4" style="color:#a87514"></i>':''}</div>
-        <div class="v2fam">${p.familia} · Bodega ${bod}</div>
+        <div class="v2fam">${p.familia}</div>
+        <div style="font-size:11px;color:var(--vino);margin-top:2px">${detalle}</div>
       </div>
       <div style="text-align:right;flex-shrink:0;margin-left:10px">
         <div class="v2qty">${fmt(totalStock(p.id))}</div>
