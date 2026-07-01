@@ -183,10 +183,11 @@ input,select,textarea,button{font-family:'Inter',system-ui,sans-serif;font-size:
 
 .orden-card{background:var(--surf);border:1px solid var(--bd);border-radius:var(--rl);padding:1rem;margin-bottom:10px;box-shadow:var(--shadow)}
 .orden-card-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:.75rem}
-.ord-tabla{width:100%;border-collapse:collapse;font-size:11px}
+.ord-tabla{width:100%;min-width:600px;border-collapse:collapse;font-size:11px;table-layout:fixed}
 .ord-tabla th{background:var(--vino);color:#fff;padding:5px 4px;text-align:center;font-size:10px;font-weight:600;line-height:1.1;border:1px solid #6a2525}
-.ord-tabla td{padding:3px;border:1px solid var(--bd);text-align:center;vertical-align:middle}
-.ord-tabla input,.ord-tabla select{width:100%;padding:5px 4px;border:1px solid var(--bd2);border-radius:5px;font-size:11px;background:var(--surf);color:var(--tx);outline:none;-webkit-appearance:none;appearance:none}
+.ord-tabla td{padding:3px;border:1px solid var(--bd);text-align:center;vertical-align:middle;overflow:hidden}
+.ord-tabla input,.ord-tabla select{width:100%;padding:5px 4px;border:1px solid var(--bd2);border-radius:5px;font-size:11px;background:var(--surf);color:var(--tx);outline:none;-webkit-appearance:none;appearance:none;box-sizing:border-box}
+.ord-tabla select{text-overflow:ellipsis}
 .ord-tabla input:focus,.ord-tabla select:focus{border-color:var(--vino)}
 .ord-tabla .calc-cell{font-weight:700;color:var(--vino);background:var(--surf2)}
 .ord-tabla .del-btn{padding:3px 7px;border:1px solid var(--bd2);border-radius:5px;background:var(--surf2);color:var(--tx2);font-size:11px;cursor:pointer}
@@ -1330,17 +1331,17 @@ async function doDevolucion(){
         <table class="ord-tabla" id="ord-tabla">
           <thead>
             <tr>
-              <th style="min-width:120px">Producto</th>
-              <th style="min-width:70px">Ing.<br>Activo</th>
-              <th>Dosis<br>/100</th>
-              <th>Dosis<br>/maq</th>
-              <th>N°<br>maq</th>
-              <th>Tot.<br>prod</th>
-              <th>Dosis<br>/ha</th>
-              <th style="min-width:80px">Objetivo</th>
-              <th>Caren.</th>
-              <th>Tóx.</th>
-              <th></th>
+              <th style="width:110px">Producto</th>
+              <th style="width:62px">Ing.<br>Activo</th>
+              <th style="width:52px">Dosis<br>/100</th>
+              <th style="width:50px">Dosis<br>/maq</th>
+              <th style="width:44px">N°<br>maq</th>
+              <th style="width:50px">Tot.<br>prod</th>
+              <th style="width:48px">Dosis<br>/ha</th>
+              <th style="width:70px">Objetivo</th>
+              <th style="width:40px">Car.</th>
+              <th style="width:34px">Tóx.</th>
+              <th style="width:34px"></th>
             </tr>
           </thead>
           <tbody id="ord-prods"></tbody>
@@ -1525,13 +1526,13 @@ function addProdOrden(){
   tr.innerHTML = `
     <td><select id="opa-prod-${id}" onchange="onProdOrdenChange(${id})"><option value="">— Producto —</option>${prodOpts()}</select></td>
     <td id="opa-ia-${id}" style="font-size:9px;color:var(--tx2);line-height:1.1">—</td>
-    <td><input type="number" id="opa-dosis-${id}" placeholder="0.090" step="0.001" oninput="recalcOrden()" style="min-width:56px"></td>
+    <td><input type="number" id="opa-dosis-${id}" placeholder="0.090" step="0.001" oninput="recalcOrden()"></td>
     <td class="calc-cell" id="opa-dmaq-${id}">—</td>
     <td class="calc-cell" id="opa-nmaq-${id}">—</td>
     <td class="calc-cell" id="opa-tot-${id}">—</td>
     <td class="calc-cell" id="opa-dha-${id}">—</td>
-    <td><input type="text" id="opa-obj-${id}" placeholder="chanchito" style="min-width:70px"></td>
-    <td><input type="number" id="opa-car-${id}" placeholder="31" style="min-width:44px"></td>
+    <td><input type="text" id="opa-obj-${id}" placeholder="chanchito"></td>
+    <td><input type="number" id="opa-car-${id}" placeholder="31"></td>
     <td id="opa-tox-${id}" style="font-weight:700"></td>
     <td><button class="del-btn" onclick="removeProdOrden(${id})">✕</button></td>
   `;
