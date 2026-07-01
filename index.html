@@ -904,6 +904,25 @@ function initOrdenForm(){
   if(document.getElementById('ord-prods') && document.getElementById('ord-prods').children.length===0){
     addProdOrden();
   }
+  onTipoOrdenChange(); // pone el correlativo inicial
+}
+
+// Calcula el siguiente número correlativo según el tipo de orden
+function siguienteCorrelativo(tipo){
+  const usados = ordenes
+    .filter(o => (o.detalle?.tipo||'fitosanitario') === tipo && String(o.estado||'').toUpperCase()!=='ANULADA')
+    .map(o => parseInt(o.detalle?.numeroOrden)).filter(n=>!isNaN(n));
+  return usados.length ? Math.max(...usados)+1 : 1;
+}
+
+function onTipoOrdenChange(){
+  const tipo = document.getElementById('ord-tipo')?.value || 'fitosanitario';
+  // Actualizar título grande
+  const titulo = document.getElementById('ord-titulo');
+  if(titulo) titulo.textContent = tipo==='herbicida' ? 'Aplicación de Herbicidas' : 'Aplicación de Productos Fitosanitarios';
+  // Poner el correlativo automático
+  const numEl = document.getElementById('ord-num');
+  if(numEl) numEl.value = siguienteCorrelativo(tipo);
 }
 
 function refresh(){ renderPanel(curTab); }
@@ -1215,16 +1234,24 @@ async function doDevolucion(){
 
     return `
     <div class="section-header">
-      <div class="section-title">Orden de Aplicación</div>
-      <div class="section-sub">Guía para el aplicador · Temp. 2025-2026</div>
+      <div class="section-title" id="ord-titulo">Aplicación de Productos Fitosanitarios</div>
+      <div class="section-sub">Guía para el aplicador · Temp. 2026-2027</div>
     </div>
 
     <div class="form-box">
       <div class="form-title"><div class="form-title-icon">📋</div>Datos de la aplicación</div>
 
       <div class="form-group">
-        <label class="form-label">N° Orden</label>
-        <input type="text" class="form-control" id="ord-num" placeholder="Ej: 981">
+        <label class="form-label">Tipo de aplicación</label>
+        <select class="form-control" id="ord-tipo" onchange="onTipoOrdenChange()">
+          <option value="fitosanitario">Fitosanitario</option>
+          <option value="herbicida">Herbicida</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">N° Orden <span style="color:var(--tx3);font-weight:400">(automático)</span></label>
+        <input type="text" class="form-control" id="ord-num" readonly style="background:var(--surf2);font-weight:700">
       </div>
 
       <div class="form-group">
@@ -1649,6 +1676,7 @@ function buildBodegaTabla(){
 }
 
 async function crearOrdenNueva(){
+  const tipoOrden = document.getElementById('ord-tipo')?.value || 'fitosanitario';
   const numeroOrden = document.getElementById('ord-num').value.trim();
   const fundo = document.getElementById('ord-fundo').value;
   const fecha = document.getElementById('ord-fecha').value;
@@ -1697,7 +1725,7 @@ async function crearOrdenNueva(){
   }
 
   const detalle = {
-    fundo, fecha, numeroOrden,
+    fundo, fecha, numeroOrden, tipo: tipoOrden,
     cuarteles: cuarts, hectareas:+has.toFixed(2),
     pct:pctV, mojamiento:parseFloat(mojamiento)||0, ltsMaq:parseFloat(ltsMaq)||0,
     especie:'Uva de Mesa', variedad:variedadOrden, direccion:direccionOrden,
@@ -1706,19 +1734,17 @@ async function crearOrdenNueva(){
     productos: detalleProds, observaciones: obs
   };
 
-  // ── NÚMERO DE ORDEN ÚNICO (bloqueo duro) ──
+  // ── NÚMERO DE ORDEN ÚNICO POR TIPO (bloqueo duro) ──
   if(numeroOrden){
     const existe = ordenes.find(o =>
       String(o.estado||'').toUpperCase()!=='ANULADA' &&
-      o.detalle && String(o.detalle.numeroOrden)===String(numeroOrden)
+      o.detalle && (o.detalle.tipo||'fitosanitario')===tipoOrden &&
+      String(o.detalle.numeroOrden)===String(numeroOrden)
     );
     if(existe){
-      // sugerir siguiente número libre
-      const usados = ordenes
-        .filter(o=>o.detalle && o.detalle.numeroOrden && String(o.estado||'').toUpperCase()!=='ANULADA')
-        .map(o=>parseInt(o.detalle.numeroOrden)).filter(n=>!isNaN(n));
-      const sugerido = usados.length ? Math.max(...usados)+1 : 1;
-      alert(`⚠️ El número de orden "${numeroOrden}" ya existe.\n\nNo se pueden repetir. El siguiente número libre es: ${sugerido}`);
+      const sugerido = siguienteCorrelativo(tipoOrden);
+      alert(`⚠️ La orden N°${numeroOrden} de tipo ${tipoOrden} ya existe.\n\nEl siguiente número libre es: ${sugerido}`);
+      document.getElementById('ord-num').value = sugerido;
       return;
     }
   }
@@ -1942,7 +1968,8 @@ function generarPDFOrden(idOrden){
   try{ if(typeof LOGO_PDF!=='undefined' && LOGO_PDF) doc.addImage(LOGO_PDF,'JPEG',10,5,42,12); }catch(e){}
   doc.setTextColor(255,255,255);
   doc.setFontSize(8); doc.setFont('helvetica','normal');
-  doc.text('Aplicación de productos fitosanitarios · Temp. 2026-2027', 56, 13);
+  const tipoTxt = (d.tipo==='herbicida') ? 'Aplicación de Herbicidas' : 'Aplicación de Productos Fitosanitarios';
+  doc.text(tipoTxt + ' · Temp. 2026-2027', 56, 13);
   // recuadro N° orden
   doc.setDrawColor(255,255,255); doc.setFillColor(150,60,60);
   doc.roundedRect(W-42,5,32,12,2,2,'F');
