@@ -306,6 +306,7 @@ input,select,textarea,button{font-family:'Inter',system-ui,sans-serif;font-size:
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
 // =====================================================
 // CONFIG - URL de Google Sheets ya conectada
@@ -1875,6 +1876,51 @@ function cerrarModalCompra(){
 }
 
 
+// ── EXPORTAR RESPALDO COMPLETO (Stock + Movimientos + Órdenes) ──
+function exportarRespaldo(){
+  if(typeof XLSX === 'undefined'){ showToast('La librería de Excel no cargó. Recarga la página.','err'); return; }
+  try{
+    showToast('Generando respaldo...');
+    const wb = XLSX.utils.book_new();
+
+    // Hoja STOCK
+    const stockRows = [['ID','NOMBRE','FAMILIA','BODEGA_CENTRAL','CASETA_CERRILLOS','RULO','PAINE','TOTAL','MINIMO','PRECIO']];
+    products.forEach(p=>{
+      stockRows.push([p.id, p.nombre, p.familia,
+        stockAt(p.id,'Bodega Central'), stockAt(p.id,'Caseta Cerrillos'),
+        stockAt(p.id,'Rulo'), stockAt(p.id,'Paine'),
+        totalStock(p.id), p.minimo||0, p.precio||0]);
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(stockRows), 'STOCK');
+
+    // Hoja MOVIMIENTOS
+    const movRows = [['FECHA','TIPO','PRODUCTO','CANTIDAD','ORIGEN','DESTINO','ESTADO','USUARIO','ORDEN','OBS']];
+    (movimientos||[]).forEach(m=>{
+      movRows.push([m.fecha||'', m.tipo||'', m.producto||'', m.cantidad||0,
+        m.origen||'', m.destino||'', m.estado||'', m.usuario||'', m.orden_id||'', m.obs||'']);
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(movRows), 'MOVIMIENTOS');
+
+    // Hoja ORDENES
+    const ordRows = [['N°','FECHA','CAMPO','CUARTELES','PRODUCTOS','ESTADO','HECTAREAS']];
+    (ordenes||[]).forEach(o=>{
+      const d=o.detalle||{};
+      ordRows.push([d.numeroOrden||o.idOrden, d.fecha||'', d.fundo||o.campo||'',
+        (d.cuarteles||[]).map(c=>c.c).join(', '),
+        (d.productos||[]).map(p=>p.nombre).join(', '),
+        o.estado||'', d.hectareas||0]);
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(ordRows), 'ORDENES');
+
+    const hoy = new Date().toISOString().slice(0,10);
+    XLSX.writeFile(wb, 'Respaldo_SanJose_'+hoy+'.xlsx');
+    showToast('✓ Respaldo descargado');
+  }catch(e){
+    console.error(e);
+    showToast('Error al generar respaldo: '+(e.message||''),'err');
+  }
+}
+
 // ── GENERAR PDF DE LA ORDEN (hoja imprimible para completar a lápiz) ──
 function generarPDFOrden(idOrden){
   const o = ordenes.find(x=>String(x.idOrden)===String(idOrden));
@@ -2381,6 +2427,8 @@ function renderGerencia(){
 
   return`
   <div class="section-header"><div class="section-title">Dashboard Gerencial</div><div class="section-sub">Vista ejecutiva · ${hoy()}</div></div>
+
+  <button onclick="exportarRespaldo()" style="width:100%;padding:11px;margin-bottom:14px;border:1px solid #1d6b3a;border-radius:10px;background:#1d6b3a;color:#fff;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-download"></i> Exportar respaldo (Excel)</button>
 
   <div style="background:var(--vino);border-radius:var(--rl);padding:1.25rem 1.5rem;margin-bottom:1rem;color:#fff">
     <div style="font-size:13px;opacity:.85;letter-spacing:.3px">Valor total del inventario</div>
