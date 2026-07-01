@@ -805,7 +805,7 @@ function getTabs(role) {
     {k:'recibir',  icon:'📥',label:'Recibir',  roles:['maestro','bodeguero'],            render:renderRecibir,     prim:false},
     {k:'transfer', icon:'↔️',label:'Mover',    roles:['maestro','bodeguero'],            render:renderTransferir,  prim:false},
     {k:'devol',    icon:'↩️',label:'Devolver', roles:['maestro','bodeguero','dosificador'],render:renderDevolucion,prim:false},
-    {k:'orden',    icon:'💧',label:'Aplicar',  roles:['maestro','dosificador'],          render:renderOrden,       prim:true},
+    {k:'orden',    icon:'💧',label:'Aplicar',  roles:['maestro','dosificador','gerencia'], render:renderOrden,       prim:true},
     {k:'historial',icon:'📋',label:'Historial',roles:['maestro','bodeguero','gerencia'], render:renderHistorial,   prim:true},
     {k:'gerencia', icon:'📊',label:'Gerencia', roles:['maestro','gerencia'],             render:renderGerencia,    prim:true},
     {k:'admin',    icon:'⚙️',label:'Admin',    roles:['maestro'],                        render:renderAdmin,       prim:false},
@@ -892,7 +892,7 @@ function renderPanel(i) {
   if(el){
     el.innerHTML=tabs[i].render();
     if(tabs[i].k==='gerencia') setTimeout(buildCharts,150);
-    if(tabs[i].k==='orden' && curUser.role==='maestro') setTimeout(initOrdenForm,100);
+    if(tabs[i].k==='orden' && (curUser.role==='maestro'||curUser.role==='gerencia')) setTimeout(initOrdenForm,100);
   }
 }
 
@@ -1210,7 +1210,7 @@ async function doDevolucion(){
 // ══ ORDENES ══
   function renderOrden(){
 
-  if(curUser.role === 'maestro'){
+  if(curUser.role === 'maestro' || curUser.role === 'gerencia'){
 
     return `
     <div class="section-header">
