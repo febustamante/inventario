@@ -1320,7 +1320,7 @@ async function doDevolucion(){
           </div>
           <div>
             <label class="form-label" style="font-size:10px;margin-bottom:2px">Lts/kg máq.</label>
-            <select class="form-control" id="ord-ltsmaq" onchange="recalcOrden()" style="padding:7px 8px;font-size:13px"><option value="">— Elegir —</option><option value="1500">1500</option><option value="2000">2000</option></select>
+            <input type="number" class="form-control" id="ord-ltsmaq" placeholder="1500" oninput="recalcOrden()" style="padding:7px 8px;font-size:13px">
           </div>
         </div>
       </div>
@@ -1330,15 +1330,15 @@ async function doDevolucion(){
         <table class="ord-tabla" id="ord-tabla">
           <thead>
             <tr>
-              <th style="min-width:100px">Producto</th>
-              <th style="min-width:64px">Ing.<br>Activo</th>
-              <th style="width:56px">Dosis<br>/100</th>
-              <th>Dosis<br>/maq</th>
-              <th>N°<br>maq</th>
-              <th>Tot.<br>prod</th>
-              <th>Dosis<br>/ha</th>
-              <th style="width:80px">Objetivo</th>
-              <th style="width:34px">Car.</th>
+              <th style="width:72px">Producto</th>
+              <th style="width:60px">Ing.<br>Activo</th>
+              <th style="width:70px">Dosis<br>/100</th>
+              <th style="width:58px">Dosis<br>/maq</th>
+              <th style="width:48px">N°<br>maq</th>
+              <th style="width:58px">Tot.<br>prod</th>
+              <th style="width:56px">Dosis<br>/ha</th>
+              <th style="width:72px">Objetivo</th>
+              <th style="width:38px">Car.</th>
               <th style="width:30px">Tóx.</th>
               <th></th>
             </tr>
@@ -1523,14 +1523,14 @@ function addProdOrden(){
   const tr = document.createElement('tr');
   tr.id = 'opa-' + id;
   tr.innerHTML = `
-    <td><select id="opa-prod-${id}" onchange="onProdOrdenChange(${id})"><option value="">— Producto —</option>${prodOpts()}</select></td>
+    <td><select id="opa-prod-${id}" onchange="onProdOrdenChange(${id})" style="width:84px;font-size:11px"><option value="">— Producto —</option>${prodOpts()}</select></td>
     <td id="opa-ia-${id}" style="font-size:9px;color:var(--tx2);line-height:1.1">—</td>
-    <td><input type="number" id="opa-dosis-${id}" placeholder="0.090" step="0.001" oninput="recalcOrden()" style="min-width:52px"></td>
+    <td><input type="number" id="opa-dosis-${id}" placeholder="0.090" step="0.001" oninput="recalcOrden()" style="width:64px"></td>
     <td class="calc-cell" id="opa-dmaq-${id}">—</td>
     <td class="calc-cell" id="opa-nmaq-${id}">—</td>
     <td class="calc-cell" id="opa-tot-${id}">—</td>
     <td class="calc-cell" id="opa-dha-${id}">—</td>
-    <td><input type="text" id="opa-obj-${id}" placeholder="chanchito" style="width:76px"></td>
+    <td><input type="text" id="opa-obj-${id}" placeholder="chanchito" style="width:66px"></td>
     <td><input type="number" id="opa-car-${id}" placeholder="31" style="min-width:32px"></td>
     <td id="opa-tox-${id}" style="font-weight:700"></td>
     <td><button class="del-btn" onclick="removeProdOrden(${id})">✕</button></td>
@@ -1919,13 +1919,29 @@ function exportarRespaldo(){
     });
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(stockRows), 'STOCK');
 
-    // Hoja MOVIMIENTOS
-    const movRows = [['FECHA','TIPO','PRODUCTO','CANTIDAD','ORIGEN','DESTINO','ESTADO','USUARIO','ORDEN','OBS']];
-    (movimientos||[]).forEach(m=>{
-      movRows.push([m.fecha||'', m.tipo||'', m.producto||'', m.cantidad||0,
-        m.origen||'', m.destino||'', m.estado||'', m.usuario||'', m.orden_id||'', m.obs||'']);
+    // Hoja ENTRADAS (recibir + devoluciones, ambas suman a bodega)
+    const entRows = [['FECHA','TIPO','PRODUCTO','CANTIDAD','DESTINO','PROVEEDOR/ORIGEN','USUARIO','OBS']];
+    (movimientos||[]).filter(m=>m.tipo==='entrada'||m.tipo==='devolucion').forEach(m=>{
+      entRows.push([m.fecha||'', m.tipo==='devolucion'?'Devolución':'Entrada', m.producto||'', m.cantidad||0,
+        m.destino||'', m.proveedor||m.origen||'', m.usuario||'', m.obs||'']);
     });
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(movRows), 'MOVIMIENTOS');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(entRows), 'ENTRADAS');
+
+    // Hoja SALIDAS (transferencias/movimientos entre bodegas)
+    const salRows = [['FECHA','TIPO','PRODUCTO','CANTIDAD','ORIGEN','DESTINO','USUARIO','OBS']];
+    (movimientos||[]).filter(m=>m.tipo==='transferencia').forEach(m=>{
+      salRows.push([m.fecha||'', 'Movimiento', m.producto||'', m.cantidad||0,
+        m.origen||'', m.destino||'', m.usuario||'', m.obs||'']);
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(salRows), 'SALIDAS');
+
+    // Hoja APLICACIONES (producto aplicado en campo)
+    const aplRows = [['FECHA','PRODUCTO','CANTIDAD','CAMPO','USUARIO','ORDEN','OBS']];
+    (movimientos||[]).filter(m=>m.tipo==='aplicacion').forEach(m=>{
+      aplRows.push([m.fecha||'', m.producto||'', m.cantidad||0,
+        m.origen||'', m.usuario||'', m.orden_id||'', m.obs||'']);
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aplRows), 'APLICACIONES');
 
     // Hoja ORDENES
     const ordRows = [['N°','FECHA','CAMPO','CUARTELES','PRODUCTOS','ESTADO','HECTAREAS']];
