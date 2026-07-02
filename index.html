@@ -337,7 +337,7 @@ const LOC_ICONS = {'Bodega Central':'🏭','Caseta Cerrillos':'🏠','Rulo':'�
 const LOC_COLORS = {'Bodega Central':'#7B2D2D','Caseta Cerrillos':'#3d5a80','Rulo':'#2d6b3a','Paine':'#8a5e00'};
 
 const USERS = [
-  {id:'maestro',name:'Felipe',     full:'FELIPE · Maestro',  role:'maestro',    pin:'1234',av:'av-m',desc:'Acceso total'},
+  {id:'maestro',name:'Felipe',     full:'FELIPE · Maestro',  role:'maestro',    pin:'2511',av:'av-m',desc:'Acceso total'},
   {id:'bodeg',  name:'Bodeguero',  full:'FREDDY · Bodeguero',role:'bodeguero',  pin:'2222',av:'av-b',desc:'Bodega Central'},
   {id:'rulo',   name:'Rulo',       full:'Rulo · JOSÉ',    role:'dosificador',pin:'3333',av:'av-d',desc:'Dosificador Rulo'},
   {id:'paine',  name:'paine',        full:'HECTOR· Paine',       role:'dosificador',pin:'4444',av:'av-d',desc:'Dosificador Paine'},
@@ -806,7 +806,7 @@ function getTabs(role) {
     {k:'stock',    icon:'📦',label:'Stock',    roles:['maestro','bodeguero','gerencia'], render:renderStock,       prim:true},
     {k:'recibir',  icon:'📥',label:'Recibir',  roles:['maestro','bodeguero'],            render:renderRecibir,     prim:false},
     {k:'transfer', icon:'↔️',label:'Mover',    roles:['maestro','bodeguero'],            render:renderTransferir,  prim:false},
-    {k:'devol',    icon:'↩️',label:'Devolver', roles:['maestro','bodeguero','dosificador'],render:renderDevolucion,prim:false},
+    {k:'devol',    icon:'↩️',label:'Devolver', roles:['maestro','bodeguero'],render:renderDevolucion,prim:false},
     {k:'orden',    icon:'💧',label:'Aplicar',  roles:['maestro','dosificador','gerencia'], render:renderOrden,       prim:true},
     {k:'historial',icon:'📋',label:'Historial',roles:['maestro','bodeguero','gerencia'], render:renderHistorial,   prim:true},
     {k:'gerencia', icon:'📊',label:'Gerencia', roles:['maestro','gerencia'],             render:renderGerencia,    prim:true},
@@ -909,11 +909,13 @@ function initOrdenForm(){
 }
 
 // Calcula el siguiente número correlativo según el tipo de orden
+// Bases de partida: fitosanitario desde 7, herbicida desde 2
 function siguienteCorrelativo(tipo){
+  const base = tipo==='herbicida' ? 2 : 7;
   const usados = ordenes
     .filter(o => (o.detalle?.tipo||'fitosanitario') === tipo && String(o.estado||'').toUpperCase()!=='ANULADA')
     .map(o => parseInt(o.detalle?.numeroOrden)).filter(n=>!isNaN(n));
-  return usados.length ? Math.max(...usados)+1 : 1;
+  return usados.length ? Math.max(Math.max(...usados)+1, base) : base;
 }
 
 function onTipoOrdenChange(){
