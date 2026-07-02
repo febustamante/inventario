@@ -1324,6 +1324,10 @@ async function doDevolucion(){
             <input type="number" class="form-control" id="ord-ltsmaq" placeholder="1500" oninput="recalcOrden()" style="padding:7px 8px;font-size:13px">
           </div>
         </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding-top:8px;border-top:1px solid var(--bd)">
+          <span style="font-size:11px;color:var(--tx3);font-weight:600">TOTAL LITROS A APLICAR</span>
+          <span id="ord-totlitros" style="font-size:16px;font-weight:800;color:var(--vino)">—</span>
+        </div>
       </div>
 
       <div class="section-label">Productos a aplicar (hasta 4)</div>
@@ -1600,6 +1604,13 @@ function recalcOrden(){
   const ltsMaq = parseFloat(document.getElementById('ord-ltsmaq')?.value) || 0;
   const nMaq = ltsMaq > 0 ? (has * mojamiento) / ltsMaq : 0;
 
+  // Total litros a aplicar = N° maquinadas × lts/máquina
+  const totLitrosEl = document.getElementById('ord-totlitros');
+  if(totLitrosEl){
+    const totLitros = nMaq * ltsMaq;
+    totLitrosEl.textContent = (has&&mojamiento&&ltsMaq) ? totLitros.toFixed(2) : '—';
+  }
+
   ordProds.forEach(id => {
     const dosis100 = parseFloat(document.getElementById('opa-dosis-'+id)?.value) || 0;
     const dosisMaq = (ltsMaq * dosis100) / 100;
@@ -1729,6 +1740,7 @@ async function crearOrdenNueva(){
     fundo, fecha, numeroOrden, tipo: tipoOrden,
     cuarteles: cuarts, hectareas:+has.toFixed(2),
     pct:pctV, mojamiento:parseFloat(mojamiento)||0, ltsMaq:parseFloat(ltsMaq)||0,
+    totalLitros: +((+has.toFixed(2))*(parseFloat(mojamiento)||0)).toFixed(2),
     especie:'Uva de Mesa', variedad:variedadOrden, direccion:direccionOrden,
     equipo: document.getElementById('ord-equipo').value || '',
     metodo: document.getElementById('ord-metodo').value || '',
@@ -2007,7 +2019,8 @@ function generarPDFOrden(idOrden){
   kv('Especie',d.especie||'Uva de Mesa',L,y); kv('Mojamiento (lts/há)',d.mojamiento,R,y); y+=6;
   kv('Variedad',d.variedad,L,y); kv('Lts o Kg / máquina',d.ltsMaq,R,y); y+=6;
   kv('Cuartel(es)',(d.cuarteles||[]).map(c=>c.c).join(', '),L,y); kv('Equipo a usar',d.equipo,R,y); y+=6;
-  kv('Fecha',d.fecha,L,y); kv('Método',d.metodo,R,y); y+=9;
+  kv('Fecha',d.fecha,L,y); kv('Método',d.metodo,R,y); y+=6;
+  kv('Total litros a aplic.', (d.totalLitros!=null?d.totalLitros:((d.hectareas||0)*(d.mojamiento||0)).toFixed(2)), L, y); y+=9;
 
   // ── helper de sección ──
   const seccion=(titulo)=>{
