@@ -1467,7 +1467,7 @@ ${misOrdenes.length ? misOrdenes.map(o => {
       </label>
     </div>
 
-    ${d.observaciones ? `<div style="font-size:12px;color:var(--tx3);margin-top:4px;font-style:italic">💬 ${d.observaciones}</div>` : ''}
+    ${d.observaciones ? `<div style="background:#dc1e1e;color:#fff;font-weight:800;font-size:15px;text-align:center;padding:12px 14px;border-radius:8px;margin:8px 0;text-transform:uppercase;line-height:1.3">⚠️ ${d.observaciones}</div>` : ''}
     <button class="btn-primary" onclick="completarOrdenReal('${o.idOrden}')">Confirmar aplicación y descontar stock</button>
   </div>`;
   }
@@ -2067,6 +2067,19 @@ function generarPDFOrden(idOrden){
   });
   y+=5;
 
+  // ── OBSERVACIONES DESTACADAS (aviso grande en rojo) ──
+  if(d.observaciones){
+    const obsTxt = String(d.observaciones).toUpperCase();
+    doc.setFillColor(220,30,30);
+    const lineas = doc.splitTextToSize(obsTxt, W-30);
+    const altura = 6 + lineas.length*6;
+    doc.rect(10,y,W-20,altura,'F');
+    doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(11);
+    lineas.forEach((ln,i)=>doc.text(ln, W/2, y+7+i*6, {align:'center'}));
+    doc.setTextColor(...TX); doc.setFont('helvetica','normal');
+    y += altura + 5;
+  }
+
   // ── INFORMACIÓN DE LA APLICACIÓN ──
   seccion('Información de la aplicación');
   doc.setFontSize(8);
@@ -2106,8 +2119,6 @@ function generarPDFOrden(idOrden){
   doc.text('Responsable (Asesor)',fx[0],y,{align:'center'});
   doc.text('Responsable Aplicación',fx[1],y,{align:'center'});
   doc.text('Dosificador',fx[2],y,{align:'center'});
-
-  if(d.observaciones){ y+=8; doc.setTextColor(...TX); doc.setFontSize(7); doc.text('Observaciones: '+d.observaciones,10,y); }
 
   doc.save('Orden_'+(d.numeroOrden||o.idOrden)+'_'+(d.fundo||'')+'.pdf');
   showToast('PDF generado');
