@@ -2018,9 +2018,9 @@ function generarPDFOrden(idOrden){
   kv('Fundo',d.fundo,L,y); kv('% Superficie',(d.pct||100)+'%',R,y); y+=6;
   kv('Especie',d.especie||'Uva de Mesa',L,y); kv('Mojamiento (lts/há)',d.mojamiento,R,y); y+=6;
   kv('Variedad',d.variedad,L,y); kv('Lts o Kg / máquina',d.ltsMaq,R,y); y+=6;
-  kv('Cuartel(es)',(d.cuarteles||[]).map(c=>c.c).join(', '),L,y); kv('Equipo a usar',d.equipo,R,y); y+=6;
-  kv('Fecha',d.fecha,L,y); kv('Método',d.metodo,R,y); y+=6;
-  kv('Total litros a aplic.', (d.totalLitros!=null?d.totalLitros:((d.hectareas||0)*(d.mojamiento||0)).toFixed(2)), L, y); y+=9;
+  kv('Cuartel(es)',(d.cuarteles||[]).map(c=>c.c).join(', '),L,y); kv('Total litros a aplic.', (d.totalLitros!=null?d.totalLitros:((d.hectareas||0)*(d.mojamiento||0)).toFixed(2)), R, y); y+=6;
+  kv('Fecha',d.fecha,L,y); kv('Equipo a usar',d.equipo,R,y); y+=6;
+  kv('Método',d.metodo,R,y); y+=9;
 
   // ── helper de sección ──
   const seccion=(titulo)=>{
