@@ -2316,6 +2316,20 @@ async function completarOrdenReal(idOrden){
 
   showToast('Aplicación registrada y stock descontado');
   await syncData();
+
+  // Generar el PDF completo y preparar correo a Felipe
+  if(confirm('Orden completada. ¿Generar el PDF y enviarlo por correo?')){
+    generarPDFOrden(o.idOrden);
+    setTimeout(()=>{
+      const num = o.detalle?.numeroOrden || o.idOrden;
+      const tipoTxt = o.detalle?.tipo==='herbicida' ? 'Herbicida' : 'Fitosanitario';
+      const asunto = encodeURIComponent(`Orden ${tipoTxt} N°${num} completada - ${o.detalle?.fundo||o.campo}`);
+      const cuerpo = encodeURIComponent(
+        `Estimado,\n\nSe completó la aplicación de la orden ${tipoTxt} N°${num} en ${o.detalle?.fundo||o.campo}.\n\nSe adjunta el PDF con el detalle (recuerda adjuntar el archivo que se acaba de descargar).\n\nSaludos.`
+      );
+      window.location.href = `mailto:fbustamante@agricolasanjose.cl?subject=${asunto}&body=${cuerpo}`;
+    }, 1500);
+  }
 }
 
  function abrirCompletarOrden(idOrden){
