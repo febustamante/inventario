@@ -1454,6 +1454,8 @@ ${misOrdenes.length ? misOrdenes.map(o => {
         <input type="text" id="ap-pis2-${o.idOrden}" placeholder="Pistonero" style="font-size:12px;padding:6px;width:100%">
       </div>
       <input type="text" id="ap-imp2-${o.idOrden}" placeholder="Implemento (N°)" style="font-size:12px;padding:6px;width:100%">
+      <div id="equipos-extra-${o.idOrden}"></div>
+      <button class="btn-sec" onclick="addEquipoAplicador('${o.idOrden}')" style="width:100%;font-size:12px;padding:8px;margin-top:10px">+ Agregar más equipos</button>
     </div>
 
     <div style="background:var(--surf2);border:1px solid var(--bd);border-radius:10px;padding:12px;margin-bottom:10px">
@@ -1949,10 +1951,14 @@ function exportarRespaldo(){
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(salRows), 'SALIDAS');
 
     // Hoja APLICACIONES (producto aplicado en campo)
-    const aplRows = [['FECHA','PRODUCTO','CANTIDAD','CAMPO','USUARIO','ORDEN','OBS']];
+    const aplRows = [['FECHA','PRODUCTO','CANTIDAD','CAMPO','USUARIO','ORDEN','TIPO']];
     (movimientos||[]).filter(m=>m.tipo==='aplicacion').forEach(m=>{
+      // Cruzar con la orden para obtener correlativo y tipo
+      const ord = ordenes.find(o=>String(o.idOrden)===String(m.orden_id));
+      const numOrden = ord?.detalle?.numeroOrden || m.orden_id || '';
+      const tipoOrden = ord?.detalle?.tipo === 'herbicida' ? 'Herbicida' : 'Fitosanitario';
       aplRows.push([m.fecha||'', m.producto||'', m.cantidad||0,
-        m.origen||'', m.usuario||'', m.orden_id||'', m.obs||'']);
+        m.origen||'', m.usuario||'', numOrden, tipoOrden]);
     });
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aplRows), 'APLICACIONES');
 
@@ -2101,15 +2107,18 @@ function generarPDFOrden(idOrden){
   doc.setFillColor(...VINO); doc.setTextColor(255,255,255); doc.rect(10,y,W-20,5,'F'); doc.setFontSize(6.5); doc.setFont('helvetica','bold');
   ['Equipo','Tractorista','Tractor','Pistonero','Implemento'].forEach((c,i)=>doc.text(c,10+((W-20)/5)*i+1,y+3.4)); y+=5;
   doc.setTextColor(...TX); doc.setFont('helvetica','normal'); doc.setFontSize(7);
-  const eqs = (ia&&ia.equipos)||[{},{}];
-  eqs.slice(0,2).forEach((e,idx)=>{
+  // Hasta 5 equipos: los que llenó el aplicador, y el resto en blanco para lápiz
+  const eqsBase = (ia&&ia.equipos)||[];
+  const eqs = [];
+  for(let i=0;i<5;i++) eqs.push(eqsBase[i]||{});
+  eqs.forEach((e,idx)=>{
     const ew=(W-20)/5;
     doc.text(String(idx+1),10+1,y+3.4);
-    doc.text(String(e.tractorista||'—').substring(0,18),10+ew+1,y+3.4);
-    doc.text(String(e.tractor||'—').substring(0,12),10+ew*2+1,y+3.4);
-    doc.text(String(e.pistonero||'—').substring(0,18),10+ew*3+1,y+3.4);
-    doc.text(String(e.implemento||'—').substring(0,12),10+ew*4+1,y+3.4);
-    doc.setDrawColor(220,220,220); doc.rect(10,y,W-20,5); y+=5;
+    if(e.tractorista) doc.text(String(e.tractorista).substring(0,18),10+ew+1,y+3.4);
+    if(e.tractor) doc.text(String(e.tractor).substring(0,12),10+ew*2+1,y+3.4);
+    if(e.pistonero) doc.text(String(e.pistonero).substring(0,18),10+ew*3+1,y+3.4);
+    if(e.implemento) doc.text(String(e.implemento).substring(0,12),10+ew*4+1,y+3.4);
+    doc.setDrawColor(220,220,220); doc.rect(10,y,W-20,6); y+=6;
   });
   y+=6;
 
@@ -2172,6 +2181,25 @@ function editarOrden(idOrden){
   showToast('Edición de órdenes: próximamente. Por ahora puedes anular y crear de nuevo.', 'info');
 }
 
+let eqSeq = {};
+function addEquipoAplicador(idOrden){
+  eqSeq[idOrden] = (eqSeq[idOrden]||2)+1;
+  const n = eqSeq[idOrden];
+  if(n>5){ showToast('Máximo 5 equipos','err'); eqSeq[idOrden]=5; return; }
+  const cont = document.getElementById('equipos-extra-'+idOrden);
+  const div = document.createElement('div');
+  div.innerHTML = `
+    <div style="font-size:11px;color:var(--tx3);font-weight:600;margin:10px 0 6px">EQUIPO ${n} (opcional)</div>
+    <input type="text" id="ap-tra${n}-${idOrden}" placeholder="Tractorista" style="font-size:12px;padding:6px;width:100%;margin-bottom:6px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px">
+      <input type="text" id="ap-trc${n}-${idOrden}" placeholder="Tractor" style="font-size:12px;padding:6px;width:100%">
+      <input type="text" id="ap-pis${n}-${idOrden}" placeholder="Pistonero" style="font-size:12px;padding:6px;width:100%">
+    </div>
+    <input type="text" id="ap-imp${n}-${idOrden}" placeholder="Implemento (N°)" style="font-size:12px;padding:6px;width:100%">
+  `;
+  cont.appendChild(div);
+}
+
 let exaSeq = {};
 function addProdAplicador(idOrden){
   exaSeq[idOrden] = (exaSeq[idOrden]||0)+1;
@@ -2229,10 +2257,6 @@ async function completarOrdenReal(idOrden){
   if(!g('ap-trc1')) faltantes.push('Tractor (Equipo 1)');
   if(!g('ap-pis1')) faltantes.push('Pistonero (Equipo 1)');
   if(!g('ap-imp1')) faltantes.push('Implemento (Equipo 1)');
-  if(!g('ap-tra2')) faltantes.push('Tractorista (Equipo 2)');
-  if(!g('ap-trc2')) faltantes.push('Tractor (Equipo 2)');
-  if(!g('ap-pis2')) faltantes.push('Pistonero (Equipo 2)');
-  if(!g('ap-imp2')) faltantes.push('Implemento (Equipo 2)');
   if(!g('ap-tie')) faltantes.push('Tiempo (clima)');
   if(!g('ap-vie')) faltantes.push('Viento');
 
@@ -2264,10 +2288,14 @@ async function completarOrdenReal(idOrden){
   const infoAplicacion = {
     fechaInicio:g('ap-fi'), horaInicio:g('ap-hi'), fechaTermino:g('ap-ft'), horaTermino:g('ap-ht'),
     lavado:g('ap-lav'), excedente:g('ap-exc'),
-    equipos:[
-      {tractorista:g('ap-tra1'),tractor:g('ap-trc1'),pistonero:g('ap-pis1'),implemento:g('ap-imp1')},
-      {tractorista:g('ap-tra2'),tractor:g('ap-trc2'),pistonero:g('ap-pis2'),implemento:g('ap-imp2')}
-    ],
+    equipos:(()=>{
+      const eqs=[];
+      for(let n=1;n<=5;n++){
+        const e={tractorista:g('ap-tra'+n),tractor:g('ap-trc'+n),pistonero:g('ap-pis'+n),implemento:g('ap-imp'+n)};
+        if(e.tractorista||e.tractor||e.pistonero||e.implemento) eqs.push(e);
+      }
+      return eqs;
+    })(),
     clima:{tiempo:g('ap-tie'),viento:g('ap-vie'),trajeCompleto:g('ap-tra')},
     realAplicado: lineasDesc
   };
