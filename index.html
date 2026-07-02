@@ -589,6 +589,16 @@ async function postSheets(body) {
       });
       if (error) throw error;
 
+    } else if (accion === 'perdida') {
+      const pid = pidPorNombre(body.producto);
+      if (!pid) throw new Error('Producto no encontrado: ' + body.producto);
+      const { error } = await sb.rpc('registrar_movimiento', {
+        p_tipo:'perdida', p_producto_id:pid, p_cantidad:Number(body.cantidad)||0,
+        p_origen_id:UBIC_ID[body.origen], p_destino_id:null,
+        p_usuario:body.usuario||'', p_orden_id:null, p_obs:body.motivo||''
+      });
+      if (error) throw error;
+
     } else if (accion === 'aplicacion') {
       // body.lineas = [{producto, cantidad}]
       const lineas = body.lineas || [];
@@ -807,6 +817,7 @@ function getTabs(role) {
     {k:'recibir',  icon:'📥',label:'Recibir',  roles:['maestro','bodeguero'],            render:renderRecibir,     prim:false},
     {k:'transfer', icon:'↔️',label:'Mover',    roles:['maestro','bodeguero'],            render:renderTransferir,  prim:false},
     {k:'devol',    icon:'↩️',label:'Devolver', roles:['maestro','bodeguero'],render:renderDevolucion,prim:false},
+    {k:'perdida',  icon:'⚠️',label:'Pérdida',  roles:['maestro'],render:renderPerdida,prim:false},
     {k:'orden',    icon:'💧',label:'Aplicar',  roles:['maestro','dosificador','gerencia'], render:renderOrden,       prim:true},
     {k:'historial',icon:'📋',label:'Historial',roles:['maestro','bodeguero','gerencia'], render:renderHistorial,   prim:true},
     {k:'gerencia', icon:'📊',label:'Gerencia', roles:['maestro','gerencia'],             render:renderGerencia,    prim:true},
@@ -1227,6 +1238,52 @@ async function doDevolucion(){
   showToast('Guardando...','info');
   await postSheets({action:'devolucion',fecha:hoy(),producto:p.nombre,cantidad:cant,origen,usuario:curUser.id,motivo:obs});
   showToast('Devuelto '+cant+' de '+p.nombre+' a Bodega');
+  refresh();
+}
+
+// ══ PÉRDIDAS / MERMAS ══
+function renderPerdida(){
+  const perds=movimientos.filter(m=>m.tipo==='perdida').slice(-5).reverse();
+  return`
+  <div class="section-header"><div class="section-title">Pérdida / Merma</div><div class="section-sub">Registrar producto perdido (derrame, rotura, vencimiento)</div></div>
+  <div class="form-box">
+    <div class="form-title"><div class="form-title-icon">⚠️</div>Registrar pérdida</div>
+    <div class="form-group"><label class="form-label">Producto <span class="required">*</span></label><select class="form-control" id="pr-p">${prodOpts()}</select></div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Cantidad <span class="required">*</span></label><input type="number" class="form-control" id="pr-c" min="0.01" step="0.01" placeholder="0" inputmode="decimal"/></div>
+      <div class="form-group"><label class="form-label">Dónde se perdió <span class="required">*</span></label><select class="form-control" id="pr-ub">${LOCS.map(l=>`<option value="${l}">${l}</option>`).join('')}</select></div>
+    </div>
+    <div class="form-group"><label class="form-label">Motivo <span class="required">*</span></label>
+      <select class="form-control" id="pr-motivo">
+        <option value="">— Elegir motivo —</option>
+        <option>Derrame</option><option>Rotura de envase</option><option>Vencimiento</option><option>Contaminación</option><option>Otro</option>
+      </select>
+    </div>
+    <div class="form-group"><label class="form-label">Detalle</label><textarea class="form-control" id="pr-obs" rows="2" placeholder="Descripción de lo ocurrido..." style="resize:none"></textarea></div>
+    <button class="btn-primary" onclick="doPerdida()" style="background:var(--red);border-color:var(--red)">⚠️ Registrar pérdida</button>
+  </div>
+  <div class="section-label">Últimas pérdidas</div>
+  <div class="card">${perds.length?perds.map(m=>`<div class="move-item"><div class="move-dot" style="background:var(--red)"></div><div class="move-body"><div class="move-prod">${m.producto}</div><div class="move-detail">${m.origen} · ${m.obs||''}</div></div><div class="move-right"><div class="move-qty" style="color:var(--red)">-${m.cantidad}</div><div class="move-date">${m.fecha}</div></div></div>`).join(''):`<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">Sin pérdidas registradas</div></div>`}</div>`;
+}
+
+async function doPerdida(){
+  const pid=parseInt(document.getElementById('pr-p').value);
+  const cant=parseFloat(document.getElementById('pr-c').value)||0;
+  const ubic=document.getElementById('pr-ub').value;
+  const motivo=document.getElementById('pr-motivo').value;
+  const obs=document.getElementById('pr-obs').value.trim();
+  if(cant<=0) return showToast('Ingresa una cantidad válida','err');
+  if(!motivo) return showToast('Elige el motivo de la pérdida','err');
+  const disp=stockAt(pid,ubic);
+  if(cant>disp) return showToast('Insuficiente en '+ubic+': '+fmt(disp)+' disp.','err');
+  const p=products.find(x=>x.id===pid);
+  const costo=cant*(p.precio||0);
+  if(!confirm(`Vas a registrar como PÉRDIDA:\n\n${p.nombre}: ${cant} (${motivo})\nUbicación: ${ubic}\nValor: ${plata(costo)}\n\nEsto DESCONTARÁ el stock. ¿Confirmar?`)) return;
+  addStock(pid,ubic,-cant);
+  movimientos.push({id:nextMov++,tipo:'perdida',producto:p.nombre,cantidad:cant,origen:ubic,destino:'',obs:motivo+(obs?' · '+obs:''),fecha:hoy(),usuario:curUser.id});
+  showToast('Guardando...','info');
+  await postSheets({action:'perdida',fecha:hoy(),producto:p.nombre,cantidad:cant,origen:ubic,usuario:curUser.id,motivo:motivo+(obs?' · '+obs:'')});
+  showToast('Pérdida registrada: '+cant+' de '+p.nombre);
   refresh();
 }
 
@@ -1964,6 +2021,16 @@ function exportarRespaldo(){
     });
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aplRows), 'APLICACIONES');
 
+    // Hoja PERDIDAS (mermas con valor en dinero)
+    const perRows = [['FECHA','PRODUCTO','CANTIDAD','PRECIO_UNIT','TOTAL_$','UBICACION','MOTIVO','USUARIO']];
+    (movimientos||[]).filter(m=>m.tipo==='perdida').forEach(m=>{
+      const p = products.find(x=>x.nombre===m.producto);
+      const precio = p ? (p.precio||0) : 0;
+      perRows.push([m.fecha||'', m.producto||'', m.cantidad||0,
+        precio, +(precio*(m.cantidad||0)).toFixed(0), m.origen||'', m.obs||'', m.usuario||'']);
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(perRows), 'PERDIDAS');
+
     // Hoja ORDENES
     const ordRows = [['N°','FECHA','CAMPO','CUARTELES','PRODUCTOS','ESTADO','HECTAREAS']];
     (ordenes||[]).forEach(o=>{
@@ -2466,7 +2533,8 @@ function renderHistorial(){
     entrada:{color:'var(--green)',dot:'#2d6b2d',label:'Entrada'},
     transferencia:{color:'var(--blue)',dot:'#1a4a8a',label:'Transferencia'},
     aplicacion:{color:'var(--amber)',dot:'#8a5e00',label:'Aplicacion'},
-    devolucion:{color:'var(--purple)',dot:'#9d6b4f',label:'Devolucion'}
+    devolucion:{color:'var(--purple)',dot:'#9d6b4f',label:'Devolucion'},
+    perdida:{color:'var(--red)',dot:'#a32d2d',label:'Pérdida'}
   };
 
   const list = [...movimientos].reverse();
@@ -2529,6 +2597,10 @@ function renderGerencia(){
   // Valor consumido en aplicaciones (todo el historial cargado)
   const valorConsumido=apls.reduce((s,m)=>{const p=products.find(x=>x.nombre===m.producto);return s+(p?m.cantidad*(p.precio||0):0)},0);
 
+  // Valor perdido (mermas: derrames, roturas, vencimientos)
+  const perds=movimientos.filter(m=>m.tipo==='perdida'&&String(m.estado||'ACTIVO').toUpperCase()!=='ANULADO');
+  const valorPerdido=perds.reduce((s,m)=>{const p=products.find(x=>x.nombre===m.producto);return s+(p?m.cantidad*(p.precio||0):0)},0);
+
   // Top productos por valor en bodega
   const topValor=[...products]
     .map(p=>({nombre:p.nombre,familia:p.familia,valor:valorProducto(p.id),u:totalStock(p.id)}))
@@ -2559,6 +2631,7 @@ function renderGerencia(){
     <div style="background:var(--surf2);border-radius:var(--r);padding:1rem"><div style="font-size:12px;color:var(--tx3)">📦 Unidades stock</div><div style="font-size:19px;font-weight:700;color:var(--blue);margin-top:4px">${fmt(totalU)}</div></div>
     <div style="background:var(--surf2);border-radius:var(--r);padding:1rem"><div style="font-size:12px;color:var(--tx3)">📋 Órdenes en curso</div><div style="font-size:19px;font-weight:700;color:var(--blue);margin-top:4px">${ordenesCurso}</div></div>
     <div style="background:var(--surf2);border-radius:var(--r);padding:1rem"><div style="font-size:12px;color:var(--tx3)">⚠️ Alertas stock</div><div style="font-size:19px;font-weight:700;color:var(--red);margin-top:4px">${alertas.length+agotados.length}</div></div>
+    <div style="background:var(--surf2);border-radius:var(--r);padding:1rem;grid-column:span 2;border-left:3px solid var(--red)"><div style="font-size:12px;color:var(--tx3)">💸 Pérdidas / mermas (${perds.length} registros)</div><div style="font-size:19px;font-weight:700;color:var(--red);margin-top:4px">${plata(valorPerdido)}</div></div>
   </div>
 
   <div class="card">
