@@ -1436,7 +1436,7 @@ async function doPerdida(){
 
   const misOrdenes = ordenes.filter(o =>
   String(o.dosificador).toLowerCase() === String(curUser.id).toLowerCase() &&
-  String(o.estado).toUpperCase() === 'EN CURSO'
+  ['EN CURSO','INICIADA'].includes(String(o.estado).toUpperCase())
 );
 
 return `
@@ -1489,7 +1489,7 @@ ${misOrdenes.length ? misOrdenes.map(o => {
     <div style="background:var(--surf2);border:1px solid var(--bd);border-radius:10px;padding:12px;margin-bottom:10px">
       <div style="font-size:11px;color:var(--tx3);font-weight:600;margin-bottom:6px">FECHA Y HORA</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        <div><label style="font-size:11px;color:var(--tx3)">Inicio</label><input type="date" id="ap-fi-${o.idOrden}" style="font-size:12px;padding:6px;width:100%"><input type="time" id="ap-hi-${o.idOrden}" style="font-size:12px;padding:6px;width:100%;margin-top:4px"></div>
+        <div><label style="font-size:11px;color:var(--tx3)">Inicio</label><input type="date" id="ap-fi-${o.idOrden}" value="${d.inicioReal?.fecha||''}" style="font-size:12px;padding:6px;width:100%"><input type="time" id="ap-hi-${o.idOrden}" value="${d.inicioReal?.hora||''}" style="font-size:12px;padding:6px;width:100%;margin-top:4px"></div>
         <div><label style="font-size:11px;color:var(--tx3)">Término</label><input type="date" id="ap-ft-${o.idOrden}" style="font-size:12px;padding:6px;width:100%"><input type="time" id="ap-ht-${o.idOrden}" style="font-size:12px;padding:6px;width:100%;margin-top:4px"></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
@@ -1529,7 +1529,13 @@ ${misOrdenes.length ? misOrdenes.map(o => {
     </div>
 
     ${d.observaciones ? `<div style="background:#dc1e1e;color:#fff;font-weight:800;font-size:15px;text-align:center;padding:12px 14px;border-radius:8px;margin:8px 0;text-transform:uppercase;line-height:1.3">⚠️ ${d.observaciones}</div>` : ''}
-    <button class="btn-primary" onclick="completarOrdenReal('${o.idOrden}')">Confirmar aplicación y descontar stock</button>
+    ${String(o.estado).toUpperCase()==='EN CURSO' ? `
+      <button class="btn-primary" style="background:#1d6b3a;border-color:#1d6b3a" onclick="iniciarOrden('${o.idOrden}')">▶️ INICIAR APLICACIÓN</button>
+      <div style="font-size:11px;color:var(--tx3);text-align:center;margin-top:6px">Al iniciar se registrará la fecha y hora automáticamente</div>
+    ` : `
+      <div style="background:#eef6e6;color:#1d6b3a;font-weight:600;font-size:12px;text-align:center;padding:8px;border-radius:8px;margin-bottom:8px">✓ Iniciada el ${d.inicioReal?.fecha||''} a las ${d.inicioReal?.hora||''}</div>
+      <button class="btn-primary" onclick="completarOrdenReal('${o.idOrden}')">Confirmar aplicación y descontar stock</button>
+    `}
   </div>`;
   }
   // Orden vieja sin detalle: vista simple de antes
@@ -2286,6 +2292,26 @@ function addProdAplicador(idOrden){
   cont.appendChild(div);
 }
 
+// El dosificador inicia la aplicación: registra fecha/hora automática
+async function iniciarOrden(idOrden){
+  const o = ordenes.find(x => String(x.idOrden) === String(idOrden));
+  if(!o){ showToast('No se encontró la orden', 'err'); return; }
+  const ahora = new Date();
+  const fecha = ahora.toISOString().slice(0,10);
+  const hora = ahora.toTimeString().slice(0,5);
+  if(!confirm(`▶️ Iniciar la aplicación de la Orden N°${o.detalle?.numeroOrden||o.idOrden}?\n\nSe registrará el inicio: ${fecha} a las ${hora}`)) return;
+  try{
+    const detalleActualizado = Object.assign({}, o.detalle||{}, { inicioReal:{fecha, hora} });
+    const { error } = await sb.from('ordenes').update({ estado:'INICIADA', detalle: detalleActualizado }).eq('id', o.idOrden);
+    if(error) throw error;
+    showToast('✓ Aplicación iniciada a las '+hora);
+    await syncData();
+  }catch(e){
+    console.error(e);
+    showToast('Error al iniciar: '+(e.message||''),'err');
+  }
+}
+
 async function completarOrdenReal(idOrden){
   const o = ordenes.find(x => String(x.idOrden) === String(idOrden));
   if(!o){ showToast('No se encontró la orden', 'err'); return; }
@@ -2613,6 +2639,7 @@ function renderGerencia(){
   const topFam=Object.entries(famMap).sort((a,b)=>b[1]-a[1]).slice(0,6);
   const maxFam = topFam.length ? topFam[0][1] : 1;
   const ordenesCurso=ordenes.filter(o=>String(o.estado||'').trim().toUpperCase()==='EN CURSO').length;
+  const ordenesIni=ordenes.filter(o=>String(o.estado||'').trim().toUpperCase()==='INICIADA').length;
   const ordenesTerm=ordenes.filter(o=>String(o.estado||'').trim().toUpperCase()==='TERMINADA').length;
 
   return`
@@ -2664,17 +2691,51 @@ function renderGerencia(){
 
   <div class="card">
     <div class="card-header"><div class="card-title">📋 Estado de órdenes</div></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
       <div style="background:var(--surf2);border-radius:10px;padding:14px;text-align:center">
-        <div style="font-size:28px;font-weight:800;color:var(--blue)">${ordenesCurso}</div>
-        <div style="font-size:12px;color:var(--tx3);margin-top:2px">En curso</div>
+        <div style="font-size:26px;font-weight:800;color:var(--blue)">${ordenesCurso}</div>
+        <div style="font-size:11px;color:var(--tx3);margin-top:2px">📝 Creadas</div>
       </div>
       <div style="background:var(--surf2);border-radius:10px;padding:14px;text-align:center">
-        <div style="font-size:28px;font-weight:800;color:var(--green)">${ordenesTerm}</div>
-        <div style="font-size:12px;color:var(--tx3);margin-top:2px">Terminadas</div>
+        <div style="font-size:26px;font-weight:800;color:var(--amber)">${ordenesIni}</div>
+        <div style="font-size:11px;color:var(--tx3);margin-top:2px">▶️ Iniciadas</div>
+      </div>
+      <div style="background:var(--surf2);border-radius:10px;padding:14px;text-align:center">
+        <div style="font-size:26px;font-weight:800;color:var(--green)">${ordenesTerm}</div>
+        <div style="font-size:11px;color:var(--tx3);margin-top:2px">✓ Terminadas</div>
       </div>
     </div>
   </div>
+
+  ${(()=>{
+    // ── SEGUIMIENTO DE ÓRDENES: línea de tiempo de cada orden activa ──
+    const activas = ordenes.filter(o=>['EN CURSO','INICIADA'].includes(String(o.estado||'').toUpperCase()));
+    const recientes = ordenes.filter(o=>String(o.estado||'').toUpperCase()==='TERMINADA').slice(-3).reverse();
+    const seguir = [...activas, ...recientes];
+    if(!seguir.length) return '';
+    return `<div class="section-label">🔎 Seguimiento de órdenes</div>
+    <div class="card">${seguir.map(o=>{
+      const d=o.detalle||{};
+      const est=String(o.estado||'').toUpperCase();
+      const num=(d.tipo==='herbicida'?'H':'F')+'-N°'+(d.numeroOrden||o.idOrden);
+      const paso=(hecho,label,detalle)=>`<div style="display:flex;gap:8px;align-items:flex-start;flex:1">
+        <div style="width:22px;height:22px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;${hecho?'background:#1d6b3a;color:#fff':'background:var(--surf3);color:var(--tx3)'}">${hecho?'✓':'·'}</div>
+        <div><div style="font-size:11px;font-weight:600;color:${hecho?'var(--tx)':'var(--tx3)'}">${label}</div><div style="font-size:10px;color:var(--tx3)">${detalle||''}</div></div>
+      </div>`;
+      const fin=d.infoAplicacion;
+      return `<div style="border-top:1px solid var(--bd);padding:10px 0">
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+          <span style="font-weight:700;font-size:13px">${num} <span style="font-weight:400;color:var(--tx3);font-size:11px">· ${d.fundo||o.campo}</span></span>
+          <span class="badge ${est==='TERMINADA'?'b-ok':est==='INICIADA'?'b-low':'b-out'}" style="${est==='EN CURSO'?'background:#e8f0fb;color:#2456a0':''}">${est==='EN CURSO'?'Creada':est==='INICIADA'?'Iniciada':'Terminada'}</span>
+        </div>
+        <div style="display:flex;gap:4px">
+          ${paso(true,'Creada',d.fecha||o.fecha)}
+          ${paso(est==='INICIADA'||est==='TERMINADA','Iniciada',d.inicioReal?(d.inicioReal.fecha+' '+d.inicioReal.hora):'')}
+          ${paso(est==='TERMINADA','Terminada',fin?((fin.fechaTermino||'')+' '+(fin.horaTermino||'')).trim():'')}
+        </div>
+      </div>`;
+    }).join('')}</div>`;
+  })()}
 
   ${(()=>{
     // Costo por cuartel, agrupado por campo. Usa órdenes TERMINADAS.
@@ -2731,7 +2792,7 @@ function renderGerencia(){
   })()}
 
   ${(()=>{
-    const pend = ordenes.filter(o=>String(o.estado||'').toUpperCase()==='EN CURSO');
+    const pend = ordenes.filter(o=>['EN CURSO','INICIADA'].includes(String(o.estado||'').toUpperCase()));
     if(!pend.length) return '';
     return `<div class="section-label" style="color:var(--amber)">⏳ Órdenes pendientes por aplicar (${pend.length})</div>
     <div class="card" style="border-left:3px solid var(--amber)">
@@ -2768,7 +2829,8 @@ function renderGerencia(){
           const prods = (d&&d.productos) ? d.productos.map(p=>p.nombre).join(', ') : (o.productos||'—');
           const term = String(o.estado||'').toUpperCase()==='TERMINADA';
           const anulada = String(o.estado||'').toUpperCase()==='ANULADA';
-          const badge = anulada ? `<span class="badge b-out">Anulada</span>` : term ? `<span class="badge b-ok">Terminada</span>` : `<span class="badge b-low">En curso</span>`;
+          const iniciada = String(o.estado||'').toUpperCase()==='INICIADA';
+          const badge = anulada ? `<span class="badge b-out">Anulada</span>` : term ? `<span class="badge b-ok">Terminada</span>` : iniciada ? `<span class="badge b-low">▶️ Iniciada</span>` : `<span class="badge" style="background:#e8f0fb;color:#2456a0">Creada</span>`;
           const esMaestro = curUser && curUser.role==='maestro';
           let botones = '';
           if(esMaestro && !anulada){
