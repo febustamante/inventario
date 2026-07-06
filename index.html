@@ -1519,6 +1519,20 @@ ${misOrdenes.length ? misOrdenes.map(o => {
       <span style="background:var(--surf2);padding:3px 8px;border-radius:6px">Mojamiento: ${d.mojamiento}</span>
       <span style="background:var(--surf2);padding:3px 8px;border-radius:6px">Lts/maq: ${d.ltsMaq}</span>
     </div>
+    <div style="background:var(--surf2);border-radius:8px;padding:8px;margin:6px 0">
+      <div style="font-size:11px;color:var(--tx3);font-weight:600;margin-bottom:6px">Ajustar cuarteles (si hubo cambios en terreno)</div>
+      <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px">
+        ${cuarts.map(c=>`<span style="background:var(--surf);border:1px solid var(--bd2);padding:3px 6px;border-radius:6px;font-size:11px">${c.c} <button onclick="quitarCuartelOrden('${o.idOrden}','${c.c}')" style="border:none;background:none;color:var(--red);font-weight:700;cursor:pointer;padding:0 2px">✕</button></span>`).join('')}
+      </div>
+      <div style="display:flex;gap:6px">
+        <select id="add-cuartel-${o.idOrden}" style="flex:1;font-size:11px;padding:5px">${(()=>{
+          const fundoKey = String(d.fundo||'').toUpperCase();
+          const disp = (CUARTELES[fundoKey]||[]).filter(q=>!cuarts.some(c=>c.c===q.c));
+          return '<option value="">— Agregar cuartel —</option>'+disp.map(q=>`<option value="${q.c}">${q.c} (${q.ha} ha)</option>`).join('');
+        })()}</select>
+        <button onclick="agregarCuartelOrden('${o.idOrden}')" style="font-size:11px;padding:5px 12px;border:1px solid var(--vino);border-radius:6px;background:var(--vino);color:#fff">+ Agregar</button>
+      </div>
+    </div>
     <div style="font-size:11px;color:var(--tx3);margin-bottom:4px">Escribe el <strong>Real Aplicado</strong> (total por producto). Eso descontará del stock de ${o.campo}.</div>
     ${tabla}
 
@@ -2062,8 +2076,8 @@ function exportarRespaldo(){
     const aplRows = [['FECHA','PRODUCTO','CANTIDAD','CAMPO','USUARIO','ORDEN','TIPO']];
     (movimientos||[]).filter(m=>m.tipo==='aplicacion').forEach(m=>{
       // Cruzar con la orden para obtener correlativo y tipo
-      const ord = ordenes.find(o=>String(o.idOrden)===String(m.orden_id));
-      const numOrden = ord?.detalle?.numeroOrden || m.orden_id || '';
+      const ord = ordenes.find(o=>String(o.idOrden)===String(m.ordenNum));
+      const numOrden = ord?.detalle?.numeroOrden || m.ordenNum || '';
       const tipoOrden = ord?.detalle?.tipo === 'herbicida' ? 'Herbicida' : 'Fitosanitario';
       aplRows.push([m.fecha||'', m.producto||'', m.cantidad||0,
         m.origen||'', m.usuario||'', numOrden, tipoOrden]);
@@ -2253,6 +2267,45 @@ function generarPDFOrden(idOrden){
   doc.text('Responsable Aplicación',fx[1],y,{align:'center'});
   doc.text('Dosificador',fx[2],y,{align:'center'});
 
+  // ── PÁGINA 2: CONSUMO REAL POR CUARTEL (solo si la orden está completada) ──
+  if(ia && ia.realAplicado && ia.realAplicado.length){
+    doc.addPage();
+    let y2 = 14;
+    doc.setFillColor(...VINO); doc.rect(0,0,W,16,'F');
+    doc.setTextColor(255,255,255); doc.setFontSize(11); doc.setFont('helvetica','bold');
+    doc.text('CONSUMO REAL POR CUARTEL — Orden N°'+(d.numeroOrden||o.idOrden), W/2, 10, {align:'center'});
+    y2 = 24;
+    doc.setTextColor(...TX); doc.setFontSize(8); doc.setFont('helvetica','normal');
+    doc.text('Reparto del consumo real de cada producto entre los cuarteles, proporcional a sus hectáreas.', 10, y2); y2+=7;
+
+    const cuartsF = (d.cuartelesFinales||d.cuarteles||[]);
+    const totHa = cuartsF.reduce((s,c)=>s+(c.ha||0),0) || 1;
+    const bh2=['Producto','Real Total',...cuartsF.map(c=>c.c)];
+    const bw2=(W-20)/bh2.length;
+    doc.setFillColor(...VINO); doc.setTextColor(255,255,255); doc.rect(10,y2,W-20,6,'F'); doc.setFontSize(6.5); doc.setFont('helvetica','bold');
+    bh2.forEach((c,i)=>doc.text(String(c),10+bw2*i+1,y2+4)); 
+    // fila de hectáreas bajo el encabezado
+    y2+=6;
+    doc.setTextColor(...LBL); doc.setFontSize(6);
+    doc.text('(hectáreas)',10+bw2+1,y2+3);
+    cuartsF.forEach((c,i)=>doc.text((c.ha||0)+' ha',10+bw2*(i+2)+1,y2+3));
+    doc.setDrawColor(220,220,220); doc.rect(10,y2,W-20,4.5); y2+=4.5;
+    doc.setTextColor(...TX); doc.setFontSize(7); doc.setFont('helvetica','normal');
+    ia.realAplicado.forEach((ra,idx)=>{
+      if(idx%2){ doc.setFillColor(250,247,245); doc.rect(10,y2,W-20,5.5,'F'); }
+      doc.text(String(ra.producto).substring(0,18),11,y2+3.8);
+      doc.setFont('helvetica','bold'); doc.text(String(ra.cantidad),10+bw2+1,y2+3.8); doc.setFont('helvetica','normal');
+      cuartsF.forEach((c,i)=>{
+        const val = ra.cantidad*(c.ha||0)/totHa;
+        doc.text(val.toFixed(2),10+bw2*(i+2)+1,y2+3.8);
+      });
+      doc.setDrawColor(220,220,220); doc.rect(10,y2,W-20,5.5); y2+=5.5;
+    });
+    y2+=6;
+    doc.setFontSize(7); doc.setTextColor(...LBL);
+    doc.text('Generado por el sistema de inventario · Agrícola San José', 10, y2);
+  }
+
   doc.save('Orden_'+(d.numeroOrden||o.idOrden)+'_'+(d.fundo||'')+'.pdf');
   showToast('PDF generado');
   }catch(e){
@@ -2333,6 +2386,56 @@ function addProdAplicador(idOrden){
     <button onclick="this.parentElement.remove()" style="padding:6px 10px;border:1px solid var(--bd2);border-radius:6px;background:var(--surf2);color:var(--tx2)">✕</button>
   `;
   cont.appendChild(div);
+}
+
+// ── AJUSTE DE CUARTELES por el dosificador (antes de finalizar) ──
+async function actualizarCuartelesOrden(o, nuevosCuarts){
+  const d = o.detalle;
+  const pct = d.pct||100;
+  // Recalcular hectáreas y el teórico por cuartel de cada producto
+  const sumHa = nuevosCuarts.reduce((s,c)=>s+(c.ha||0),0);
+  const nuevosProds = (d.productos||[]).map(p=>{
+    const porCuartel = nuevosCuarts.map(q=>({c:q.c, val:+(q.ha*(p.dosisHa||0)*pct/100).toFixed(2)}));
+    const totalTeorico = +porCuartel.reduce((s,c)=>s+c.val,0).toFixed(2);
+    return Object.assign({}, p, {porCuartel, totalTeorico});
+  });
+  const detalleActualizado = Object.assign({}, d, {
+    cuarteles: nuevosCuarts,
+    hectareas: +sumHa.toFixed(2),
+    totalLitros: +(sumHa*(d.mojamiento||0)).toFixed(2),
+    productos: nuevosProds
+  });
+  const { error } = await sb.from('ordenes').update({ detalle: detalleActualizado }).eq('id', o.idOrden);
+  if(error) throw error;
+  await syncData();
+}
+
+async function quitarCuartelOrden(idOrden, c){
+  const o = ordenes.find(x=>String(x.idOrden)===String(idOrden));
+  if(!o||!o.detalle) return;
+  const cuarts = (o.detalle.cuarteles||[]);
+  if(cuarts.length<=1){ showToast('La orden debe tener al menos un cuartel','err'); return; }
+  if(!confirm(`¿Quitar el cuartel ${c} de esta orden?\n\nSe recalcularán las hectáreas y los totales.`)) return;
+  try{
+    await actualizarCuartelesOrden(o, cuarts.filter(q=>q.c!==c));
+    showToast('Cuartel '+c+' quitado');
+  }catch(e){ showToast('Error: '+(e.message||''),'err'); }
+}
+
+async function agregarCuartelOrden(idOrden){
+  const o = ordenes.find(x=>String(x.idOrden)===String(idOrden));
+  if(!o||!o.detalle) return;
+  const sel = document.getElementById('add-cuartel-'+idOrden);
+  const c = sel?.value;
+  if(!c){ showToast('Elige un cuartel para agregar','err'); return; }
+  const fundoKey = String(o.detalle.fundo||'').toUpperCase();
+  const q = (CUARTELES[fundoKey]||[]).find(x=>x.c===c);
+  if(!q){ showToast('Cuartel no encontrado','err'); return; }
+  if(!confirm(`¿Agregar el cuartel ${c} (${q.ha} ha) a esta orden?\n\nSe recalcularán las hectáreas y los totales.`)) return;
+  try{
+    await actualizarCuartelesOrden(o, [...(o.detalle.cuarteles||[]), {c:q.c, ha:q.ha}]);
+    showToast('Cuartel '+c+' agregado');
+  }catch(e){ showToast('Error: '+(e.message||''),'err'); }
 }
 
 // El dosificador inicia la aplicación: registra fecha/hora automática
