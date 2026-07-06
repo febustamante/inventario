@@ -85,6 +85,7 @@
   <nav class="nav">
     <a class="on" data-v="dash" onclick="ver('dash')"><i class="ti ti-layout-dashboard"></i>Dashboard</a>
     <a data-v="ordenes" onclick="ver('ordenes')"><i class="ti ti-clipboard-list"></i>Control de órdenes</a>
+    <a data-v="calendario" onclick="ver('calendario')"><i class="ti ti-calendar"></i>Calendario</a>
     <a onclick="cargar()"><i class="ti ti-refresh"></i>Actualizar datos</a>
     <a href="index.html"><i class="ti ti-device-mobile"></i>Ir a la app</a>
   </nav>
@@ -147,7 +148,7 @@ function totalStock(pid){const s=stockByLoc[pid]||{};return Object.values(s).red
 function ver(v){
   vista=v;
   document.querySelectorAll('.nav a[data-v]').forEach(a=>a.classList.toggle('on',a.dataset.v===v));
-  document.getElementById('titulo').textContent=v==='dash'?'Dashboard Gerencial':'Control de órdenes';
+  document.getElementById('titulo').textContent=v==='dash'?'Dashboard Gerencial':v==='calendario'?'Calendario de órdenes':'Control de órdenes';
   render();
 }
 
@@ -168,7 +169,9 @@ function numOrden(o){const d=o.detalle||{};return(d.tipo==='herbicida'?'H':'F')+
 function render(){
   charts.forEach(c=>c.destroy());charts=[];
   const el=document.getElementById('contenido');
-  if(vista==='dash')el.innerHTML=renderDash();else el.innerHTML=renderOrdenes();
+  if(vista==='dash')el.innerHTML=renderDash();
+  else if(vista==='calendario')el.innerHTML=renderCalendario();
+  else el.innerHTML=renderOrdenes();
   if(vista==='dash')setTimeout(buildCharts,60);
 }
 
@@ -362,6 +365,85 @@ function desglose(o){
   <div style="font-size:12px;font-weight:700;color:#7B2D2D;margin-bottom:6px">PRODUCTOS</div>
   <table style="font-size:12.5px"><thead><tr><th>Producto</th><th>Dosis/100</th><th>Dosis/ha</th><th>Objetivo</th><th>Teórico</th><th>Real aplicado</th></tr></thead>
   <tbody>${prodRows||'<tr><td colspan="6" style="color:#8a8a8e">Sin detalle de productos</td></tr>'}</tbody></table>`;
+}
+
+// ── CALENDARIO MENSUAL DE ÓRDENES ──
+let calMes=new Date().getMonth(), calAno=new Date().getFullYear();
+function moverMes(n){
+  calMes+=n;
+  if(calMes<0){calMes=11;calAno--;}
+  if(calMes>11){calMes=0;calAno++;}
+  render();
+}
+
+// La fecha de la orden: detalle.fecha (aaaa-mm-dd) o creación (dd-mm-aaaa)
+function fechaOrden(o){
+  const d=o.detalle||{};
+  if(d.fecha && /^\d{4}-\d{2}-\d{2}$/.test(d.fecha)) return d.fecha;
+  const f=(o.fecha||'').split('-');
+  if(f.length===3) return f[2]+'-'+f[1].padStart(2,'0')+'-'+f[0].padStart(2,'0');
+  return '';
+}
+
+function renderCalendario(){
+  const meses=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const primerDia=new Date(calAno,calMes,1);
+  const diasMes=new Date(calAno,calMes+1,0).getDate();
+  let inicio=primerDia.getDay()-1; if(inicio<0)inicio=6;
+
+  const porDia={};
+  ordenes.forEach(o=>{
+    const f=fechaOrden(o);
+    if(!f)return;
+    const[a,m,d]=f.split('-').map(Number);
+    if(a===calAno&&m===calMes+1){ (porDia[d]=porDia[d]||[]).push(o); }
+  });
+
+  const colEst={'EN CURSO':'#2456a0','INICIADA':'#a87514','TERMINADA':'#2f7d4f','ANULADA':'#a32d2d'};
+  const bgEst={'EN CURSO':'#e8f0fb','INICIADA':'#fdf3dc','TERMINADA':'#e8f5ec','ANULADA':'#fbecec'};
+  const hoy=new Date();
+  const esHoy=d=>hoy.getFullYear()===calAno&&hoy.getMonth()===calMes&&hoy.getDate()===d;
+
+  let celdas='';
+  for(let i=0;i<inicio;i++) celdas+='<div class="cal-dia vacio"></div>';
+  for(let d=1;d<=diasMes;d++){
+    const ords=porDia[d]||[];
+    celdas+=`<div class="cal-dia ${esHoy(d)?'hoy':''}">
+      <div class="cal-num">${d}</div>
+      ${ords.map(o=>{const det=o.detalle||{};return`<div class="cal-orden" style="background:${bgEst[o.estado]||'#eee'};color:${colEst[o.estado]||'#555'}" title="${numOrden(o)} · ${det.fundo||o.campo} · ${o.estado}">
+        <b>${numOrden(o)}</b> ${det.fundo||o.campo}
+      </div>`}).join('')}
+    </div>`;
+  }
+
+  return `
+  <style>
+    .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+    .cal-hdr{font-size:11px;color:#8a8a8e;font-weight:700;text-transform:uppercase;text-align:center;padding:4px 0}
+    .cal-dia{background:#fff;border:1px solid #ececf0;border-radius:10px;min-height:86px;padding:6px}
+    .cal-dia.vacio{background:transparent;border:none}
+    .cal-dia.hoy{border:2px solid #2f7d4f}
+    .cal-num{font-size:12px;font-weight:700;color:#555;margin-bottom:4px}
+    .cal-dia.hoy .cal-num{color:#2f7d4f}
+    .cal-orden{font-size:10.5px;padding:3px 6px;border-radius:6px;margin-bottom:3px;font-weight:600;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  </style>
+  <div class="panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <button class="btn line" onclick="moverMes(-1)"><i class="ti ti-chevron-left"></i></button>
+      <h3 style="margin:0">${meses[calMes]} ${calAno}</h3>
+      <button class="btn line" onclick="moverMes(1)"><i class="ti ti-chevron-right"></i></button>
+    </div>
+    <div class="cal-grid" style="margin-bottom:4px">
+      ${['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'].map(d=>`<div class="cal-hdr">${d}</div>`).join('')}
+    </div>
+    <div class="cal-grid">${celdas}</div>
+    <div style="display:flex;gap:14px;margin-top:14px;font-size:12px;color:#666">
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#e8f0fb;border:1px solid #2456a0"></span> Creada</span>
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#fdf3dc;border:1px solid #a87514"></span> Iniciada</span>
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#e8f5ec;border:1px solid #2f7d4f"></span> Terminada</span>
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#fbecec;border:1px solid #a32d2d"></span> Anulada</span>
+    </div>
+  </div>`;
 }
 </script>
 </body>
