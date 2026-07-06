@@ -177,7 +177,7 @@ function renderDash(){
   const iniciadas=ordenes.filter(o=>o.estado==='INICIADA').length;
   const terminadas=ordenes.filter(o=>o.estado==='TERMINADA').length;
   const valorInv=products.reduce((s,p)=>s+totalStock(p.id)*p.precio,0);
-  const bajo=products.filter(p=>{const t=totalStock(p.id);return t>0&&t<p.minimo}).length;
+  const bajo=products.filter(p=>{const t=totalStock(p.id);return t>0&&t<=p.minimo}).length;
   const agotados=products.filter(p=>totalStock(p.id)<=0).length;
   const perds=movimientos.filter(m=>m.tipo==='perdida');
   const valorPerd=perds.reduce((s,m)=>{const p=products.find(x=>x.nombre===m.producto);return s+(p?m.cantidad*p.precio:0)},0);
