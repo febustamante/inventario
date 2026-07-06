@@ -270,9 +270,11 @@ function buildCharts(){
 function renderOrdenes(){
   const fe=document.getElementById('f-est')?.value||'';
   const ft=document.getElementById('f-tipo')?.value||'';
+  const fc=document.getElementById('f-campo')?.value||'';
   let lista=ordenes;
   if(fe)lista=lista.filter(o=>o.estado===fe);
   if(ft)lista=lista.filter(o=>(o.detalle?.tipo||'fitosanitario')===ft);
+  if(fc)lista=lista.filter(o=>o.campo===fc);
   return `
   <div class="panel">
     <div class="filters">
@@ -288,10 +290,14 @@ function renderOrdenes(){
         <option ${ft==='fitosanitario'?'selected':''} value="fitosanitario">Fitosanitario</option>
         <option ${ft==='herbicida'?'selected':''} value="herbicida">Herbicida</option>
       </select>
+      <select id="f-campo" onchange="render()">
+        <option value="">Todos los campos</option>
+        ${['Caseta Cerrillos','Rulo','Paine'].map(c=>`<option ${fc===c?'selected':''} value="${c}">${c}</option>`).join('')}
+      </select>
       <span style="font-size:12.5px;color:#8a8a8e;align-self:center">${lista.length} órdenes</span>
     </div>
     <table><thead><tr><th>Orden</th><th>Tipo</th><th>Campo</th><th>Cuarteles</th><th>Ha</th><th>Creada</th><th>Progreso</th><th>Estado</th><th>Dosificador</th></tr></thead><tbody>
-    ${lista.length?lista.map(o=>{const d=o.detalle||{};return`<tr>
+    ${lista.length?lista.map((o,i)=>{const d=o.detalle||{};return`<tr onclick="toggleDet(${i})" style="cursor:pointer" title="Clic para ver el desglose">
       <td><b>${numOrden(o)}</b></td>
       <td style="font-size:12px">${d.tipo==='herbicida'?'Herbicida':'Fitosanitario'}</td>
       <td>${d.fundo||o.campo}</td>
@@ -301,9 +307,61 @@ function renderOrdenes(){
       <td>${pasos(o)}</td>
       <td>${badge(o.estado)}</td>
       <td style="font-size:12px">${o.dosificador||'—'}</td>
-    </tr>`}).join(''):'<tr><td colspan="9" style="text-align:center;color:#8a8a8e;padding:30px">No hay órdenes con esos filtros</td></tr>'}
+    </tr>
+    <tr id="det-${i}" class="hide"><td colspan="9" style="background:#faf9f7;padding:16px 20px">${desglose(o)}</td></tr>`}).join(''):'<tr><td colspan="9" style="text-align:center;color:#8a8a8e;padding:30px">No hay órdenes con esos filtros</td></tr>'}
     </tbody></table>
   </div>`;
+}
+
+function toggleDet(i){
+  const el=document.getElementById('det-'+i);
+  if(el)el.classList.toggle('hide');
+}
+
+// Desglose completo de una orden
+function desglose(o){
+  const d=o.detalle||{};
+  const ia=d.infoAplicacion||null;
+  const kv=(k,v)=>`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dashed #eee;font-size:12.5px"><span style="color:#8a8a8e">${k}</span><b>${v||'—'}</b></div>`;
+
+  // tabla de productos: teórico y real
+  const realDe=n=>{if(!ia||!ia.realAplicado)return null;const r=ia.realAplicado.find(x=>x.producto===n);return r?r.cantidad:null;};
+  const prodRows=(d.productos||[]).map(p=>{
+    const real=realDe(p.nombre);
+    return`<tr><td>${p.nombre}</td><td>${p.dosis100||'—'}</td><td>${p.dosisHa||'—'}</td><td>${p.objetivo||'—'}</td><td>${p.totalTeorico!=null?p.totalTeorico:'—'}</td><td style="font-weight:700;color:${real!=null?'#2f7d4f':'#aaa'}">${real!=null?real:'—'}</td></tr>`;
+  }).join('');
+
+  return`
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:14px">
+    <div>
+      <div style="font-size:12px;font-weight:700;color:#7B2D2D;margin-bottom:6px">DATOS GENERALES</div>
+      ${kv('Fecha de la orden',d.fecha)}
+      ${kv('Fundo',d.fundo||o.campo)}
+      ${kv('Cuarteles',(d.cuarteles||[]).map(c=>c.c+' ('+c.ha+' ha)').join(' · '))}
+      ${kv('Hectáreas',d.hectareas)}
+      ${kv('% Superficie',(d.pct||100)+'%')}
+      ${kv('Mojamiento',d.mojamiento)}
+      ${kv('Lts/kg máquina',d.ltsMaq)}
+      ${kv('Total litros',d.totalLitros)}
+      ${kv('Creada por',d.creadaPor||'—')}
+      ${d.observaciones?`<div style="background:#dc1e1e;color:#fff;font-weight:700;font-size:12px;padding:8px;border-radius:7px;margin-top:8px;text-transform:uppercase">⚠️ ${d.observaciones}</div>`:''}
+    </div>
+    <div>
+      <div style="font-size:12px;font-weight:700;color:#7B2D2D;margin-bottom:6px">EJECUCIÓN</div>
+      ${kv('▶️ Inicio real',d.inicioReal?(d.inicioReal.fecha+' a las '+d.inicioReal.hora):'Aún no iniciada')}
+      ${kv('Fecha inicio (formulario)',ia?((ia.fechaInicio||'')+' '+(ia.horaInicio||'')).trim():'—')}
+      ${kv('Fecha término',ia?((ia.fechaTermino||'')+' '+(ia.horaTermino||'')).trim():'—')}
+      ${kv('Lavado de máquina',ia?ia.lavado:'—')}
+      ${kv('Elim. excedente',ia?ia.excedente:'—')}
+      ${kv('Tiempo',ia&&ia.clima?ia.clima.tiempo:'—')}
+      ${kv('Viento',ia&&ia.clima?ia.clima.viento:'—')}
+      ${kv('Traje completo',ia&&ia.clima?ia.clima.trajeCompleto:'—')}
+      ${ia&&ia.equipos&&ia.equipos.length?`<div style="font-size:12px;margin-top:8px"><b>Equipos:</b> ${ia.equipos.map((e,j)=>`E${j+1}: ${e.tractorista||'—'} / ${e.tractor||'—'} / ${e.pistonero||'—'}`).join(' · ')}</div>`:''}
+    </div>
+  </div>
+  <div style="font-size:12px;font-weight:700;color:#7B2D2D;margin-bottom:6px">PRODUCTOS</div>
+  <table style="font-size:12.5px"><thead><tr><th>Producto</th><th>Dosis/100</th><th>Dosis/ha</th><th>Objetivo</th><th>Teórico</th><th>Real aplicado</th></tr></thead>
+  <tbody>${prodRows||'<tr><td colspan="6" style="color:#8a8a8e">Sin detalle de productos</td></tr>'}</tbody></table>`;
 }
 </script>
 </body>
