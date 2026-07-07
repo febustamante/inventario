@@ -5,12 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Panel Gerencia · Agrícola San José</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:-apple-system,system-ui,'Segoe UI',sans-serif;background:#f6f7f9;color:#1d1d1f;display:flex;min-height:100vh}
+  body{font-family:'Inter',-apple-system,system-ui,sans-serif;background:#F7F5F1;color:#23201C;display:flex;min-height:100vh}
+  h1,h3,.serif{font-family:'Fraunces',Georgia,serif}
+  .num{font-variant-numeric:tabular-nums}
+  .eyebrow{font-size:10.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#8B867D;margin:26px 0 10px;display:flex;align-items:center;gap:10px}
+  .eyebrow::after{content:'';flex:1;height:1px;background:#E7E3DB}
   .side{width:225px;background:#7B2D2D;color:#fff;display:flex;flex-direction:column;flex-shrink:0;position:sticky;top:0;height:100vh}
   .side .logo{background:#fff;margin:16px;padding:10px;border-radius:10px;text-align:center}
   .side .logo span{color:#7B2D2D;font-weight:800;font-size:14px;font-style:italic}
@@ -35,7 +40,7 @@
   .kpi .lbl{font-size:12.5px;color:#7a7a80}
   .kpi .val{font-size:22px;font-weight:800}
   .grid2{display:grid;grid-template-columns:1.15fr .85fr;gap:14px;margin-bottom:16px}
-  .panel{background:#fff;border:1px solid #ececf0;border-radius:14px;padding:18px}
+  .panel{background:#fff;border:1px solid #EAE6DE;border-radius:14px;padding:20px;box-shadow:0 1px 2px rgba(35,32,28,.04)}
   .panel h3{font-size:15px;font-weight:700;margin-bottom:14px}
   table{width:100%;border-collapse:collapse;font-size:13px}
   th{color:#8a8a8e;font-weight:600;text-align:left;padding:8px 10px;font-size:11.5px;border-bottom:1px solid #ececf0;text-transform:uppercase}
@@ -176,7 +181,102 @@ function render(){
   if(vista==='dash')setTimeout(buildCharts,60);
 }
 
+// ═══ HELPERS DE ANÁLISIS ═══
+function hoyISO(){return new Date().toISOString().slice(0,10);}
+function diasEntre(a,b){return Math.round((new Date(b)-new Date(a))/86400000);}
+function sumaDias(fecha,n){const d=new Date(fecha);d.setDate(d.getDate()+n);return d.toISOString().slice(0,10);}
+function fmtFecha(f){if(!f)return '—';const[a,m,d]=f.split('-');return d+'/'+m;}
+
+function analitica(){
+  const term=ordenes.filter(o=>o.estado==='TERMINADA');
+  const apls=movimientos.filter(m=>m.tipo==='aplicacion');
+  const precio=n=>{const p=products.find(x=>x.nombre===n);return p?p.precio:0;};
+
+  // Costo aplicado por campo y hectáreas por campo → $/ha
+  const costoCampo={},haCampo={};
+  apls.forEach(m=>{if(m.origen)costoCampo[m.origen]=(costoCampo[m.origen]||0)+m.cantidad*precio(m.producto);});
+  term.forEach(o=>{const c=o.detalle?.fundo||o.campo;if(c)haCampo[c]=(haCampo[c]||0)+(o.detalle?.hectareas||0);});
+  const costoHa=Object.keys(costoCampo).map(c=>({campo:c,total:costoCampo[c],ha:haCampo[c]||haCampo[Object.keys(haCampo).find(k=>c.includes(k)||k.includes(c))]||0}))
+    .map(x=>({...x,porHa:x.ha>0?x.total/x.ha:null}));
+
+  // Desviación teórico vs real
+  const desv=[];
+  term.forEach(o=>{
+    const d=o.detalle||{},ia=d.infoAplicacion;
+    if(!ia||!ia.realAplicado)return;
+    (d.productos||[]).forEach(p=>{
+      if(!p.totalTeorico)return;
+      const r=ia.realAplicado.find(x=>x.producto===p.nombre);
+      if(!r)return;
+      const pct=((r.cantidad-p.totalTeorico)/p.totalTeorico)*100;
+      desv.push({orden:numOrden(o),producto:p.nombre,teo:p.totalTeorico,real:r.cantidad,pct});
+    });
+  });
+  desv.sort((a,b)=>Math.abs(b.pct)-Math.abs(a.pct));
+
+  // Carencias activas por cuartel
+  const carencias=[];
+  term.forEach(o=>{
+    const d=o.detalle||{},ia=d.infoAplicacion;
+    const fin=(ia&&ia.fechaTermino)||d.inicioReal?.fecha||d.fecha;
+    if(!fin||!/^\d{4}-\d{2}-\d{2}$/.test(fin))return;
+    const maxCar=Math.max(0,...(d.productos||[]).map(p=>parseInt(p.carencia)||0));
+    if(!maxCar)return;
+    const hasta=sumaDias(fin,maxCar);
+    const rest=diasEntre(hoyISO(),hasta);
+    if(rest>=0)carencias.push({orden:numOrden(o),cuarteles:(d.cuartelesFinales||d.cuarteles||[]).map(c=>c.c).join(', '),fundo:d.fundo||o.campo,hasta,rest,dias:maxCar});
+  });
+  carencias.sort((a,b)=>a.rest-b.rest);
+
+  // Duración de aplicaciones y órdenes estancadas
+  const durs=[];
+  term.forEach(o=>{
+    const d=o.detalle||{},ia=d.infoAplicacion;
+    if(d.inicioReal&&ia&&ia.fechaTermino&&ia.horaTermino){
+      const t0=new Date(d.inicioReal.fecha+'T'+(d.inicioReal.hora||'00:00'));
+      const t1=new Date(ia.fechaTermino+'T'+ia.horaTermino);
+      const h=(t1-t0)/3600000;
+      if(h>0&&h<72)durs.push({orden:numOrden(o),h});
+    }
+  });
+  const durProm=durs.length?durs.reduce((s,x)=>s+x.h,0)/durs.length:null;
+  const estancadas=ordenes.filter(o=>o.estado==='EN CURSO'&&o.detalle?.fecha&&diasEntre(o.detalle.fecha,hoyISO())>=2)
+    .map(o=>({orden:numOrden(o),campo:o.detalle?.fundo||o.campo,dias:diasEntre(o.detalle.fecha,hoyISO())}));
+
+  // Proyección de quiebre de stock (consumo últimos 30 días)
+  const hace30=new Date(Date.now()-30*86400000);
+  const cons30={};
+  apls.forEach(m=>{if(m.fechaRaw&&new Date(m.fechaRaw)>=hace30)cons30[m.producto]=(cons30[m.producto]||0)+m.cantidad;});
+  const quiebre=Object.keys(cons30).map(n=>{
+    const p=products.find(x=>x.nombre===n);if(!p)return null;
+    const tot=totalStock(p.id),rate=cons30[n]/30;
+    return rate>0?{producto:n,dias:Math.floor(tot/rate),stock:tot}:null;
+  }).filter(x=>x&&x.dias<=60).sort((a,b)=>a.dias-b.dias).slice(0,6);
+
+  // Pérdidas por motivo
+  const perds=movimientos.filter(m=>m.tipo==='perdida');
+  const perdMotivo={};
+  perds.forEach(m=>{const mot=(m.obs||'Otro').split('·')[0].trim()||'Otro';perdMotivo[mot]=(perdMotivo[mot]||0)+m.cantidad*precio(m.producto);});
+
+  // Top productos del mes en $
+  const mesAct=new Date().getMonth(),anoAct=new Date().getFullYear();
+  const topMes={};
+  apls.forEach(m=>{if(!m.fechaRaw)return;const d=new Date(m.fechaRaw);if(d.getMonth()===mesAct&&d.getFullYear()===anoAct)topMes[m.producto]=(topMes[m.producto]||0)+m.cantidad*precio(m.producto);});
+  const top5=Object.entries(topMes).sort((a,b)=>b[1]-a[1]).slice(0,5);
+
+  const costoMes=Object.values(topMes).reduce((s,v)=>s+v,0);
+  return {costoHa,desv:desv.slice(0,8),carencias,durProm,durs,estancadas,quiebre,perdMotivo,top5,costoMes};
+}
+
+function semaforo(pct){
+  const a=Math.abs(pct);
+  if(a<=10)return['#3E7A52','#E8F3EC'];
+  if(a<=20)return['#C98A1B','#FBF3E1'];
+  return['#B3382F','#F9E9E7'];
+}
+
 function renderDash(){
+  const A=analitica();
   const creadas=ordenes.filter(o=>o.estado==='EN CURSO').length;
   const iniciadas=ordenes.filter(o=>o.estado==='INICIADA').length;
   const terminadas=ordenes.filter(o=>o.estado==='TERMINADA').length;
@@ -184,55 +284,112 @@ function renderDash(){
   const bajo=products.filter(p=>{const t=totalStock(p.id);return t>0&&t<=p.minimo}).length;
   const agotados=products.filter(p=>totalStock(p.id)<=0).length;
   const perds=movimientos.filter(m=>m.tipo==='perdida');
-  const valorPerd=perds.reduce((s,m)=>{const p=products.find(x=>x.nombre===m.producto);return s+(p?m.cantidad*p.precio:0)},0);
-
-  // valor por familia
-  const fam={};
-  products.forEach(p=>{const v=totalStock(p.id)*p.precio;if(v>0)fam[p.familia]=(fam[p.familia]||0)+v;});
-  const famTop=Object.entries(fam).sort((a,b)=>b[1]-a[1]);
-  const top4=famTop.slice(0,4);const resto=famTop.slice(4).reduce((s,f)=>s+f[1],0);
-  if(resto>0)top4.push(['Otros',resto]);
-  const colores=['#2f7d4f','#2456a0','#e6a817','#7B2D2D','#9aa2ad'];
+  const valorPerd=Object.values(A.perdMotivo).reduce((s,v)=>s+v,0);
+  const costoHaProm=(()=>{const v=A.costoHa.filter(x=>x.porHa);return v.length?v.reduce((s,x)=>s+x.porHa,0)/v.length:null;})();
 
   const activas=[...ordenes.filter(o=>['EN CURSO','INICIADA'].includes(o.estado)),...ordenes.filter(o=>o.estado==='TERMINADA').slice(0,3)];
 
+  const celda=(lbl,val,sub,color)=>`<div style="padding:4px 22px;border-right:1px solid #EEEAE2;flex:1;min-width:130px">
+    <div style="font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#8B867D">${lbl}</div>
+    <div class="serif num" style="font-size:27px;font-weight:600;color:${color||'#23201C'};margin-top:2px;line-height:1.1">${val}</div>
+    <div style="font-size:11px;color:#8B867D;margin-top:2px">${sub||''}</div>
+  </div>`;
+
   return `
-  <div class="kpis">
-    <div class="kpi"><div class="top"><div class="ic" style="background:#e8f0fb;color:#2456a0"><i class="ti ti-file-plus"></i></div><div><div class="lbl">Órdenes creadas</div><div class="val">${creadas}</div></div></div></div>
-    <div class="kpi"><div class="top"><div class="ic" style="background:#fdf3dc;color:#a87514"><i class="ti ti-player-play"></i></div><div><div class="lbl">Iniciadas</div><div class="val">${iniciadas}</div></div></div></div>
-    <div class="kpi"><div class="top"><div class="ic" style="background:#e8f5ec;color:#2f7d4f"><i class="ti ti-circle-check"></i></div><div><div class="lbl">Terminadas</div><div class="val">${terminadas}</div></div></div></div>
-    <div class="kpi"><div class="top"><div class="ic" style="background:#fbecec;color:#a32d2d"><i class="ti ti-currency-dollar"></i></div><div><div class="lbl">Valor inventario</div><div class="val">${plata(valorInv)}</div></div></div></div>
+  <!-- BANDA EJECUTIVA -->
+  <div class="panel" style="display:flex;flex-wrap:wrap;padding:16px 0;gap:0">
+    ${celda('Órdenes activas',creadas+iniciadas,creadas+' creadas · '+iniciadas+' iniciadas','#6E2430')}
+    ${celda('Terminadas',terminadas,A.durProm?('duración prom. '+A.durProm.toFixed(1)+' h'):'')}
+    ${celda('Valor inventario',plata(valorInv),products.length+' productos')}
+    ${celda('Aplicado este mes',plata(A.costoMes),costoHaProm?(plata(costoHaProm)+' /ha prom.'):'')}
+    ${celda('Alertas de stock',bajo+' / '+agotados,'bajo mínimo / agotados',(bajo+agotados)>0?'#C98A1B':'#3E7A52')}
+    ${celda('Pérdidas',plata(valorPerd),perds.length+' registros',valorPerd>0?'#B3382F':'#3E7A52')}
   </div>
-  <div class="kpis" style="grid-template-columns:repeat(3,1fr)">
-    <div class="kpi"><div class="top"><div class="ic" style="background:#fdf3dc;color:#a87514"><i class="ti ti-alert-triangle"></i></div><div><div class="lbl">Bajo stock / Agotados</div><div class="val">${bajo} / ${agotados}</div></div></div></div>
-    <div class="kpi"><div class="top"><div class="ic" style="background:#fbecec;color:#a32d2d"><i class="ti ti-droplet-off"></i></div><div><div class="lbl">Pérdidas (${perds.length} reg.)</div><div class="val">${plata(valorPerd)}</div></div></div></div>
-    <div class="kpi"><div class="top"><div class="ic" style="background:#e8f5ec;color:#2f7d4f"><i class="ti ti-packages"></i></div><div><div class="lbl">Productos</div><div class="val">${products.length}</div></div></div></div>
-  </div>
+
+  <!-- OPERACIÓN -->
+  <div class="eyebrow">Operación</div>
   <div class="grid2">
     <div class="panel">
       <h3>Seguimiento de órdenes</h3>
       <table><thead><tr><th>Orden</th><th>Campo</th><th>Progreso</th><th>Estado</th><th>Inicio real</th></tr></thead><tbody>
-      ${activas.length?activas.map(o=>{const d=o.detalle||{};return`<tr><td><b>${numOrden(o)}</b></td><td>${d.fundo||o.campo}</td><td>${pasos(o)}</td><td>${badge(o.estado)}</td><td style="font-size:12px;color:#8a8a8e">${d.inicioReal?d.inicioReal.fecha+' '+d.inicioReal.hora:'—'}</td></tr>`}).join(''):'<tr><td colspan="5" style="text-align:center;color:#8a8a8e">Sin órdenes</td></tr>'}
+      ${activas.length?activas.map(o=>{const d=o.detalle||{};return`<tr><td class="num"><b>${numOrden(o)}</b></td><td>${d.fundo||o.campo}</td><td>${pasos(o)}</td><td>${badge(o.estado)}</td><td class="num" style="font-size:12px;color:#8B867D">${d.inicioReal?d.inicioReal.fecha+' '+d.inicioReal.hora:'—'}</td></tr>`}).join(''):'<tr><td colspan="5" style="text-align:center;color:#8B867D">Sin órdenes</td></tr>'}
       </tbody></table>
     </div>
     <div class="panel">
-      <h3>Valor por familia</h3>
-      <div style="display:flex;gap:20px;align-items:center">
-        <div style="width:140px;height:140px;flex-shrink:0"><canvas id="dona"></canvas></div>
-        <div style="flex:1">
-        ${top4.map((f,i)=>`<div class="famrow"><span><span class="dotc" style="background:${colores[i]}"></span>${f[0]}</span><span class="m">${plata(f[1])}</span></div>`).join('')}
-        </div>
+      <h3>Ritmo de trabajo</h3>
+      <div style="display:flex;gap:26px;margin-bottom:14px">
+        <div><div style="font-size:11px;color:#8B867D">Duración promedio</div><div class="serif num" style="font-size:24px;font-weight:600">${A.durProm?A.durProm.toFixed(1)+' h':'—'}</div></div>
+        <div><div style="font-size:11px;color:#8B867D">Aplicaciones medidas</div><div class="serif num" style="font-size:24px;font-weight:600">${A.durs.length}</div></div>
+      </div>
+      <div style="font-size:12px;font-weight:700;color:${A.estancadas.length?'#B3382F':'#3E7A52'};margin-bottom:6px">${A.estancadas.length?'⏳ Órdenes sin iniciar hace 2+ días':'✓ Sin órdenes estancadas'}</div>
+      ${A.estancadas.map(e=>`<div style="display:flex;justify-content:space-between;font-size:12.5px;padding:5px 0;border-bottom:1px dashed #EEE"><span class="num"><b>${e.orden}</b> · ${e.campo}</span><span style="color:#B3382F;font-weight:700">${e.dias} días</span></div>`).join('')}
+    </div>
+  </div>
+
+  <!-- CUMPLIMIENTO -->
+  <div class="eyebrow">Cumplimiento</div>
+  <div class="grid2">
+    <div class="panel">
+      <h3>Carencias activas por cuartel</h3>
+      <div style="font-size:12px;color:#8B867D;margin-bottom:12px">Cuarteles con período de carencia vigente — no cosechar ni reingresar antes de la fecha.</div>
+      ${A.carencias.length?`<div style="display:flex;gap:10px;flex-wrap:wrap">${A.carencias.map(c=>`
+        <div style="border:1.5px solid ${c.rest<=3?'#3E7A52':'#C98A1B'};border-radius:10px;padding:10px 14px;position:relative;background:${c.rest<=3?'#F4FAF6':'#FDF9F0'}">
+          <div style="font-size:14px;font-weight:800" class="num">${c.cuarteles}</div>
+          <div style="font-size:11px;color:#8B867D">${c.fundo} · ${c.orden}</div>
+          <div style="font-size:12px;margin-top:4px">Libre el <b>${fmtFecha(c.hasta)}</b> · <span style="font-weight:800;color:${c.rest<=3?'#3E7A52':'#C98A1B'}" class="num">${c.rest===0?'HOY':'faltan '+c.rest+' días'}</span></div>
+        </div>`).join('')}</div>`
+      :'<div style="color:#3E7A52;font-weight:600;font-size:13px">✓ Ningún cuartel con carencia vigente</div>'}
+    </div>
+    <div class="panel">
+      <h3>Teórico vs real</h3>
+      <div style="font-size:12px;color:#8B867D;margin-bottom:8px">Desviaciones de dosis por producto en órdenes terminadas.</div>
+      <table><thead><tr><th>Orden</th><th>Producto</th><th class="num">Teórico</th><th class="num">Real</th><th>Desv.</th></tr></thead><tbody>
+      ${A.desv.length?A.desv.map(d=>{const[c,bg]=semaforo(d.pct);return`<tr><td class="num" style="font-size:12px">${d.orden}</td><td style="font-size:12px">${d.producto}</td><td class="num">${d.teo}</td><td class="num"><b>${d.real}</b></td><td><span class="num" style="background:${bg};color:${c};font-weight:800;font-size:11.5px;padding:3px 8px;border-radius:10px">${d.pct>0?'+':''}${d.pct.toFixed(0)}%</span></td></tr>`}).join(''):'<tr><td colspan="5" style="color:#8B867D;text-align:center">Aún sin órdenes terminadas con real registrado</td></tr>'}
+      </tbody></table>
+    </div>
+  </div>
+
+  <!-- COSTOS -->
+  <div class="eyebrow">Costos</div>
+  <div class="grid2">
+    <div class="panel">
+      <h3>Costo por hectárea aplicada</h3>
+      ${A.costoHa.length?A.costoHa.map(c=>`<div style="display:flex;justify-content:space-between;align-items:baseline;padding:8px 0;border-bottom:1px dashed #EEE">
+        <span style="font-size:13.5px;font-weight:600">${c.campo}</span>
+        <span><span class="serif num" style="font-size:18px;font-weight:600">${c.porHa!=null?plata(c.porHa):'—'}</span><span style="font-size:11px;color:#8B867D"> /ha · ${plata(c.total)} total${c.ha?' · '+c.ha.toFixed(1)+' ha':''}</span></span>
+      </div>`).join(''):'<div style="color:#8B867D;font-size:13px">Sin aplicaciones registradas aún</div>'}
+      <div style="height:170px;margin-top:14px"><canvas id="cons"></canvas></div>
+    </div>
+    <div class="panel">
+      <h3>Top productos del mes</h3>
+      ${A.top5.length?(()=>{const max=A.top5[0][1];return A.top5.map(([n,v],i)=>`
+        <div style="margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:3px"><span style="font-weight:600">${i+1}. ${n}</span><span class="num" style="font-weight:700">${plata(v)}</span></div>
+          <div style="height:7px;background:#F1EDE5;border-radius:4px"><div style="height:100%;width:${(v/max*100).toFixed(0)}%;background:linear-gradient(90deg,#6E2430,#9E3D4A);border-radius:4px"></div></div>
+        </div>`).join('')})():'<div style="color:#8B867D;font-size:13px">Sin consumo este mes</div>'}
+      <div style="display:flex;gap:20px;margin-top:16px;align-items:center">
+        <div style="width:120px;height:120px;flex-shrink:0"><canvas id="dona"></canvas></div>
+        <div style="flex:1;font-size:12px" id="dona-leyenda"></div>
       </div>
     </div>
   </div>
+
+  <!-- INVENTARIO -->
+  <div class="eyebrow">Inventario</div>
   <div class="grid2">
     <div class="panel">
-      <h3>Consumo mensual (aplicaciones)</h3>
-      <div style="height:200px"><canvas id="cons"></canvas></div>
+      <h3>Proyección de quiebre de stock</h3>
+      <div style="font-size:12px;color:#8B867D;margin-bottom:10px">Al ritmo de consumo de los últimos 30 días.</div>
+      ${A.quiebre.length?A.quiebre.map(q=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px dashed #EEE">
+        <span style="font-size:13px;font-weight:600">${q.producto}</span>
+        <span><span class="num" style="font-weight:800;color:${q.dias<=7?'#B3382F':q.dias<=21?'#C98A1B':'#3E7A52'}">${q.dias} días</span><span style="font-size:11px;color:#8B867D"> · quedan ${q.stock.toFixed(1)}</span></span>
+      </div>`).join(''):'<div style="color:#3E7A52;font-weight:600;font-size:13px">✓ Ningún producto en riesgo de quiebre próximo</div>'}
     </div>
     <div class="panel">
-      <h3>Consumo por campo</h3>
-      <div style="height:200px"><canvas id="campos"></canvas></div>
+      <h3>Pérdidas por motivo</h3>
+      ${Object.keys(A.perdMotivo).length?Object.entries(A.perdMotivo).sort((a,b)=>b[1]-a[1]).map(([m,v])=>`
+        <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px dashed #EEE;font-size:13px"><span>${m}</span><b class="num" style="color:#B3382F">${plata(v)}</b></div>`).join('')
+      :'<div style="color:#3E7A52;font-weight:600;font-size:13px">✓ Sin pérdidas registradas</div>'}
     </div>
   </div>`;
 }
@@ -243,11 +400,12 @@ function buildCharts(){
   const famTop=Object.entries(fam).sort((a,b)=>b[1]-a[1]);
   const top4=famTop.slice(0,4);const resto=famTop.slice(4).reduce((s,f)=>s+f[1],0);
   if(resto>0)top4.push(['Otros',resto]);
-  const colores=['#2f7d4f','#2456a0','#e6a817','#7B2D2D','#9aa2ad'];
+  const colores=['#6E2430','#3E7A52','#C98A1B','#4A6FA5','#B8B2A6'];
   const d1=document.getElementById('dona');
-  if(d1)charts.push(new Chart(d1,{type:'doughnut',data:{labels:top4.map(f=>f[0]),datasets:[{data:top4.map(f=>f[1]),backgroundColor:colores,borderWidth:0}]},options:{cutout:'62%',plugins:{legend:{display:false}}}}));
+  if(d1)charts.push(new Chart(d1,{type:'doughnut',data:{labels:top4.map(f=>f[0]),datasets:[{data:top4.map(f=>f[1]),backgroundColor:colores,borderWidth:2,borderColor:'#fff'}]},options:{cutout:'66%',plugins:{legend:{display:false}}}}));
+  const ley=document.getElementById('dona-leyenda');
+  if(ley)ley.innerHTML='<div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8B867D;margin-bottom:6px">Valor por familia</div>'+top4.map((f,i)=>`<div style="display:flex;justify-content:space-between;padding:3px 0"><span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${colores[i]};margin-right:6px"></span>${f[0]}</span><b class="num">${plata(f[1])}</b></div>`).join('');
 
-  // consumo mensual: aplicaciones en $ por mes
   const meses={};
   movimientos.filter(m=>m.tipo==='aplicacion').forEach(m=>{
     if(!m.fechaRaw)return;
@@ -258,17 +416,7 @@ function buildCharts(){
   const mk=Object.keys(meses).sort().slice(-8);
   const nombres={'01':'Ene','02':'Feb','03':'Mar','04':'Abr','05':'May','06':'Jun','07':'Jul','08':'Ago','09':'Sep','10':'Oct','11':'Nov','12':'Dic'};
   const c2=document.getElementById('cons');
-  if(c2)charts.push(new Chart(c2,{type:'bar',data:{labels:mk.map(k=>nombres[k.slice(5)]+' '+k.slice(2,4)),datasets:[{data:mk.map(k=>meses[k]),backgroundColor:'#2f7d4f99',borderRadius:6}]},options:{plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>plata(v)}},x:{grid:{display:false}}},responsive:true,maintainAspectRatio:false}}));
-
-  // consumo por campo
-  const campos={};
-  movimientos.filter(m=>m.tipo==='aplicacion').forEach(m=>{
-    const p=products.find(x=>x.nombre===m.producto);
-    if(m.origen)campos[m.origen]=(campos[m.origen]||0)+(p?m.cantidad*p.precio:0);
-  });
-  const ck=Object.keys(campos);
-  const c3=document.getElementById('campos');
-  if(c3)charts.push(new Chart(c3,{type:'bar',data:{labels:ck,datasets:[{data:ck.map(k=>campos[k]),backgroundColor:'#7B2D2D99',borderRadius:6}]},options:{indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{ticks:{callback:v=>plata(v)}},y:{grid:{display:false}}},responsive:true,maintainAspectRatio:false}}));
+  if(c2)charts.push(new Chart(c2,{type:'bar',data:{labels:mk.map(k=>nombres[k.slice(5)]+' '+k.slice(2,4)),datasets:[{data:mk.map(k=>meses[k]),backgroundColor:'#6E2430CC',borderRadius:5,barThickness:22}]},options:{plugins:{legend:{display:false},title:{display:true,text:'Consumo mensual en $',font:{size:11},color:'#8B867D'}},scales:{y:{ticks:{callback:v=>plata(v),font:{size:10}},grid:{color:'#F1EDE5'}},x:{grid:{display:false}}},responsive:true,maintainAspectRatio:false}}));
 }
 
 function renderOrdenes(){
