@@ -445,6 +445,41 @@ function pidPorNombre(nombre){
 }
 
 // Lee todo el estado actual desde Supabase (productos + stock + movimientos + ordenes)
+// ── AVISO DE ÓRDENES NUEVAS al dosificador (notificación + sonido) ──
+function notificarOrdenesNuevas(){
+  if(!curUser || curUser.role!=='dosificador') return;
+  const clave = 'ordenesVistas:'+curUser.id;
+  const mias = ordenes.filter(o=>
+    String(o.dosificador).toLowerCase()===String(curUser.id).toLowerCase() &&
+    ['EN CURSO','INICIADA'].includes(String(o.estado).toUpperCase())
+  );
+  let vistas;
+  try{ vistas = JSON.parse(localStorage.getItem(clave)||'null'); }catch(_){ vistas=null; }
+  const idsActuales = mias.map(o=>String(o.idOrden));
+  if(vistas===null){
+    // primera vez: registrar sin avisar (evita avalancha al entrar)
+    try{ localStorage.setItem(clave, JSON.stringify(idsActuales)); }catch(_){}
+    return;
+  }
+  const nuevas = mias.filter(o=>!vistas.includes(String(o.idOrden)));
+  if(nuevas.length){
+    nuevas.forEach(o=>{
+      const d=o.detalle||{};
+      const titulo = '📋 Nueva orden N°'+(d.numeroOrden||o.idOrden);
+      const cuerpo = (d.tipo==='herbicida'?'Herbicida':'Fitosanitario')+' · '+(d.fundo||o.campo)+' · '+(d.hectareas||'?')+' ha';
+      // Notificación del sistema (si dio permiso)
+      if('Notification' in window && Notification.permission==='granted'){
+        try{ new Notification(titulo,{body:cuerpo,icon:'',tag:'orden-'+o.idOrden}); }catch(_){}
+      }
+      // Aviso dentro de la app siempre
+      showToast(titulo+' · '+cuerpo);
+    });
+    // vibrar si el teléfono lo permite
+    if(navigator.vibrate) navigator.vibrate([200,100,200]);
+  }
+  try{ localStorage.setItem(clave, JSON.stringify(idsActuales)); }catch(_){}
+}
+
 async function syncData() {
   setSyncStatus('loading', 'Sincronizando...');
   const btn = document.getElementById('btn-sync');
@@ -539,6 +574,7 @@ async function syncData() {
     sheetsConnected = true;
     setSyncStatus('on', 'Conectado · ' + products.length + ' productos');
     guardarCacheLocal();
+    notificarOrdenesNuevas();
     refresh();
 
   } catch(e) {
@@ -773,6 +809,11 @@ function attemptLogin() {
     document.getElementById('topbar-user').textContent = curUser.full;
     document.getElementById('role-chip').textContent = curUser.desc;
 
+    // Pedir permiso de notificaciones a los dosificadores
+    if(curUser.role==='dosificador' && 'Notification' in window && Notification.permission==='default'){
+      setTimeout(()=>Notification.requestPermission(), 1500);
+    }
+
     // 1. Cargar cache local al instante (sin esperar a Sheets)
     const hayCache = cargarCacheLocal();
     buildApp();
@@ -839,8 +880,8 @@ function buildApp() {
   const sec  = tabs.map((t,i)=>({t,i})).filter(x=>!x.t.prim);
 
   let nav = prim.map(({t,i})=>`
-    <button class="nav-item${i===0?' active':''}" onclick="switchTab(${i})" aria-label="${t.label}">
-      <span class="nav-icon">${t.icon}</span>
+    <button class="nav-item${i===0?' active':''}" onclick="switchTab(${i})" aria-label="${t.label}" style="position:relative">
+      <span class="nav-icon">${t.icon}${t.k==='orden'&&curUser.role==='dosificador'?`<span id="badge-ordenes" style="display:none;position:absolute;top:2px;right:14px;background:#d33;color:#fff;font-size:10px;font-weight:700;border-radius:10px;padding:1px 6px;min-width:16px"></span>`:''}</span>
       <span class="nav-label">${t.label}</span>
     </button>`).join('');
 
@@ -942,7 +983,15 @@ function onTipoOrdenChange(){
   if(numEl) numEl.value = siguienteCorrelativo(tipo);
 }
 
-function refresh(){ renderPanel(curTab); }
+function refresh(){ 
+  renderPanel(curTab);
+  // Actualizar el numerito rojo de órdenes pendientes del dosificador
+  const b=document.getElementById('badge-ordenes');
+  if(b && curUser && curUser.role==='dosificador'){
+    const n=ordenes.filter(o=>String(o.dosificador).toLowerCase()===String(curUser.id).toLowerCase()&&['EN CURSO','INICIADA'].includes(String(o.estado).toUpperCase())).length;
+    b.textContent=n; b.style.display=n?'block':'none';
+  }
+}
 
 // ── BORRADOR AUTOMÁTICO: lo que llena el dosificador se guarda al instante ──
 // Se guarda cada campo en el teléfono; al reabrir la app se restaura.
