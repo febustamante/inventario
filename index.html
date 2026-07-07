@@ -2864,7 +2864,10 @@ function renderGerencia(){
   return`
   <div class="section-header"><div class="section-title">Dashboard Gerencial</div><div class="section-sub">Vista ejecutiva · ${hoy()}</div></div>
 
-  <button onclick="exportarRespaldo()" style="width:100%;padding:11px;margin-bottom:14px;border:1px solid #1d6b3a;border-radius:10px;background:#1d6b3a;color:#fff;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-download"></i> Exportar respaldo (Excel)</button>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+    <button onclick="exportarRespaldo()" style="padding:11px;border:1px solid #1d6b3a;border-radius:10px;background:#1d6b3a;color:#fff;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-download"></i> Respaldo Excel</button>
+    <a href="gerencia.html" style="padding:11px;border:1px solid var(--vino);border-radius:10px;background:var(--vino);color:#fff;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:6px;text-decoration:none"><i class="ti ti-device-desktop"></i> Panel escritorio</a>
+  </div>
 
   <div style="background:var(--vino);border-radius:var(--rl);padding:1.25rem 1.5rem;margin-bottom:1rem;color:#fff">
     <div style="font-size:13px;opacity:.85;letter-spacing:.3px">Valor total del inventario</div>
