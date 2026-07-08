@@ -1634,6 +1634,7 @@ ${misOrdenes.length ? misOrdenes.map(o => {
       </label>
     </div>
 
+    ${d.devueltaMotivo ? `<div style="background:#fff3cd;border:1px solid #e0a800;color:#7a5c00;font-weight:600;font-size:13px;padding:11px 14px;border-radius:8px;margin:8px 0">↩️ <b>Orden devuelta para corregir.</b><br>Motivo: ${d.devueltaMotivo}<br><span style="font-size:11px;font-weight:400">Corrige lo indicado y vuelve a cerrar la orden.</span></div>` : ''}
     ${d.observaciones ? `<div style="background:#dc1e1e;color:#fff;font-weight:800;font-size:15px;text-align:center;padding:12px 14px;border-radius:8px;margin:8px 0;text-transform:uppercase;line-height:1.3">⚠️ ${d.observaciones}</div>` : ''}
     ${(()=>{
       const faltas=(d.productos||[]).map(p=>{
@@ -1672,6 +1673,38 @@ ${misOrdenes.length ? misOrdenes.map(o => {
     <div class="empty-text">No tienes órdenes pendientes.</div>
   </div>
 `}
+
+${(()=>{
+  // Historial: últimas 10 órdenes terminadas de este dosificador
+  const hist = ordenes.filter(o=>
+    String(o.dosificador).toLowerCase()===String(curUser.id).toLowerCase() &&
+    String(o.estado).toUpperCase()==='TERMINADA'
+  ).slice(-10).reverse();
+  if(!hist.length) return '';
+  return `
+  <div class="section-header" style="margin-top:24px">
+    <div class="section-title">Mi historial</div>
+    <div class="section-sub">Últimas ${hist.length} órdenes terminadas</div>
+  </div>
+  ${hist.map(o=>{
+    const d=o.detalle||{};
+    const ia=d.infoAplicacion||{};
+    const num=(d.tipo==='herbicida'?'H':'F')+'-N°'+(d.numeroOrden||o.idOrden);
+    const reales=(ia.realAplicado||[]).map(r=>`${r.producto}: ${r.cantidad}`).join(' · ');
+    return `<div class="orden-card" style="opacity:.95">
+      <div class="orden-card-header">
+        <span class="orden-num-badge" style="background:#1d6b3a">${num}</span>
+        <span class="orden-date">${d.fecha||o.fecha}</span>
+      </div>
+      <div class="orden-campo-chip">📍 ${d.fundo||o.campo} · ${(d.cuarteles||[]).map(c=>c.c).join(', ')}</div>
+      <div style="font-size:12px;color:var(--tx2);margin:6px 0">
+        ${reales?('<b>Aplicado:</b> '+reales):'Sin detalle de real'}
+        ${ia.horaTermino?`<br><span style="font-size:11px;color:var(--tx3)">Terminada: ${ia.fechaTermino||''} ${ia.horaTermino}</span>`:''}
+      </div>
+      <button class="btn-sec" onclick="generarPDFOrden('${o.idOrden}')" style="width:100%;font-size:12px;padding:8px"><span style="font-size:13px">📄</span> Ver / descargar PDF</button>
+    </div>`;
+  }).join('')}`;
+})()}
 `;
 }
 // ══ ORDEN DE APLICACION (formulario rico) ══
@@ -2370,6 +2403,50 @@ function generarPDFOrden(idOrden){
   }catch(e){
     console.error(e);
     showToast('Error al generar PDF: '+(e.message||'desconocido'),'err');
+  }
+}
+
+// ── DEVOLVER ORDEN al dosificador para corregir (revierte stock, vuelve a INICIADA) ──
+async function devolverOrden(idOrden){
+  const o = ordenes.find(x=>String(x.idOrden)===String(idOrden));
+  if(!o){ showToast('Orden no encontrada','err'); return; }
+  if(String(o.estado||'').toUpperCase()!=='TERMINADA'){ showToast('Solo se pueden devolver órdenes terminadas','info'); return; }
+
+  const motivo = prompt('¿Por qué devuelves la orden N°'+(o.detalle?.numeroOrden||o.idOrden)+' al dosificador?\n\nEscribe el motivo (lo verá el dosificador para corregir):');
+  if(motivo===null) return;
+  if(!motivo.trim()){ showToast('Debes escribir un motivo','err'); return; }
+
+  if(!confirm('Se devolverá la orden al dosificador y se REVERTIRÁ el stock aplicado en '+o.campo+'.\n\nEl dosificador la corregirá y volverá a cerrarla. ¿Continuar?')) return;
+
+  try{
+    // Revertir movimientos de aplicación de esta orden
+    const { data: movs, error } = await sb.from('movimientos')
+      .select('*').eq('orden_id', o.idOrden).eq('estado','ACTIVO');
+    if(error) throw error;
+    for(const m of (movs||[])){
+      await sb.rpc('anular_movimiento', { p_mov_id: m.id });
+    }
+    // Registrar auditoría y volver a INICIADA
+    const audit = (o.detalle?.auditoria||[]).concat([{
+      accion:'Devuelta para corregir (motivo: '+motivo.trim()+')',
+      usuario: curUser?curUser.id:'?',
+      fecha: new Date().toLocaleString('es-CL')
+    }]);
+    const detDev = Object.assign({}, o.detalle||{}, {
+      auditoria: audit,
+      devueltaMotivo: motivo.trim(),
+      devueltaPor: curUser?curUser.id:'?',
+      devueltaEn: new Date().toLocaleString('es-CL')
+    });
+    // limpiar la info de aplicación anterior para que corrija desde cero el real
+    delete detDev.infoAplicacion;
+    const { error:e2 } = await sb.from('ordenes').update({ estado:'INICIADA', detalle:detDev }).eq('id', o.idOrden);
+    if(e2) throw e2;
+    showToast('Orden devuelta al dosificador · stock revertido');
+    await syncData();
+  }catch(e){
+    console.error(e);
+    showToast('Error al devolver: '+(e.message||''),'err');
   }
 }
 
@@ -3072,6 +3149,7 @@ function renderGerencia(){
             botones = `<div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">`;
             botones += `<button onclick="generarPDFOrden('${o.idOrden}')" style="font-size:11px;padding:5px 12px;border:1px solid var(--vino);border-radius:6px;background:var(--vino);color:#fff">📄 PDF</button>`;
             if(!term) botones += `<button onclick="editarOrden('${o.idOrden}')" style="font-size:11px;padding:5px 12px;border:1px solid var(--bd2);border-radius:6px;background:var(--surf);color:var(--tx2)">✏️ Editar</button>`;
+            if(term) botones += `<button onclick="devolverOrden('${o.idOrden}')" style="font-size:11px;padding:5px 12px;border:1px solid #e0a800;border-radius:6px;background:var(--surf);color:#a87514">↩️ Devolver a dosificador</button>`;
             botones += `<button onclick="anularOrden('${o.idOrden}',${term})" style="font-size:11px;padding:5px 12px;border:1px solid var(--red);border-radius:6px;background:var(--surf);color:var(--red)">✕ Anular${term?' (revierte stock)':''}</button>`;
             botones += `</div>`;
           }
