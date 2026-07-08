@@ -465,17 +465,20 @@ function buildCharts(){
 function renderOrdenes(){
   const ordenes=ordenesF();
   const ft=document.getElementById('f-tipo')?.value||'';
+  const fca=document.getElementById('f-campo')?.value||'';
   const fcu=document.getElementById('f-cuartel')?.value||'';
   const chk=e=>document.getElementById(e)?document.getElementById(e).checked:true;
   const verCreadas=chk('ch-creadas'),verIni=chk('ch-ini'),verTerm=chk('ch-term'),verAnu=document.getElementById('ch-anu')?document.getElementById('ch-anu').checked:false;
 
   let lista=ordenes;
   if(ft)lista=lista.filter(o=>(o.detalle?.tipo||'fitosanitario')===ft);
+  if(fca)lista=lista.filter(o=>String(o.detalle?.fundo||o.campo||'').toUpperCase()===fca);
   if(fcu)lista=lista.filter(o=>(o.detalle?.cuarteles||[]).some(c=>c.c===fcu));
   lista=lista.filter(o=>
     (o.estado==='EN CURSO'&&verCreadas)||(o.estado==='INICIADA'&&verIni)||
     (o.estado==='TERMINADA'&&verTerm)||(o.estado==='ANULADA'&&verAnu));
 
+  const camposTodos=[...new Set(ordenes.map(o=>String(o.detalle?.fundo||o.campo||'').toUpperCase()).filter(Boolean))].sort();
   const cuartelesTodos=[...new Set(ordenes.flatMap(o=>(o.detalle?.cuarteles||[]).map(c=>c.c)))].sort();
   const dotCol={'EN CURSO':'#2f80ed','INICIADA':'#e0a800','TERMINADA':'#27ae60','ANULADA':'#d64545'};
 
@@ -486,6 +489,11 @@ function renderOrdenes(){
         <option value="">todos</option>
         <option ${ft==='fitosanitario'?'selected':''} value="fitosanitario">Fitosanitario</option>
         <option ${ft==='herbicida'?'selected':''} value="herbicida">Herbicida</option>
+      </select></div>
+    <div class="fbox"><label>Campo</label>
+      <select id="f-campo" onchange="render()">
+        <option value="">todos</option>
+        ${camposTodos.map(c=>`<option ${fca===c?'selected':''} value="${c}">${c}</option>`).join('')}
       </select></div>
     <div class="fbox"><label>Cuartel</label>
       <select id="f-cuartel" onchange="render()">
