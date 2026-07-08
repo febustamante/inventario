@@ -1701,7 +1701,10 @@ ${(()=>{
         ${reales?('<b>Aplicado:</b> '+reales):'Sin detalle de real'}
         ${ia.horaTermino?`<br><span style="font-size:11px;color:var(--tx3)">Terminada: ${ia.fechaTermino||''} ${ia.horaTermino}</span>`:''}
       </div>
-      <button class="btn-sec" onclick="generarPDFOrden('${o.idOrden}')" style="width:100%;font-size:12px;padding:8px"><span style="font-size:13px">📄</span> Ver / descargar PDF</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn-sec" onclick="generarPDFOrden('${o.idOrden}','ver')" style="flex:1;font-size:12px;padding:8px">👁️ Ver PDF</button>
+        <button class="btn-sec" onclick="generarPDFOrden('${o.idOrden}','descargar')" style="flex:1;font-size:12px;padding:8px">⬇️ Descargar</button>
+      </div>
     </div>`;
   }).join('')}`;
 })()}
@@ -2207,7 +2210,7 @@ function exportarRespaldo(){
 }
 
 // ── GENERAR PDF DE LA ORDEN (hoja imprimible para completar a lápiz) ──
-function generarPDFOrden(idOrden){
+function generarPDFOrden(idOrden, modo){
   const o = ordenes.find(x=>String(x.idOrden)===String(idOrden));
   if(!o || !o.detalle){ showToast('Esta orden no tiene datos para PDF','err'); return; }
   const d = o.detalle;
@@ -2398,8 +2401,16 @@ function generarPDFOrden(idOrden){
     doc.text('Generado por el sistema de inventario · Agrícola San José', 10, y2);
   }
 
-  doc.save('Orden_'+(d.numeroOrden||o.idOrden)+'_'+(d.fundo||'')+'.pdf');
-  showToast('PDF generado');
+  const nombrePDF = 'Orden_'+(d.numeroOrden||o.idOrden)+'_'+(d.fundo||'')+'.pdf';
+  if(modo==='ver'){
+    // Abrir en pestaña nueva para visualizar (sin descargar)
+    const url = doc.output('bloburl');
+    window.open(url, '_blank');
+    showToast('Abriendo PDF...');
+  } else {
+    doc.save(nombrePDF);
+    showToast('PDF descargado');
+  }
   }catch(e){
     console.error(e);
     showToast('Error al generar PDF: '+(e.message||'desconocido'),'err');
