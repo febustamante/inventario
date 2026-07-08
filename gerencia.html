@@ -558,6 +558,9 @@ function desglose(o){
       ${kv('Lts/kg máquina',d.ltsMaq)}
       ${kv('Total litros',d.totalLitros)}
       ${kv('Creada por',d.creadaPor||'—')}
+      ${d.anuladaPor?kv('⛔ Anulada por',d.anuladaPor+' · '+(d.anuladaEn||'')):''}
+      ${d.editadaPor?kv('✏️ Editada por',d.editadaPor+' · '+(d.editadaEn||'')):''}
+      ${(d.auditoria&&d.auditoria.length)?`<div style="margin-top:8px;font-size:11px;color:#80868b"><b>Historial:</b><br>${d.auditoria.map(a=>`· ${a.accion} — ${a.usuario} (${a.fecha})`).join('<br>')}</div>`:''}
       ${d.observaciones?`<div style="background:#dc1e1e;color:#fff;font-weight:700;font-size:12px;padding:8px;border-radius:7px;margin-top:8px;text-transform:uppercase">⚠️ ${d.observaciones}</div>`:''}
     </div>
     <div>
