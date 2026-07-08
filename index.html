@@ -2377,6 +2377,13 @@ async function anularOrden(idOrden, terminada){
   const o = ordenes.find(x=>String(x.idOrden)===String(idOrden));
   if(!o){ showToast('Orden no encontrada','err'); return; }
 
+  // Protección: no re-anular una orden ya anulada
+  if(String(o.estado||'').toUpperCase()==='ANULADA'){
+    showToast('Esta orden ya está anulada','info');
+    await syncData();
+    return;
+  }
+
   let msg = `¿Anular la orden N°${o.detalle?.numeroOrden||o.idOrden}?`;
   if(terminada) msg += `\n\nEsta orden ya descontó stock. Al anularla, se DEVOLVERÁ al stock de ${o.campo} lo que se había aplicado.`;
   if(!confirm(msg)) return;
@@ -2391,8 +2398,14 @@ async function anularOrden(idOrden, terminada){
         await sb.rpc('anular_movimiento', { p_mov_id: m.id });
       }
     }
-    // Marcar la orden como anulada
-    const { error: e2 } = await sb.from('ordenes').update({ estado:'ANULADA' }).eq('id', o.idOrden);
+    // Marcar la orden como anulada + registrar auditoría
+    const audit = (o.detalle?.auditoria||[]).concat([{
+      accion:'Anulada'+(terminada?' (stock revertido)':''),
+      usuario: curUser?curUser.id:'?',
+      fecha: new Date().toLocaleString('es-CL')
+    }]);
+    const detAudit = Object.assign({}, o.detalle||{}, {auditoria:audit, anuladaPor:curUser?curUser.id:'?', anuladaEn:new Date().toLocaleString('es-CL')});
+    const { error: e2 } = await sb.from('ordenes').update({ estado:'ANULADA', detalle:detAudit }).eq('id', o.idOrden);
     if(e2) throw e2;
 
     showToast('Orden anulada' + (terminada?' y stock revertido':''));
