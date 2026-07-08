@@ -9,6 +9,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:'Inter',-apple-system,system-ui,sans-serif;background:#fff;color:#212529;display:flex;min-height:100vh}
@@ -126,6 +127,7 @@
     <a class="on" data-v="dash" onclick="ver('dash')"><i class="ti ti-layout-dashboard"></i>Dashboard</a>
     <a data-v="ordenes" onclick="ver('ordenes')"><i class="ti ti-clipboard-list"></i>Órdenes</a>
     <a data-v="calendario" onclick="ver('calendario')"><i class="ti ti-calendar"></i>Calendario</a>
+    <a data-v="maquinaria" onclick="ver('maquinaria')"><i class="ti ti-tractor"></i>Maquinaria</a>
     <a onclick="cargar()"><i class="ti ti-refresh"></i>Actualizar datos</a>
     <a href="index.html"><i class="ti ti-device-mobile"></i>Ir a la app</a>
   </nav>
@@ -192,7 +194,7 @@ function movsF(){const f=fundoSel();if(!f)return movimientos;const mapa={CERRILL
 function ver(v){
   vista=v;
   document.querySelectorAll('.nav a[data-v]').forEach(a=>a.classList.toggle('on',a.dataset.v===v));
-  document.getElementById('titulo').textContent=v==='dash'?'Dashboard Gerencial':v==='calendario'?'Calendario de órdenes':'Control de órdenes';
+  document.getElementById('titulo').textContent=v==='dash'?'Dashboard Gerencial':v==='calendario'?'Calendario de órdenes':v==='maquinaria'?'Control de maquinaria':'Control de órdenes';
   render();
 }
 
@@ -215,6 +217,7 @@ function render(){
   const el=document.getElementById('contenido');
   if(vista==='dash')el.innerHTML=renderDash();
   else if(vista==='calendario')el.innerHTML=renderCalendario();
+  else if(vista==='maquinaria'){el.innerHTML='<div class="loading">Cargando flota...</div>';renderMaquinaria();}
   else el.innerHTML=renderOrdenes();
   if(vista==='dash')setTimeout(buildCharts,60);
 }
@@ -848,6 +851,84 @@ function generarPDFOrden(idOrden){
     console.error(e);
     showToast('Error al generar PDF: '+(e.message||'desconocido'),'err');
   }
+}
+
+// ══ MAQUINARIA (lee maquinarias.xlsx del repositorio) ══
+let maqData=null;
+async function renderMaquinaria(){
+  const el=document.getElementById('contenido');
+  if(!maqData){
+    try{
+      const r=await fetch('maquinarias.xlsx');
+      if(!r.ok)throw new Error('no encontrado');
+      const buf=await r.arrayBuffer();
+      maqData=parseMaq(XLSX.read(buf,{type:'array',cellDates:true}));
+    }catch(e){
+      el.innerHTML=`<div class="panel" style="text-align:center;padding:40px">
+        <div style="font-size:15px;font-weight:700;margin-bottom:8px">Archivo de flota no encontrado</div>
+        <div style="font-size:13px;color:#80868b;margin-bottom:16px">Sube tu Excel <b>maquinarias.xlsx</b> al repositorio de GitHub (junto a gerencia.html),<br>o cárgalo aquí para verlo ahora:</div>
+        <input type="file" accept=".xlsx" onchange="cargarMaqLocal(this)" style="font-size:13px">
+      </div>`;
+      return;
+    }
+  }
+  el.innerHTML=vistaMaq(maqData);
+}
+function cargarMaqLocal(inp){
+  const f=inp.files[0]; if(!f)return;
+  const rd=new FileReader();
+  rd.onload=e=>{maqData=parseMaq(XLSX.read(e.target.result,{type:'array',cellDates:true}));document.getElementById('contenido').innerHTML=vistaMaq(maqData);};
+  rd.readAsArrayBuffer(f);
+}
+function parseMaq(wb){
+  const ws=wb.Sheets['CONTROL FLOTA'];
+  if(!ws) return null;
+  const V=addr=>{const c=ws[addr];return c?c.v:null;};
+  // KPIs de estado (fila 4 etiqueta, 5 valor, 6 subtítulo) en columnas A,C,E,G,I,K,M,O,Q,S
+  const cols=['A','C','E','G','I','K','M','O','Q','S'];
+  const estado=cols.map(c=>({lbl:V(c+'4'),val:V(c+'5'),sub:V(c+'6')})).filter(k=>k.lbl!=null);
+  // KPIs de costos (fila 8/9/10) en columnas A,E,I,M,Q
+  const cols2=['A','E','I','M','Q'];
+  const costos=cols2.map(c=>({lbl:V(c+'8'),val:V(c+'9'),sub:V(c+'10')})).filter(k=>k.lbl!=null);
+  const fecha=V('R2');
+  return {estado,costos,fecha};
+}
+function vistaMaq(D){
+  if(!D) return '<div class="panel" style="text-align:center;padding:30px;color:#80868b">El archivo no tiene la hoja CONTROL FLOTA</div>';
+  const colorEstado=k=>{
+    const l=String(k.lbl).toUpperCase();
+    if(l.includes('OPERATIVAS'))return '#27ae60';
+    if(l.includes('VENCID'))return k.val>0?'#d64545':'#27ae60';
+    if(l.includes('PRÓX'))return k.val>0?'#e0a800':'#27ae60';
+    if(l.includes('MANTENCIÓN')||l.includes('FUERA'))return k.val>0?'#e0a800':'#212529';
+    return '#212529';
+  };
+  const fmtCosto=k=>{
+    const l=String(k.lbl).toUpperCase();
+    if(l.includes('KM TOTALES'))return Math.round(k.val).toLocaleString('es-CL')+' km';
+    if(l.includes('POR KM'))return plata(k.val)+'/km';
+    return plata(k.val);
+  };
+  const fF=d=>{if(!d)return'';const x=d instanceof Date?d:new Date(d);return isNaN(x)?'':' · datos al '+x.toLocaleDateString('es-CL');};
+  return `
+  <div style="font-size:12.5px;color:#80868b;margin-bottom:12px">KPIs de la hoja CONTROL FLOTA${fF(D.fecha)}</div>
+  <div class="eyebrow">Estado de la flota</div>
+  <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:8px">
+    ${D.estado.map(k=>`<div class="panel" style="padding:14px">
+      <div style="font-size:10.5px;color:#80868b;font-weight:700;text-transform:uppercase;letter-spacing:.03em">${k.lbl}</div>
+      <div class="num" style="font-size:26px;font-weight:800;color:${colorEstado(k)};margin-top:2px">${k.val!=null?k.val:'—'}</div>
+      <div style="font-size:11px;color:#80868b">${k.sub||''}</div>
+    </div>`).join('')}
+  </div>
+  <div class="eyebrow">Costos</div>
+  <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px">
+    ${D.costos.map(k=>`<div class="panel" style="padding:14px">
+      <div style="font-size:10.5px;color:#80868b;font-weight:700;text-transform:uppercase;letter-spacing:.03em">${k.lbl}</div>
+      <div class="num" style="font-size:21px;font-weight:800;margin-top:2px">${k.val!=null?fmtCosto(k):'—'}</div>
+      <div style="font-size:11px;color:#80868b">${k.sub||''}</div>
+    </div>`).join('')}
+  </div>
+  <div style="font-size:12px;color:#80868b;margin-top:14px">Fuente: maquinarias.xlsx (hoja CONTROL FLOTA) · para actualizar, reemplaza el archivo en GitHub</div>`;
 }
 </script>
 </body>
