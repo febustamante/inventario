@@ -11,65 +11,90 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:'Inter',-apple-system,system-ui,sans-serif;background:#F7F5F1;color:#23201C;display:flex;min-height:100vh}
-  h1,h3,.serif{font-family:'Fraunces',Georgia,serif}
+  body{font-family:'Inter',-apple-system,system-ui,sans-serif;background:#fff;color:#212529;display:flex;min-height:100vh}
+  h1,h3,.serif{font-family:'Inter',sans-serif}
   .num{font-variant-numeric:tabular-nums}
-  .eyebrow{font-size:10.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#8B867D;margin:26px 0 10px;display:flex;align-items:center;gap:10px}
-  .eyebrow::after{content:'';flex:1;height:1px;background:#E7E3DB}
-  .side{width:225px;background:#7B2D2D;color:#fff;display:flex;flex-direction:column;flex-shrink:0;position:sticky;top:0;height:100vh}
-  .side .logo{background:#fff;margin:16px;padding:10px;border-radius:10px;text-align:center}
-  .side .logo span{color:#7B2D2D;font-weight:800;font-size:14px;font-style:italic}
-  .nav{flex:1;padding:6px 12px}
-  .nav a{display:flex;align-items:center;gap:11px;padding:10px 13px;border-radius:9px;color:rgba(255,255,255,.75);text-decoration:none;font-size:13.5px;margin-bottom:2px;cursor:pointer}
-  .nav a i{font-size:19px}
-  .nav a.on{background:#2f7d4f;color:#fff;font-weight:600}
-  .nav a:hover:not(.on){background:rgba(255,255,255,.08);color:#fff}
-  .side .user{padding:14px 16px;border-top:1px solid rgba(255,255,255,.15);display:flex;gap:10px;align-items:center}
-  .side .user .av{width:34px;height:34px;border-radius:50%;background:#fff;color:#7B2D2D;display:flex;align-items:center;justify-content:center;font-weight:700}
-  .main{flex:1;padding:22px 28px;min-width:0}
-  .tophdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
-  .tophdr h1{font-size:21px;font-weight:700}
-  .tophdr .sub{font-size:12.5px;color:#8a8a8e;margin-top:2px}
-  .btn{border:none;border-radius:9px;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;display:inline-flex;gap:6px;align-items:center}
+  .eyebrow{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#9aa0a6;margin:26px 0 10px}
+  /* SIDEBAR claro */
+  .side{width:230px;background:#ECECEC;color:#212529;display:flex;flex-direction:column;flex-shrink:0;position:sticky;top:0;height:100vh;border-right:1px solid #e0e0e0}
+  .side .logo{margin:18px 16px 6px;padding:0}
+  .side .logo span{font-weight:800;font-size:17px;color:#7B2D2D;font-style:italic}
+  .side .empresa{font-size:12.5px;color:#555;margin:0 16px 12px}
+  .side .selector{margin:0 14px 14px}
+  .side .selector select{width:100%;padding:9px 10px;border:1px solid #d5d5d5;border-radius:8px;font-size:13px;background:#fff;font-weight:600}
+  .nav{flex:1;padding:4px 10px;overflow-y:auto}
+  .nav a{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;color:#3c4043;text-decoration:none;font-size:13.5px;margin-bottom:2px;cursor:pointer;font-weight:500}
+  .nav a i{font-size:18px;color:#5f6368}
+  .nav a.on{background:#fff;color:#111;font-weight:700;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+  .nav a.on i{color:#2f7d4f}
+  .nav a:hover:not(.on){background:rgba(255,255,255,.6)}
+  .side .user{padding:12px 16px;border-top:1px solid #ddd;display:flex;gap:10px;align-items:center;font-size:13px}
+  .side .user .av{width:32px;height:32px;border-radius:50%;background:#7B2D2D;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px}
+  /* MAIN */
+  .main{flex:1;padding:22px 30px;min-width:0;background:#fff}
+  .tophdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+  .tophdr h1{font-size:21px;font-weight:800}
+  .tophdr .sub{font-size:12.5px;color:#80868b;margin-top:2px}
+  .btn{border:none;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;display:inline-flex;gap:6px;align-items:center}
   .btn.green{background:#2f7d4f;color:#fff}
-  .btn.line{background:#fff;border:1px solid #e0e0e5;color:#444}
-  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}
-  .kpi{background:#fff;border:1px solid #ececf0;border-radius:14px;padding:16px}
-  .kpi .top{display:flex;gap:12px;align-items:center}
-  .kpi .ic{width:40px;height:40px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
-  .kpi .lbl{font-size:12.5px;color:#7a7a80}
-  .kpi .val{font-size:22px;font-weight:800}
-  .grid2{display:grid;grid-template-columns:1.15fr .85fr;gap:14px;margin-bottom:16px}
-  .panel{background:#fff;border:1px solid #EAE6DE;border-radius:14px;padding:20px;box-shadow:0 1px 2px rgba(35,32,28,.04)}
-  .panel h3{font-size:15px;font-weight:700;margin-bottom:14px}
+  .btn.line{background:#fff;border:1px solid #dadce0;color:#3c4043}
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px}
+  .grid2{display:grid;grid-template-columns:1.15fr .85fr;gap:14px;margin-bottom:14px}
+  .panel{background:#fff;border:1px solid #e6e6e6;border-radius:12px;padding:18px}
+  .panel h3{font-size:15px;font-weight:700;margin-bottom:12px}
   table{width:100%;border-collapse:collapse;font-size:13px}
-  th{color:#8a8a8e;font-weight:600;text-align:left;padding:8px 10px;font-size:11.5px;border-bottom:1px solid #ececf0;text-transform:uppercase}
-  td{padding:10px;border-bottom:1px solid #f4f4f7;vertical-align:middle}
+  th{color:#80868b;font-weight:600;text-align:left;padding:8px 10px;font-size:11.5px;border-bottom:1px solid #eee;text-transform:uppercase}
+  td{padding:10px;border-bottom:1px solid #f4f4f4;vertical-align:middle}
   tr:last-child td{border:none}
-  .tag{font-size:11px;padding:3px 10px;border-radius:12px;font-weight:600;white-space:nowrap}
-  .tag.creada{background:#e8f0fb;color:#2456a0}
-  .tag.iniciada{background:#fdf3dc;color:#a87514}
-  .tag.terminada{background:#e8f5ec;color:#2f7d4f}
-  .tag.anulada{background:#fbecec;color:#a32d2d}
-  .famrow{display:flex;justify-content:space-between;align-items:center;padding:6px 0;font-size:13px}
-  .famrow .dotc{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:8px}
-  .famrow .m{font-weight:700}
+  /* Pastillas de estado (sólidas, estilo referencia) */
+  .tag{font-size:11.5px;padding:3px 12px;border-radius:12px;font-weight:700;white-space:nowrap;color:#fff}
+  .tag.creada{background:#2f80ed}
+  .tag.iniciada{background:#e0a800}
+  .tag.terminada{background:#27ae60}
+  .tag.anulada{background:#d64545}
+  /* Filtros en cajas etiquetadas */
+  .fbox{border:1px solid #dadce0;border-radius:10px;padding:7px 12px;background:#fff;min-width:170px}
+  .fbox label{display:block;font-size:11px;color:#80868b;font-weight:600}
+  .fbox select{border:none;outline:none;width:100%;font-size:13.5px;background:#fff;font-weight:500;padding:2px 0}
+  .filters{display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;align-items:flex-end}
+  .chks{display:flex;gap:16px;align-items:center;font-size:13.5px;margin-bottom:14px;flex-wrap:wrap}
+  .chks b{font-weight:700}
+  .chks label{display:flex;gap:6px;align-items:center;cursor:pointer;font-weight:500}
+  .chks input{width:16px;height:16px;accent-color:#2f80ed}
+  /* Lista de órdenes como tarjetas */
+  .ord-card{border:1px solid #e6e6e6;border-radius:10px;padding:14px 18px;margin-bottom:10px;display:flex;align-items:center;gap:16px;cursor:pointer;transition:box-shadow .12s}
+  .ord-card:hover{box-shadow:0 2px 8px rgba(0,0,0,.07)}
+  .ord-num{display:flex;align-items:center;gap:8px;min-width:92px}
+  .ord-num .dot{width:10px;height:10px;border-radius:50%}
+  .ord-num b{font-size:15px}
+  .ord-mid{flex:1;min-width:0}
+  .ord-mid .t{font-size:14px;font-weight:700}
+  .ord-mid .s{font-size:12.5px;color:#80868b;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ord-right{text-align:right;display:flex;align-items:center;gap:14px}
+  .ord-right .fecha{font-size:13px;color:#2f80ed;font-weight:600}
+  .ord-det{border:1px solid #e6e6e6;border-top:none;border-radius:0 0 10px 10px;margin:-11px 0 10px;padding:16px 20px;background:#fafafa}
   .steps{display:flex;gap:3px;align-items:center}
   .step{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700}
-  .step.ok{background:#2f7d4f;color:#fff}
-  .step.no{background:#eceef1;color:#a0a0a5}
+  .step.ok{background:#27ae60;color:#fff}
+  .step.no{background:#ececec;color:#a0a0a5}
   .stline{width:16px;height:2px;background:#e0e0e5}
-  .filters{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
-  .filters select{padding:8px 12px;border:1px solid #e0e0e5;border-radius:8px;font-size:13px;background:#fff}
-  #login{position:fixed;inset:0;background:#7B2D2D;display:flex;align-items:center;justify-content:center;z-index:99}
-  #login .box{background:#fff;border-radius:16px;padding:34px;width:320px;text-align:center}
-  #login h2{color:#7B2D2D;font-size:17px;margin-bottom:4px}
-  #login p{font-size:12.5px;color:#8a8a8e;margin-bottom:16px}
+  .famrow{display:flex;justify-content:space-between;align-items:center;padding:6px 0;font-size:13px}
+  #login{position:fixed;inset:0;background:#f2f2f2;display:flex;align-items:center;justify-content:center;z-index:99}
+  #login .box{background:#fff;border:1px solid #e0e0e0;border-radius:14px;padding:34px;width:320px;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,.08)}
+  #login h2{color:#212529;font-size:17px;margin-bottom:4px}
+  #login p{font-size:12.5px;color:#80868b;margin-bottom:16px}
   #login input{width:100%;padding:12px;border:1px solid #ddd;border-radius:9px;font-size:20px;text-align:center;letter-spacing:8px;margin-bottom:12px}
   #login button{width:100%}
   .hide{display:none!important}
-  .loading{text-align:center;padding:50px;color:#8a8a8e;font-size:14px}
-  .err{color:#a32d2d;font-size:12px;min-height:16px;margin-bottom:8px}
+  .loading{text-align:center;padding:50px;color:#80868b;font-size:14px}
+  .err{color:#d64545;font-size:12px;min-height:16px;margin-bottom:8px}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+  .cal-hdr{font-size:11px;color:#80868b;font-weight:700;text-transform:uppercase;text-align:center;padding:4px 0}
+  .cal-dia{background:#fff;border:1px solid #e6e6e6;border-radius:10px;min-height:86px;padding:6px}
+  .cal-dia.vacio{background:transparent;border:none}
+  .cal-dia.hoy{border:2px solid #27ae60}
+  .cal-num{font-size:12px;font-weight:700;color:#555;margin-bottom:4px}
+  .cal-orden{font-size:10.5px;padding:3px 6px;border-radius:6px;margin-bottom:3px;font-weight:600;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   @media(max-width:1100px){.kpis{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}}
 </style>
 </head>
@@ -88,14 +113,23 @@
 
 <aside class="side hide" id="sidebar">
   <div class="logo"><span>Agrícola San José</span></div>
+  <div class="empresa">Panel de gestión</div>
+  <div class="selector">
+    <select id="fundo-global" onchange="render()">
+      <option value="">Todos los fundos</option>
+      <option value="CERRILLOS">El Cerrillo</option>
+      <option value="RULO">El Rulo</option>
+      <option value="PAINE">Paine</option>
+    </select>
+  </div>
   <nav class="nav">
     <a class="on" data-v="dash" onclick="ver('dash')"><i class="ti ti-layout-dashboard"></i>Dashboard</a>
-    <a data-v="ordenes" onclick="ver('ordenes')"><i class="ti ti-clipboard-list"></i>Control de órdenes</a>
+    <a data-v="ordenes" onclick="ver('ordenes')"><i class="ti ti-clipboard-list"></i>Órdenes</a>
     <a data-v="calendario" onclick="ver('calendario')"><i class="ti ti-calendar"></i>Calendario</a>
     <a onclick="cargar()"><i class="ti ti-refresh"></i>Actualizar datos</a>
     <a href="index.html"><i class="ti ti-device-mobile"></i>Ir a la app</a>
   </nav>
-  <div class="user"><div class="av" id="u-av">G</div><div><div style="font-size:13px;font-weight:600" id="u-nm">Gerencia</div><div style="font-size:11px;opacity:.7">Panel escritorio</div></div></div>
+  <div class="user"><div class="av" id="u-av">G</div><div><div style="font-weight:700" id="u-nm">Gerencia</div><div style="font-size:11px;color:#80868b">En línea</div></div></div>
 </aside>
 
 <main class="main hide" id="main">
@@ -151,6 +185,10 @@ async function cargar(){
 
 function totalStock(pid){const s=stockByLoc[pid]||{};return Object.values(s).reduce((a,b)=>a+b,0);}
 
+function fundoSel(){return document.getElementById('fundo-global')?.value||'';}
+function ordenesF(){const f=fundoSel();return f?ordenes.filter(o=>String(o.detalle?.fundo||'').toUpperCase().includes(f)):ordenes;}
+function movsF(){const f=fundoSel();if(!f)return movimientos;const mapa={CERRILLOS:'Caseta Cerrillos',RULO:'Rulo',PAINE:'Paine'};const c=mapa[f];return movimientos.filter(m=>m.origen===c||m.destino===c);}
+
 function ver(v){
   vista=v;
   document.querySelectorAll('.nav a[data-v]').forEach(a=>a.classList.toggle('on',a.dataset.v===v));
@@ -159,7 +197,7 @@ function ver(v){
 }
 
 function badge(est){
-  const m={'EN CURSO':['creada','Creada'],'INICIADA':['iniciada','▶ Iniciada'],'TERMINADA':['terminada','✓ Terminada'],'ANULADA':['anulada','Anulada']};
+  const m={'EN CURSO':['creada','Creada'],'INICIADA':['iniciada','Iniciada'],'TERMINADA':['terminada','Terminada'],'ANULADA':['anulada','Anulada']};
   const[c,t]=m[est]||['creada',est];return`<span class="tag ${c}">${t}</span>`;
 }
 function pasos(o){
@@ -188,6 +226,7 @@ function sumaDias(fecha,n){const d=new Date(fecha);d.setDate(d.getDate()+n);retu
 function fmtFecha(f){if(!f)return '—';const[a,m,d]=f.split('-');return d+'/'+m;}
 
 function analitica(){
+  const ordenes=ordenesF(), movimientos=movsF();
   const term=ordenes.filter(o=>o.estado==='TERMINADA');
   const apls=movimientos.filter(m=>m.tipo==='aplicacion');
   const precio=n=>{const p=products.find(x=>x.nombre===n);return p?p.precio:0;};
@@ -277,6 +316,7 @@ function semaforo(pct){
 
 function renderDash(){
   const A=analitica();
+  const ordenes=ordenesF(), movimientos=movsF();
   const creadas=ordenes.filter(o=>o.estado==='EN CURSO').length;
   const iniciadas=ordenes.filter(o=>o.estado==='INICIADA').length;
   const terminadas=ordenes.filter(o=>o.estado==='TERMINADA').length;
@@ -420,50 +460,60 @@ function buildCharts(){
 }
 
 function renderOrdenes(){
-  const fe=document.getElementById('f-est')?.value||'';
+  const ordenes=ordenesF();
   const ft=document.getElementById('f-tipo')?.value||'';
-  const fc=document.getElementById('f-campo')?.value||'';
+  const fcu=document.getElementById('f-cuartel')?.value||'';
+  const chk=e=>document.getElementById(e)?document.getElementById(e).checked:true;
+  const verCreadas=chk('ch-creadas'),verIni=chk('ch-ini'),verTerm=chk('ch-term'),verAnu=document.getElementById('ch-anu')?document.getElementById('ch-anu').checked:false;
+
   let lista=ordenes;
-  if(fe)lista=lista.filter(o=>o.estado===fe);
   if(ft)lista=lista.filter(o=>(o.detalle?.tipo||'fitosanitario')===ft);
-  if(fc)lista=lista.filter(o=>o.campo===fc);
+  if(fcu)lista=lista.filter(o=>(o.detalle?.cuarteles||[]).some(c=>c.c===fcu));
+  lista=lista.filter(o=>
+    (o.estado==='EN CURSO'&&verCreadas)||(o.estado==='INICIADA'&&verIni)||
+    (o.estado==='TERMINADA'&&verTerm)||(o.estado==='ANULADA'&&verAnu));
+
+  const cuartelesTodos=[...new Set(ordenes.flatMap(o=>(o.detalle?.cuarteles||[]).map(c=>c.c)))].sort();
+  const dotCol={'EN CURSO':'#2f80ed','INICIADA':'#e0a800','TERMINADA':'#27ae60','ANULADA':'#d64545'};
+
   return `
-  <div class="panel">
-    <div class="filters">
-      <select id="f-est" onchange="render()">
-        <option value="">Todos los estados</option>
-        <option ${fe==='EN CURSO'?'selected':''} value="EN CURSO">Creadas</option>
-        <option ${fe==='INICIADA'?'selected':''} value="INICIADA">Iniciadas</option>
-        <option ${fe==='TERMINADA'?'selected':''} value="TERMINADA">Terminadas</option>
-        <option ${fe==='ANULADA'?'selected':''} value="ANULADA">Anuladas</option>
-      </select>
+  <div class="filters">
+    <div class="fbox"><label>Tipo</label>
       <select id="f-tipo" onchange="render()">
-        <option value="">Todos los tipos</option>
+        <option value="">todos</option>
         <option ${ft==='fitosanitario'?'selected':''} value="fitosanitario">Fitosanitario</option>
         <option ${ft==='herbicida'?'selected':''} value="herbicida">Herbicida</option>
-      </select>
-      <select id="f-campo" onchange="render()">
-        <option value="">Todos los campos</option>
-        ${['Caseta Cerrillos','Rulo','Paine'].map(c=>`<option ${fc===c?'selected':''} value="${c}">${c}</option>`).join('')}
-      </select>
-      <span style="font-size:12.5px;color:#8a8a8e;align-self:center">${lista.length} órdenes</span>
+      </select></div>
+    <div class="fbox"><label>Cuartel</label>
+      <select id="f-cuartel" onchange="render()">
+        <option value="">todos</option>
+        ${cuartelesTodos.map(c=>`<option ${fcu===c?'selected':''}>${c}</option>`).join('')}
+      </select></div>
+    <span style="font-size:12.5px;color:#80868b;padding-bottom:8px">${lista.length} órdenes</span>
+  </div>
+  <div class="chks">
+    <b>Estado</b>
+    <label><input type="checkbox" id="ch-creadas" ${verCreadas?'checked':''} onchange="render()">creadas</label>
+    <label><input type="checkbox" id="ch-ini" ${verIni?'checked':''} onchange="render()">iniciadas</label>
+    <label><input type="checkbox" id="ch-term" ${verTerm?'checked':''} onchange="render()">terminadas</label>
+    <label><input type="checkbox" id="ch-anu" ${verAnu?'checked':''} onchange="render()">anuladas</label>
+  </div>
+  ${lista.length?lista.map((o,i)=>{const d=o.detalle||{};return `
+  <div class="ord-card" onclick="toggleDet(${i})">
+    <div class="ord-num"><span class="dot" style="background:${dotCol[o.estado]||'#999'}"></span><b class="num">${numOrden(o)}</b></div>
+    <div class="ord-mid">
+      <div class="t">${d.tipo==='herbicida'?'Herbicida':'Fitosanitario'} · ${d.fundo||o.campo}</div>
+      <div class="s">${(d.productos||[]).map(p=>p.nombre).join(', ')||'—'} &nbsp;·&nbsp; ${(d.cuarteles||[]).map(c=>c.c).join(', ')} · ${d.hectareas||'?'} ha · ${o.dosificador||''}</div>
     </div>
-    <table><thead><tr><th>Orden</th><th>Tipo</th><th>Campo</th><th>Cuarteles</th><th>Ha</th><th>Creada</th><th>Progreso</th><th>Estado</th><th>Dosificador</th><th>PDF</th></tr></thead><tbody>
-    ${lista.length?lista.map((o,i)=>{const d=o.detalle||{};return`<tr onclick="toggleDet(${i})" style="cursor:pointer" title="Clic para ver el desglose">
-      <td><b>${numOrden(o)}</b></td>
-      <td style="font-size:12px">${d.tipo==='herbicida'?'Herbicida':'Fitosanitario'}</td>
-      <td>${d.fundo||o.campo}</td>
-      <td style="font-size:12px;color:#666">${(d.cuarteles||[]).map(c=>c.c).join(', ')||'—'}</td>
-      <td>${d.hectareas||'—'}</td>
-      <td style="font-size:12px">${d.fecha||o.fecha}</td>
-      <td>${pasos(o)}</td>
-      <td>${badge(o.estado)}</td>
-      <td style="font-size:12px">${o.dosificador||'—'}</td>
-      <td><button class="btn line" style="padding:5px 10px;font-size:11.5px" onclick="event.stopPropagation();generarPDFOrden('${o.idOrden}')" title="Descargar PDF"><i class="ti ti-file-type-pdf"></i> PDF</button></td>
-    </tr>
-    <tr id="det-${i}" class="hide"><td colspan="10" style="background:#faf9f7;padding:16px 20px">${desglose(o)}</td></tr>`}).join(''):'<tr><td colspan="10" style="text-align:center;color:#8a8a8e;padding:30px">No hay órdenes con esos filtros</td></tr>'}
-    </tbody></table>
-  </div>`;
+    <div class="ord-right">
+      ${pasos(o)}
+      <span class="fecha num">${fmtFecha(d.fecha||'')||o.fecha}</span>
+      ${badge(o.estado)}
+      <button class="btn line" style="padding:5px 10px;font-size:11.5px" onclick="event.stopPropagation();generarPDFOrden('${o.idOrden}')"><i class="ti ti-file-type-pdf"></i> PDF</button>
+    </div>
+  </div>
+  <div id="det-${i}" class="ord-det hide">${desglose(o)}</div>`}).join('')
+  :'<div style="text-align:center;color:#80868b;padding:40px;border:1px dashed #ddd;border-radius:10px">No hay órdenes con esos filtros</div>'}`;
 }
 
 function toggleDet(i){
@@ -536,6 +586,7 @@ function fechaOrden(o){
 }
 
 function renderCalendario(){
+  const ordenes=ordenesF();
   const meses=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
   const primerDia=new Date(calAno,calMes,1);
   const diasMes=new Date(calAno,calMes+1,0).getDate();
