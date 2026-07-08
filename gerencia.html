@@ -882,53 +882,89 @@ function cargarMaqLocal(inp){
 }
 function parseMaq(wb){
   const ws=wb.Sheets['CONTROL FLOTA'];
-  if(!ws) return null;
-  const V=addr=>{const c=ws[addr];return c?c.v:null;};
-  // KPIs de estado (fila 4 etiqueta, 5 valor, 6 subtítulo) en columnas A,C,E,G,I,K,M,O,Q,S
+  const V=addr=>{if(!ws)return null;const c=ws[addr];return c?c.v:null;};
   const cols=['A','C','E','G','I','K','M','O','Q','S'];
   const estado=cols.map(c=>({lbl:V(c+'4'),val:V(c+'5'),sub:V(c+'6')})).filter(k=>k.lbl!=null);
-  // KPIs de costos (fila 8/9/10) en columnas A,E,I,M,Q
   const cols2=['A','E','I','M','Q'];
   const costos=cols2.map(c=>({lbl:V(c+'8'),val:V(c+'9'),sub:V(c+'10')})).filter(k=>k.lbl!=null);
   const fecha=V('R2');
-  return {estado,costos,fecha};
+  // Hoja DATOS: detalle por máquina
+  const datos=wb.Sheets['DATOS']?XLSX.utils.sheet_to_json(wb.Sheets['DATOS'],{defval:null}).filter(r=>r['MAQUINARIA']):[];
+  return {estado,costos,fecha,datos};
 }
 function vistaMaq(D){
   if(!D) return '<div class="panel" style="text-align:center;padding:30px;color:#80868b">El archivo no tiene la hoja CONTROL FLOTA</div>';
-  const colorEstado=k=>{
-    const l=String(k.lbl).toUpperCase();
-    if(l.includes('OPERATIVAS'))return '#27ae60';
-    if(l.includes('VENCID'))return k.val>0?'#d64545':'#27ae60';
-    if(l.includes('PRÓX'))return k.val>0?'#e0a800':'#27ae60';
-    if(l.includes('MANTENCIÓN')||l.includes('FUERA'))return k.val>0?'#e0a800':'#212529';
-    return '#212529';
-  };
-  const fmtCosto=k=>{
-    const l=String(k.lbl).toUpperCase();
-    if(l.includes('KM TOTALES'))return Math.round(k.val).toLocaleString('es-CL')+' km';
-    if(l.includes('POR KM'))return plata(k.val)+'/km';
-    return plata(k.val);
-  };
   const fF=d=>{if(!d)return'';const x=d instanceof Date?d:new Date(d);return isNaN(x)?'':' · datos al '+x.toLocaleDateString('es-CL');};
+  const M=D.datos||[];
+  const num=v=>(+v||0);
+  const est=e=>String(e||'').toUpperCase();
+
+  // Alertas accionables
+  const alertasList=M.filter(r=>{const a=est(r['ALERTAS']),e=est(r['ESTADO DE RT']),g=est(r['ESTADO GASES']);
+    return (a&&a!=='OK')||e.includes('VENCID')||g.includes('VENCID')||est(r['ESTADO']).includes('MANTENCIÓN')||est(r['ESTADO']).includes('FUERA');});
+  // Rankings
+  const porCostoTotal=[...M].sort((a,b)=>num(b['COSTO TOTAL'])-num(a['COSTO TOTAL'])).slice(0,6);
+  const porCostoKm=[...M].filter(r=>num(r['COSTO X KM'])>0).sort((a,b)=>num(b['COSTO X KM'])-num(a['COSTO X KM'])).slice(0,6);
+  // Por ubicación
+  const ubic={}; M.forEach(r=>{const u=r['UBICACIÓN']||'Sin ubic.';if(!ubic[u])ubic[u]={n:0,costo:0};ubic[u].n++;ubic[u].costo+=num(r['COSTO TOTAL']);});
+  // Por responsable
+  const resp={}; M.forEach(r=>{const p=r['RESPONSABLE']||'—';if(!resp[p])resp[p]={n:0,costo:0};resp[p].n++;resp[p].costo+=num(r['COSTO TOTAL']);});
+  const respArr=Object.entries(resp).sort((a,b)=>b[1].costo-a[1].costo).slice(0,8);
+
+  const colorEstado=k=>{const l=String(k.lbl).toUpperCase();if(l.includes('OPERATIVAS'))return'#27ae60';if(l.includes('VENCID'))return k.val>0?'#d64545':'#27ae60';if(l.includes('PRÓX'))return k.val>0?'#e0a800':'#27ae60';if(l.includes('MANTENCIÓN')||l.includes('FUERA'))return k.val>0?'#e0a800':'#212529';return'#212529';};
+  const fmtCosto=k=>{const l=String(k.lbl).toUpperCase();if(l.includes('KM TOTALES'))return Math.round(k.val).toLocaleString('es-CL')+' km';if(l.includes('POR KM'))return plata(k.val)+'/km';return plata(k.val);};
+  const tagEstado=e=>{const l=est(e);const col=l.includes('OPERATIVA')?'#27ae60':l.includes('MANTENCIÓN')?'#e0a800':l.includes('FUERA')?'#d64545':l.includes('ARRIENDO')?'#2f80ed':'#80868b';return`<span class="tag" style="background:${col}">${e||'—'}</span>`;};
+  const semRT=(e)=>{const l=est(e);if(l.includes('VENCID'))return'#d64545';if(l.includes('PRÓX'))return'#e0a800';if(l.includes('VIGENTE')||l.includes('OK'))return'#27ae60';return'#80868b';};
+
   return `
-  <div style="font-size:12.5px;color:#80868b;margin-bottom:12px">KPIs de la hoja CONTROL FLOTA${fF(D.fecha)}</div>
+  <div style="font-size:12.5px;color:#80868b;margin-bottom:12px">Control de flota${fF(D.fecha)}</div>
+
   <div class="eyebrow">Estado de la flota</div>
   <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:8px">
-    ${D.estado.map(k=>`<div class="panel" style="padding:14px">
-      <div style="font-size:10.5px;color:#80868b;font-weight:700;text-transform:uppercase;letter-spacing:.03em">${k.lbl}</div>
-      <div class="num" style="font-size:26px;font-weight:800;color:${colorEstado(k)};margin-top:2px">${k.val!=null?k.val:'—'}</div>
-      <div style="font-size:11px;color:#80868b">${k.sub||''}</div>
-    </div>`).join('')}
+    ${D.estado.map(k=>`<div class="panel" style="padding:14px"><div style="font-size:10.5px;color:#80868b;font-weight:700;text-transform:uppercase">${k.lbl}</div><div class="num" style="font-size:26px;font-weight:800;color:${colorEstado(k)};margin-top:2px">${k.val!=null?k.val:'—'}</div><div style="font-size:11px;color:#80868b">${k.sub||''}</div></div>`).join('')}
   </div>
+
   <div class="eyebrow">Costos</div>
   <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px">
-    ${D.costos.map(k=>`<div class="panel" style="padding:14px">
-      <div style="font-size:10.5px;color:#80868b;font-weight:700;text-transform:uppercase;letter-spacing:.03em">${k.lbl}</div>
-      <div class="num" style="font-size:21px;font-weight:800;margin-top:2px">${k.val!=null?fmtCosto(k):'—'}</div>
-      <div style="font-size:11px;color:#80868b">${k.sub||''}</div>
-    </div>`).join('')}
+    ${D.costos.map(k=>`<div class="panel" style="padding:14px"><div style="font-size:10.5px;color:#80868b;font-weight:700;text-transform:uppercase">${k.lbl}</div><div class="num" style="font-size:21px;font-weight:800;margin-top:2px">${k.val!=null?fmtCosto(k):'—'}</div><div style="font-size:11px;color:#80868b">${k.sub||''}</div></div>`).join('')}
   </div>
-  <div style="font-size:12px;color:#80868b;margin-top:14px">Fuente: maquinarias.xlsx (hoja CONTROL FLOTA) · para actualizar, reemplaza el archivo en GitHub</div>`;
+
+  ${alertasList.length?`<div class="eyebrow">Requieren atención</div>
+  <div class="panel" style="border-left:3px solid #d64545">
+    <table><thead><tr><th>Máquina</th><th>Estado</th><th>Rev. técnica</th><th>Gases</th><th>Ubicación</th><th>Responsable</th></tr></thead><tbody>
+    ${alertasList.map(r=>`<tr><td><b>${r['MAQUINARIA']}</b> <span style="color:#80868b;font-size:11px">${r['PATENTE']||''}</span></td><td>${tagEstado(r['ESTADO'])}</td><td><span style="color:${semRT(r['ESTADO DE RT'])};font-weight:700;font-size:12px">${r['ESTADO DE RT']||'—'}</span></td><td><span style="color:${semRT(r['ESTADO GASES'])};font-weight:700;font-size:12px">${r['ESTADO GASES']||'—'}</span></td><td style="font-size:12px">${r['UBICACIÓN']||''}</td><td style="font-size:12px">${r['RESPONSABLE']||''}</td></tr>`).join('')}
+    </tbody></table>
+  </div>`:''}
+
+  <div class="eyebrow">Máquinas más costosas</div>
+  <div class="grid2">
+    <div class="panel"><h3>Top por costo total (año)</h3>
+      ${(()=>{const max=porCostoTotal.length?num(porCostoTotal[0]['COSTO TOTAL']):1;return porCostoTotal.map(r=>`<div style="margin-bottom:9px"><div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:3px"><span style="font-weight:600">${r['MAQUINARIA']} · ${r['RESPONSABLE']||''}</span><span class="num" style="font-weight:700">${plata(num(r['COSTO TOTAL']))}</span></div><div style="height:7px;background:#f0f0f0;border-radius:4px"><div style="height:100%;width:${(num(r['COSTO TOTAL'])/max*100).toFixed(0)}%;background:#7B2D2D;border-radius:4px"></div></div></div>`).join('');})()}
+    </div>
+    <div class="panel"><h3>Top por costo/km (eficiencia)</h3>
+      <table><thead><tr><th>Máquina</th><th class="num">Costo/km</th><th class="num">Costo total</th></tr></thead><tbody>
+      ${porCostoKm.map(r=>`<tr><td><b>${r['MAQUINARIA']}</b></td><td class="num" style="color:#d64545;font-weight:700">${plata(num(r['COSTO X KM']))}</td><td class="num">${plata(num(r['COSTO TOTAL']))}</td></tr>`).join('')}
+      </tbody></table>
+    </div>
+  </div>
+
+  <div class="eyebrow">Distribución</div>
+  <div class="grid2">
+    <div class="panel"><h3>Por campo</h3>
+      ${Object.entries(ubic).sort((a,b)=>b[1].costo-a[1].costo).map(([u,d])=>`<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px dashed #eee;font-size:13px"><span><b>${u}</b> <span style="color:#80868b;font-size:11px">${d.n} máq.</span></span><b class="num">${plata(d.costo)}</b></div>`).join('')}
+    </div>
+    <div class="panel"><h3>Costo por responsable</h3>
+      ${respArr.map(([p,d])=>`<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px dashed #eee;font-size:13px"><span>${p} <span style="color:#80868b;font-size:11px">${d.n} máq.</span></span><b class="num">${plata(d.costo)}</b></div>`).join('')}
+    </div>
+  </div>
+
+  <div class="eyebrow">Detalle por máquina</div>
+  <div class="panel">
+    <table><thead><tr><th>Máquina</th><th>Tipo</th><th>Marca/Modelo</th><th>Estado</th><th>RT</th><th>Gases</th><th>Ubicación</th><th class="num">Costo total</th><th class="num">$/km</th></tr></thead><tbody>
+    ${M.map(r=>`<tr><td><b>${r['MAQUINARIA']}</b></td><td style="font-size:12px">${r['TIPO VEHICULO']||''}</td><td style="font-size:12px">${(r['MARCA']||'')+' '+(r['MODELO']||'')}</td><td>${tagEstado(r['ESTADO'])}</td><td><span style="color:${semRT(r['ESTADO DE RT'])};font-size:11.5px;font-weight:600">${r['ESTADO DE RT']||'—'}</span></td><td><span style="color:${semRT(r['ESTADO GASES'])};font-size:11.5px;font-weight:600">${r['ESTADO GASES']||'—'}</span></td><td style="font-size:12px">${r['UBICACIÓN']||''}</td><td class="num">${plata(num(r['COSTO TOTAL']))}</td><td class="num">${num(r['COSTO X KM'])>0?plata(num(r['COSTO X KM'])):'—'}</td></tr>`).join('')}
+    </tbody></table>
+  </div>
+  <div style="font-size:12px;color:#80868b;margin-top:14px">Fuente: maquinarias.xlsx (hojas CONTROL FLOTA y DATOS) · para actualizar, reemplaza el archivo en GitHub</div>`;
 }
 </script>
 </body>
