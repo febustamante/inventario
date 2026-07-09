@@ -1129,7 +1129,7 @@ function onFundoNueva(){
   document.getElementById('n-num').value=siguienteCorrNueva(document.getElementById('n-tipo').value);
   const cont=document.getElementById('n-cuarteles');
   if(!f||!CUARTELES[f]){cont.innerHTML='<span style="color:#999;font-size:12px">Elige un fundo</span>';calcNueva();return;}
-  cont.innerHTML=CUARTELES[f].map(q=>`<label style="font-size:12px;display:flex;gap:3px;align-items:center;cursor:pointer"><input type="checkbox" class="ncq" data-c="${q.c}" data-ha="${q.ha}" data-var="${q.var||''}" data-dir="${q.dir||''}" onchange="calcNueva()">${q.c} <span style="color:#999">(${q.ha})</span></label>`).join('');
+  cont.innerHTML='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:6px">'+CUARTELES[f].map(q=>`<label style="font-size:12px;display:flex;gap:5px;align-items:center;cursor:pointer;border:1px solid #e0e0e5;border-radius:7px;padding:6px 8px;background:#fff"><input type="checkbox" class="ncq" data-c="${q.c}" data-ha="${q.ha}" data-var="${q.var||''}" data-dir="${q.dir||''}" onchange="calcNueva()" style="width:15px;height:15px"><span><b>${q.c}</b><br><span style="color:#999;font-size:10px">${q.ha} ha</span></span></label>`).join('')+'</div>';
   calcNueva();
 }
 function selNueva(){return [...document.querySelectorAll('.ncq:checked')].map(ch=>({c:ch.dataset.c,ha:parseFloat(ch.dataset.ha)||0,var:ch.dataset.var,dir:ch.dataset.dir}));}
@@ -1212,6 +1212,28 @@ async function guardarNueva(){
     creadaPor:(document.getElementById('u-nm')?.textContent||'gerencia')
   };
 
+  // ── VALIDACIÓN DE STOCK contra Bodega Central (igual que la app) ──
+  const faltaStock=[];
+  detalleProds.forEach(dp=>{
+    const p=products.find(x=>x.nombre===dp.nombre);
+    if(!p)return;
+    const enBodega=(stockByLoc[p.id]||{})['Bodega Central']||0;
+    if(dp.totalTeorico>enBodega) faltaStock.push({nombre:dp.nombre,necesita:dp.totalTeorico,hay:enBodega,falta:dp.totalTeorico-enBodega});
+  });
+  if(faltaStock.length){
+    const txt=faltaStock.map(f=>`• ${f.nombre}: necesita ${f.necesita.toFixed(2)}, hay ${f.hay.toFixed(2)} (falta ${f.falta.toFixed(2)})`).join('\n');
+    const compra=confirm('⚠️ Falta stock en Bodega Central para:\n\n'+txt+'\n\n¿Generar una solicitud de compra por correo?');
+    if(compra){
+      const asunto='Solicitud de compra - Agrícola San José';
+      const cuerpo='Hola Janet,\n\nPor favor cotizar/comprar los siguientes productos:\n\n'+
+        faltaStock.map(f=>`• ${f.nombre}: ${Math.ceil(f.falta)}`).join('\n')+
+        `\n\nSolicitado por: ${detalle?'gerencia':''}\nFecha: ${fecha}\n\nGracias.`;
+      window.open('https://mail.google.com/mail/?view=cm&fs=1&to='+encodeURIComponent('felipe.bustaa@gmail.com')+'&su='+encodeURIComponent(asunto)+'&body='+encodeURIComponent(cuerpo),'_blank');
+    }
+    const crearIgual=confirm('La orden AÚN NO se ha creado.\n\n¿Crear la orden de todas formas (aunque falte stock)?');
+    if(!crearIgual){ msg.innerHTML='<span style="color:#80868b">Orden no creada. Puedes ajustar productos o cantidades.</span>'; return; }
+  }
+
   msg.innerHTML='<span style="color:#80868b">Creando orden...</span>';
   try{
     const { error } = await sb.from('ordenes').insert({
@@ -1227,6 +1249,9 @@ async function guardarNueva(){
     msg.innerHTML='<span style="color:#27ae60;font-weight:700">✓ Orden N°'+numeroOrden+' creada. Le llegará al dosificador de '+fundo+'.</span>';
     nProds=[];nSeq=0;
     await cargar();
+    // Ofrecer PDF de la orden recién creada
+    const ult=ordenes.find(o=>o.detalle&&(o.detalle.tipo||'fitosanitario')===tipo&&String(o.detalle.numeroOrden)===String(numeroOrden));
+    if(ult && confirm('Orden creada. ¿Generar el PDF ahora?')) generarPDFOrden(ult.idOrden);
     setTimeout(()=>ver('ordenes'),1200);
   }catch(e){
     console.error(e);
