@@ -585,12 +585,23 @@ function desglose(o){
 
 // ── CALENDARIO MENSUAL DE ÓRDENES ──
 let calMes=new Date().getMonth(), calAno=new Date().getFullYear();
+let calModo='mes'; // 'mes' | 'semana'
+let calSemana=new Date(); // fecha de referencia de la semana
 function moverMes(n){
   calMes+=n;
   if(calMes<0){calMes=11;calAno--;}
   if(calMes>11){calMes=0;calAno++;}
   render();
 }
+function moverSemana(n){calSemana.setDate(calSemana.getDate()+n*7);render();}
+function calHoy(){calSemana=new Date();render();}
+function setCalModo(m){calModo=m;render();}
+
+// Lunes de la semana de una fecha
+function lunesDe(d){const x=new Date(d);const dia=x.getDay();const diff=dia===0?-6:1-dia;x.setDate(x.getDate()+diff);x.setHours(0,0,0,0);return x;}
+// N° de semana ISO
+function numSemana(d){const x=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));const dia=x.getUTCDay()||7;x.setUTCDate(x.getUTCDate()+4-dia);const ini=new Date(Date.UTC(x.getUTCFullYear(),0,1));return Math.ceil((((x-ini)/86400000)+1)/7);}
+
 
 // La fecha de la orden: detalle.fecha (aaaa-mm-dd) o creación (dd-mm-aaaa)
 function fechaOrden(o){
@@ -602,6 +613,79 @@ function fechaOrden(o){
 }
 
 function renderCalendario(){
+  const toggle=`<div style="display:flex;gap:8px;margin-bottom:14px">
+    <button class="btn ${calModo==='mes'?'green':'line'}" onclick="setCalModo('mes')">Mes</button>
+    <button class="btn ${calModo==='semana'?'green':'line'}" onclick="setCalModo('semana')">Semana</button>
+  </div>`;
+  return toggle + (calModo==='semana' ? renderCalSemana() : renderCalMes());
+}
+
+function renderCalSemana(){
+  const ordenes=ordenesF();
+  const ft=document.getElementById('cs-tipo')?.value||'';
+  const lun=lunesDe(calSemana);
+  const dias=[...Array(7)].map((_,i)=>{const d=new Date(lun);d.setDate(d.getDate()+i);return d;});
+  const nomDia=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
+  const meses=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  const hoyISO2=iso(new Date());
+
+  let lista=ordenes;
+  if(ft)lista=lista.filter(o=>(o.detalle?.tipo||'fitosanitario')===ft);
+
+  const porDia={};
+  lista.forEach(o=>{const f=fechaOrden(o);if(f)(porDia[f]=porDia[f]||[]).push(o);});
+
+  const colEst={'EN CURSO':'#2f80ed','INICIADA':'#e0a800','TERMINADA':'#27ae60','ANULADA':'#d64545'};
+  const fin=new Date(lun);fin.setDate(fin.getDate()+6);
+  const rango=`${lun.getDate()} ${meses[lun.getMonth()]} al ${fin.getDate()} ${meses[fin.getMonth()]} ${fin.getFullYear()}`;
+
+  return `
+  <div style="text-align:center;margin-bottom:6px">
+    <div style="font-size:17px;font-weight:800">Planificación · semana n° ${numSemana(lun)}</div>
+    <div style="font-size:13px;color:#80868b">${rango}</div>
+    <div style="display:flex;gap:14px;justify-content:center;align-items:center;margin-top:8px">
+      <button class="btn line" onclick="moverSemana(-1)">‹‹</button>
+      <button class="btn line" onclick="calHoy()">Hoy</button>
+      <button class="btn line" onclick="moverSemana(1)">››</button>
+    </div>
+  </div>
+  <div class="filters" style="justify-content:center;margin-bottom:12px">
+    <div class="fbox"><label>Tipo orden</label>
+      <select id="cs-tipo" onchange="render()">
+        <option value="">todas</option>
+        <option ${ft==='fitosanitario'?'selected':''} value="fitosanitario">Fitosanitario</option>
+        <option ${ft==='herbicida'?'selected':''} value="herbicida">Herbicida</option>
+      </select></div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;align-items:start">
+    ${dias.map((d,i)=>{
+      const key=iso(d);
+      const ords=porDia[key]||[];
+      const esHoy=key===hoyISO2;
+      return `<div>
+        <div style="text-align:center;padding:8px 4px;background:${esHoy?'#eaf5ee':'#f5f5f5'};border-radius:8px 8px 0 0;border:1px solid #e6e6e6;border-bottom:none">
+          <div style="font-size:11px;font-weight:700;color:${esHoy?'#27ae60':'#3c4043'}">${nomDia[i]}</div>
+          <div style="font-size:11px;color:#80868b">${d.getDate()} ${meses[d.getMonth()]}</div>
+        </div>
+        <div style="border:1px solid #e6e6e6;border-radius:0 0 8px 8px;min-height:120px;padding:5px;background:#fff;display:flex;flex-direction:column;gap:5px">
+          ${ords.map(o=>{const dt=o.detalle||{};const col=colEst[o.estado]||'#999';
+            return `<div onclick="verOrdenDesde('${o.idOrden}')" style="border:1px solid #e6e6e6;border-left:3px solid ${col};border-radius:6px;padding:6px 7px;cursor:pointer;font-size:10.5px;line-height:1.35">
+              <div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:11px">${numOrden(o)}</b><span style="width:8px;height:8px;border-radius:50%;background:${col}"></span></div>
+              <div style="color:#3c4043;font-weight:600">${(dt.cuarteles||[]).map(c=>c.c).join(', ')||'—'}</div>
+              <div style="color:#80868b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${(dt.productos||[]).map(p=>p.nombre).join(', ')||''}</div>
+              <div style="color:#80868b;font-size:9.5px">${dt.hectareas||'?'} ha${dt.totalLitros?' · '+dt.totalLitros+' L':''}</div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+function verOrdenDesde(id){ver('ordenes');setTimeout(()=>{const idx=ordenesF().findIndex(o=>String(o.idOrden)===String(id));const el=document.getElementById('det-'+idx);if(el){el.classList.remove('hide');el.scrollIntoView({behavior:'smooth',block:'center'});}},120);}
+
+function renderCalMes(){
   const ordenes=ordenesF();
   const meses=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
   const primerDia=new Date(calAno,calMes,1);
