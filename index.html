@@ -957,6 +957,8 @@ function initOrdenForm(){
   const f = document.getElementById('ord-fecha');
   if(f && !f.value) f.value = new Date().toISOString().slice(0,10);
   ordProds = [];
+  const numEl = document.getElementById('ord-num');
+  if(numEl) delete numEl.dataset.editado; // form nuevo: vuelve a autorrellenar
   if(document.getElementById('ord-prods') && document.getElementById('ord-prods').children.length===0){
     addProdOrden();
   }
@@ -978,10 +980,11 @@ function onTipoOrdenChange(){
   // Actualizar título grande
   const titulo = document.getElementById('ord-titulo');
   if(titulo) titulo.textContent = tipo==='herbicida' ? 'Aplicación de Herbicidas' : 'Aplicación de Productos Fitosanitarios';
-  // Poner el correlativo automático
+  // Poner el correlativo automático (solo si no fue editado a mano)
   const numEl = document.getElementById('ord-num');
-  if(numEl) numEl.value = siguienteCorrelativo(tipo);
+  if(numEl && !numEl.dataset.editado) numEl.value = siguienteCorrelativo(tipo);
 }
+function marcarNumEditado(){ const e=document.getElementById('ord-num'); if(e) e.dataset.editado='1'; }
 
 function refresh(){ 
   renderPanel(curTab);
@@ -1402,8 +1405,8 @@ async function doPerdida(){
       </div>
 
       <div class="form-group">
-        <label class="form-label">N° Orden <span style="color:var(--tx3);font-weight:400">(automático)</span></label>
-        <input type="text" class="form-control" id="ord-num" readonly style="background:var(--surf2);font-weight:700">
+        <label class="form-label">N° Orden <span style="color:var(--tx3);font-weight:400">(automático · editable para rellenar atrasadas)</span></label>
+        <input type="number" class="form-control" id="ord-num" style="font-weight:700" oninput="marcarNumEditado()">
       </div>
 
       <div class="form-group">
@@ -1567,6 +1570,9 @@ ${misOrdenes.length ? misOrdenes.map(o => {
       <span style="background:var(--surf2);padding:3px 8px;border-radius:6px">${d.hectareas} ha</span>
       <span style="background:var(--surf2);padding:3px 8px;border-radius:6px">Mojamiento: ${d.mojamiento}</span>
       <span style="background:var(--surf2);padding:3px 8px;border-radius:6px">Lts/maq: ${d.ltsMaq}</span>
+      ${(()=>{const tl=d.totalLitros||((d.hectareas||0)*(d.mojamiento||0));const nm=(d.ltsMaq>0)?(tl/d.ltsMaq):0;return `
+      <span style="background:#e8f5ec;color:#1d6b3a;font-weight:700;padding:3px 8px;border-radius:6px">Total litros: ${tl?(+tl).toFixed(0):'—'}</span>
+      <span style="background:#e8f5ec;color:#1d6b3a;font-weight:700;padding:3px 8px;border-radius:6px">N° maquinadas: ${(tl&&d.ltsMaq)?nm.toFixed(1):'—'}</span>`;})()}
     </div>
     <div style="background:var(--surf2);border-radius:8px;padding:8px;margin:6px 0">
       <div style="font-size:11px;color:var(--tx3);font-weight:600;margin-bottom:6px">Ajustar cuarteles (si hubo cambios en terreno)</div>
