@@ -729,6 +729,33 @@ async function editarMovimientoSupabase(movId, datos){
     p_origen_id: m.origen_id, p_destino_id: m.destino_id,
     p_usuario:'SISTEMA-EDITA', p_orden_id: m.orden_id, p_obs:(m.observaciones||'')+' (editado)'
   });
+
+  // Si es una APLICACIÓN ligada a una orden, actualizar también el real aplicado
+  // guardado en el detalle de la orden (de ahí leen el PDF, el panel de gerencia y costos).
+  if (String(m.tipo).toLowerCase() === 'aplicacion' && m.orden_id) {
+    try {
+      const { data: ord, error: eOrd } = await sb.from('ordenes').select('id,detalle').eq('id', m.orden_id).single();
+      if (!eOrd && ord && ord.detalle && ord.detalle.infoAplicacion && Array.isArray(ord.detalle.infoAplicacion.realAplicado)) {
+        const prodNombre = (products.find(p => p.id === m.producto_id)?.nombre || '').trim();
+        const det = ord.detalle;
+        const linea = det.infoAplicacion.realAplicado.find(x => String(x.producto).trim() === prodNombre);
+        if (linea) {
+          const antes = linea.cantidad;
+          linea.cantidad = nuevaCant;
+          det.auditoria = det.auditoria || [];
+          det.auditoria.push({
+            accion: 'Real aplicado editado: ' + prodNombre + ' ' + antes + ' → ' + nuevaCant,
+            usuario: (typeof curUser !== 'undefined' && curUser) ? curUser.id : 'sistema',
+            fecha: new Date().toLocaleString('es-CL')
+          });
+          const { error: eUp } = await sb.from('ordenes').update({ detalle: det }).eq('id', ord.id);
+          if (eUp) console.error('No se pudo actualizar el real de la orden:', eUp);
+        }
+      }
+    } catch(e2) {
+      console.error('Edición de movimiento OK, pero falló la actualización del real en la orden:', e2);
+    }
+  }
 }
 
 // "Recalcular" ya NO existe como tal: el stock siempre esta correcto.
