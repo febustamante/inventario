@@ -424,7 +424,11 @@ function statusOf(pid){
   if(t<=p.minimo)return['Stock bajo','b-low'];
   return['En stock','b-ok'];
 }
-function fmt(n){return parseFloat(parseFloat(n||0).toFixed(2))}
+function fmt(n){
+  const x=parseFloat(parseFloat(n||0).toFixed(2));
+  // Separador de miles chileno, sin decimales si es entero, con hasta 2 si tiene
+  return x.toLocaleString('es-CL',{minimumFractionDigits:0, maximumFractionDigits:2});
+}
 // Formato plata chileno: $1.234.567
 function plata(n){return '$'+Math.round(n||0).toLocaleString('es-CL')}
 // Valor del stock total de un producto (todas las ubicaciones)
