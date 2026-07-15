@@ -340,7 +340,7 @@ const LOC_COLORS = {'Bodega Central':'#7B2D2D','Caseta Cerrillos':'#3d5a80','Rul
 
 const USERS = [
   {id:'maestro',name:'Felipe',     full:'FELIPE · Maestro',  role:'maestro',    pin:'2511',av:'av-m',desc:'Acceso total'},
-  {id:'bodeg',  name:'Bodeguero',  full:'FREDDY · Bodeguero',role:'bodeguero',  pin:'2222',av:'av-b',desc:'Bodega Central'},
+  {id:'bodeg',  name:'Encarg. Bodega',  full:'FREDDY · Encargado de Bodega',role:'bodeguero',  pin:'2222',av:'av-b',desc:'Bodega Central'},
   {id:'rulo',   name:'Rulo',       full:'Rulo · JOSÉ',    role:'dosificador',pin:'3333',av:'av-d',desc:'Dosificador Rulo'},
   {id:'paine',  name:'paine',        full:'HECTOR· Paine',       role:'dosificador',pin:'4444',av:'av-d',desc:'Dosificador Paine'},
   {id:'geren',  name:'Gerencia',   full:'Vista Gerencial',   role:'gerencia',   pin:'5555',av:'av-g',desc:'Vista ejecutiva'},
@@ -410,6 +410,9 @@ function edadCacheTexto() {
 // ── HELPERS ──
 function totalStock(pid){return Object.values(stockByLoc[pid]||{}).reduce((a,b)=>a+b,0)}
 function stockAt(pid,loc){return(stockByLoc[pid]||{})[loc]||0}
+// El bodeguero ve SOLO Bodega Central; maestro y gerencia ven el total de los 4 campos
+function esBodeguero(){return typeof curUser!=='undefined'&&curUser&&curUser.role==='bodeguero';}
+function stockVisible(pid){return esBodeguero()?stockAt(pid,'Bodega Central'):totalStock(pid);}
 function addStock(pid,loc,delta){
   if(!stockByLoc[pid])stockByLoc[pid]={};
   stockByLoc[pid][loc]=(stockByLoc[pid][loc]||0)+delta;
@@ -419,7 +422,7 @@ function statusOf(pid){
   const p=products.find(x=>x.id===pid);
   if(!p)return['?',''];
   if(p.vencido)return['Vencido','b-venc'];
-  const t=totalStock(pid);
+  const t=stockVisible(pid);
   if(t<=0)return['Agotado','b-out'];
   if(t<=p.minimo)return['Stock bajo','b-low'];
   return['En stock','b-ok'];
@@ -1071,14 +1074,15 @@ function limpiarBorrador(idOrden){
 let activeFam='';
 function renderStock(){
   if(!products.length) return `<div class="section-header"><div class="section-title">Inventario</div></div><div class="empty-state"><div class="empty-icon">🔄</div><div class="empty-text">Cargando inventario...<br><br><button onclick="syncData()" style="padding:10px 20px;background:var(--vino);color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer">Sincronizar ahora</button></div></div>`;
- const ok=products.filter(p=>!p.vencido&&totalStock(p.id)>p.minimo).length;
-const low=products.filter(p=>!p.vencido&&totalStock(p.id)>0&&totalStock(p.id)<=p.minimo).length;
-const out=products.filter(p=>!p.vencido&&totalStock(p.id)<=0).length;
+ const ok=products.filter(p=>!p.vencido&&stockVisible(p.id)>p.minimo).length;
+const low=products.filter(p=>!p.vencido&&stockVisible(p.id)>0&&stockVisible(p.id)<=p.minimo).length;
+const out=products.filter(p=>!p.vencido&&stockVisible(p.id)<=0).length;
 const ordenesCurso=ordenes.filter(o=>String(o.estado||'').trim().toUpperCase()==='EN CURSO').length;
 const ordenesTerminadas=ordenes.filter(o=>String(o.estado||'').trim().toUpperCase()==='TERMINADA').length;
   const fams=[...new Set(products.map(p=>p.familia))].sort();
+  const locsVista=esBodeguero()?['Bodega Central']:LOCS;
   return `
-  <div class="section-header"><div class="section-title">Inventario</div><div class="section-sub">${products.length} productos · 4 bodegas</div></div>
+  <div class="section-header"><div class="section-title">Inventario</div><div class="section-sub">${products.length} productos · ${esBodeguero()?'Bodega Central':'4 bodegas'}</div></div>
 
   <div class="card" style="padding:0;overflow:hidden;margin-bottom:12px">
     <div style="display:flex;text-align:center">
@@ -1088,7 +1092,7 @@ const ordenesTerminadas=ordenes.filter(o=>String(o.estado||'').trim().toUpperCas
     </div>
   </div>
 
-  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">${LOCS.map(l=>{
+  <div style="display:grid;grid-template-columns:repeat(${locsVista.length},1fr);gap:8px;margin-bottom:16px">${locsVista.map(l=>{
     const t=products.reduce((s,p)=>s+stockAt(p.id,l),0);
     const ic={'Bodega Central':'ti-building-warehouse','Caseta Cerrillos':'ti-home','Rulo':'ti-plant','Paine':'ti-plant-2'}[l]||'ti-map-pin';
     return`<div class="card" style="margin:0;padding:12px 6px;text-align:center;box-shadow:none"><i class="ti ${ic}" style="font-size:18px;color:var(--vino)"></i><div style="font-size:10px;color:var(--tx3);margin-top:3px">${l.replace('Bodega Central','Bodega').replace('Caseta Cerrillos','Cerrillos')}</div><div style="font-size:15px;font-weight:700;margin-top:2px">${fmt(t)}</div></div>`;
@@ -1126,8 +1130,9 @@ function stockList(list){
   return list.map(p=>{
     const[st,bc]=statusOf(p.id);
     const col=colores[bc]||'#999';
-    // Mostrar las 4 ubicaciones siempre (aunque sea 0)
-    const detalle = LOCS.map(l=>`${abrev[l]} ${fmt(stockAt(p.id,l))}`).join(' · ');
+    // Bodeguero: solo Bodega Central. Resto: las 4 ubicaciones siempre (aunque sea 0)
+    const locsDet=esBodeguero()?['Bodega Central']:LOCS;
+    const detalle = locsDet.map(l=>`${abrev[l]} ${fmt(stockAt(p.id,l))}`).join(' · ');
     return`<div class="v2item">
       <div style="min-width:0;flex:1">
         <div class="v2name">${p.nombre}${p.vencido?' <i class="ti ti-clock-hour-4" style="color:#a87514"></i>':''}</div>
@@ -1135,7 +1140,7 @@ function stockList(list){
         <div style="font-size:11px;color:var(--vino);margin-top:2px">${detalle}</div>
       </div>
       <div style="text-align:right;flex-shrink:0;margin-left:10px">
-        <div class="v2qty">${fmt(totalStock(p.id))}</div>
+        <div class="v2qty">${fmt(stockVisible(p.id))}</div>
         <div style="font-size:11px;color:${col}">${st}</div>
       </div>
     </div>`;
