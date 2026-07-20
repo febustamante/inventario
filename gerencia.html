@@ -150,16 +150,38 @@ const SUPABASE_URL='https://cmfvnluppvqyqwpfjrbs.supabase.co';
 const SUPABASE_KEY='sb_publishable_TvfWNvrb2AitDfwvW5YNww_QsR_gjD1';
 const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 const ID_UBIC={1:'Bodega Central',2:'Caseta Cerrillos',3:'Rulo',4:'Paine'};
-const PINS={'2511':'Felipe','5555':'Gerencia'};
+const PINS={'2511':'Felipe','5555':'Gerencia'};  // respaldo local si no hay conexión
 const plata=n=>'$'+Math.round(n).toLocaleString('es-CL');
 
 let products=[],stockByLoc={},movimientos=[],ordenes=[],vista='dash',charts=[];
 
-function entrar(){
+async function entrar(){
   const p=document.getElementById('pin').value.trim();
-  if(!PINS[p]){document.getElementById('pin-err').textContent='PIN incorrecto';return;}
-  document.getElementById('u-nm').textContent=PINS[p];
-  document.getElementById('u-av').textContent=PINS[p][0];
+  if(!p){document.getElementById('pin-err').textContent='Ingresa tu PIN';return;}
+  let nombre=null;
+
+  // 1) Buscar en la tabla central de usuarios
+  try{
+    const {data,error}=await sb.from('usuarios_sj').select('*').eq('pin',p).eq('activo',true).maybeSingle();
+    if(!error && data){
+      // el panel de gerencia es solo para gerencia o admin de fito
+      if(data.rol_fito==='gerencia' || data.rol_fito==='admin'){
+        nombre=data.nombre;
+      }else{
+        document.getElementById('pin-err').textContent=data.nombre+': sin acceso al panel de gerencia';
+        return;
+      }
+    }
+  }catch(e){console.warn('No se pudo consultar usuarios_sj, uso PINs locales',e);}
+
+  // 2) Respaldo local
+  if(!nombre){
+    if(PINS[p]) nombre=PINS[p];
+    else{document.getElementById('pin-err').textContent='PIN incorrecto';return;}
+  }
+
+  document.getElementById('u-nm').textContent=nombre;
+  document.getElementById('u-av').textContent=nombre[0];
   document.getElementById('login').classList.add('hide');
   document.getElementById('sidebar').classList.remove('hide');
   document.getElementById('main').classList.remove('hide');
