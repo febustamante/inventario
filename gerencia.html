@@ -130,6 +130,7 @@
     <a data-v="nueva" onclick="ver('nueva')"><i class="ti ti-file-plus"></i>Nueva orden</a>
     <a data-v="costos" onclick="ver('costos')"><i class="ti ti-cash"></i>Costos por cuartel</a>
     <a data-v="asistente" onclick="ver('asistente')"><i class="ti ti-message-chatbot"></i>Asistente</a>
+    <a data-v="compras" onclick="ver('compras')"><i class="ti ti-shopping-cart"></i>Compras</a>
     <a data-v="calendario" onclick="ver('calendario')"><i class="ti ti-calendar"></i>Calendario</a>
     <a data-v="maquinaria" onclick="ver('maquinaria')"><i class="ti ti-tractor"></i>Maquinaria</a>
     <a onclick="cargar()"><i class="ti ti-refresh"></i>Actualizar datos</a>
@@ -151,20 +152,30 @@ const SUPABASE_URL='https://cmfvnluppvqyqwpfjrbs.supabase.co';
 const SUPABASE_KEY='sb_publishable_TvfWNvrb2AitDfwvW5YNww_QsR_gjD1';
 const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 const ID_UBIC={1:'Bodega Central',2:'Caseta Cerrillos',3:'Rulo',4:'Paine'};
-const PINS={'2511':'Felipe','5555':'Gerencia'};
+const PINS={'2511':'Felipe','5555':'Gerencia','3232':'Yanet'};
+const ROL_USER={'2511':'admin','5555':'admin','3232':'compras'}; // compras = solo pestaña Compras
+let rolActual='admin';
 const plata=n=>'$'+Math.round(n).toLocaleString('es-CL');
 
-let products=[],stockByLoc={},movimientos=[],ordenes=[],vista='dash',charts=[];
+let products=[],stockByLoc={},movimientos=[],ordenes=[],compras=[],vista='dash',charts=[];
 
 function entrar(){
   const p=document.getElementById('pin').value.trim();
   if(!PINS[p]){document.getElementById('pin-err').textContent='PIN incorrecto';return;}
+  rolActual=ROL_USER[p]||'admin';
   document.getElementById('u-nm').textContent=PINS[p];
   document.getElementById('u-av').textContent=PINS[p][0];
   document.getElementById('login').classList.add('hide');
   document.getElementById('sidebar').classList.remove('hide');
   document.getElementById('main').classList.remove('hide');
   document.getElementById('subfecha').textContent=new Date().toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  // Yanet (rol compras): solo ve la pestaña Compras
+  if(rolActual==='compras'){
+    document.querySelectorAll('.nav a[data-v]').forEach(a=>{ if(a.dataset.v!=='compras') a.style.display='none'; });
+    // ocultar accesos que no le corresponden
+    document.querySelectorAll('.nav a:not([data-v])').forEach(a=>{ if(!/Actualizar/i.test(a.textContent)) a.style.display='none'; });
+    vista='compras';
+  }
   cargar();
 }
 
@@ -183,6 +194,11 @@ async function cargar(){
     (stk||[]).forEach(s=>{const l=ID_UBIC[s.ubicacion_id];if(stockByLoc[s.producto_id]&&l)stockByLoc[s.producto_id][l]=parseFloat(s.cantidad)||0;});
     movimientos=(movs||[]).map(m=>{const pr=(prods||[]).find(p=>p.id===m.producto_id);return{tipo:String(m.tipo||'').toLowerCase(),producto:pr?String(pr.nombre).trim():'',cantidad:parseFloat(m.cantidad)||0,origen:ID_UBIC[m.origen_id]||'',destino:ID_UBIC[m.destino_id]||'',usuario:m.usuario||'',ordenNum:m.orden_id||'',obs:m.observaciones||'',fechaRaw:m.fecha,fecha:m.fecha?new Date(m.fecha).toLocaleDateString('es-CL'):''};});
     ordenes=(ords||[]).map(o=>({idOrden:o.id,fecha:o.creado_en?new Date(o.creado_en).toLocaleDateString('es-CL'):'',campo:ID_UBIC[o.campo_id]||'',dosificador:o.dosificador||'',estado:String(o.estado||'EN CURSO').toUpperCase(),detalle:o.detalle||{}}));
+    // Órdenes de compra (tabla nueva; si aún no existe, no rompe el resto)
+    try{
+      const {data:ocs,error:eOc}=await sb.from('ordenes_compra').select('*').order('creado_en',{ascending:false});
+      compras = eOc ? [] : (ocs||[]);
+    }catch(_){ compras=[]; }
     render();
   }catch(e){
     document.getElementById('contenido').innerHTML='<div class="loading" style="color:#a32d2d">Error al cargar: '+(e.message||e)+'</div>';
@@ -198,7 +214,7 @@ function movsF(){const f=fundoSel();if(!f)return movimientos;const mapa={CERRILL
 function ver(v){
   vista=v;
   document.querySelectorAll('.nav a[data-v]').forEach(a=>a.classList.toggle('on',a.dataset.v===v));
-  document.getElementById('titulo').textContent=v==='dash'?'Dashboard Gerencial':v==='calendario'?'Calendario de órdenes':v==='maquinaria'?'Control de maquinaria':v==='nueva'?'Crear nueva orden':v==='costos'?'Costos por cuartel':v==='asistente'?'Asistente de Gerencia':'Control de órdenes';
+  document.getElementById('titulo').textContent=v==='dash'?'Dashboard Gerencial':v==='calendario'?'Calendario de órdenes':v==='maquinaria'?'Control de maquinaria':v==='nueva'?'Crear nueva orden':v==='costos'?'Costos por cuartel':v==='asistente'?'Asistente de Gerencia':v==='compras'?'Compras':'Control de órdenes';
   render();
 }
 
@@ -225,6 +241,7 @@ function render(){
   else if(vista==='nueva'){el.innerHTML=renderNueva();setTimeout(()=>{onFundoNueva();addProdNueva();},50);}
   else if(vista==='costos'){el.innerHTML=renderCostos();}
   else if(vista==='asistente'){el.innerHTML=renderAsistente();setTimeout(()=>{const i=document.getElementById('asis-input');if(i)i.focus();},50);}
+  else if(vista==='compras'){el.innerHTML=renderCompras();setTimeout(()=>{if(typeof ocProds!=='undefined'&&!ocProds.length&&document.getElementById('oc-prods'))addProdOC();},50);}
   else el.innerHTML=renderOrdenes();
   if(vista==='dash')setTimeout(buildCharts,60);
 }
@@ -1568,6 +1585,167 @@ function asisEnviar(){
   const key=asisResolver(q);
   asisHist.push({who:'bot',txt:key?asisResponder(key):'No entendí bien esa pregunta 🤔 Prueba una de las sugeridas abajo — puedo ayudarte con costos, órdenes, inventario y cumplimiento.'});
   render();setTimeout(()=>{asisPintar();const inp=document.getElementById('asis-input');if(inp)inp.focus();},30);
+}
+
+// ══════ COMPRAS (Yanet crea · Freddy recibe · gerencia ve) ══════
+function isoLocalG(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function estadoOC(oc){
+  const items=(oc.detalle||[]);
+  const tp=items.reduce((s,i)=>s+(+i.pedido||0),0);
+  const tr=items.reduce((s,i)=>s+(+i.recibido||0),0);
+  if(tr<=0)return 'PENDIENTE';
+  if(tr>=tp)return 'COMPLETA';
+  return 'PARCIAL';
+}
+function tagOC(e){
+  const m={'PENDIENTE':['#e0a800','Pendiente'],'PARCIAL':['#2f80ed','Parcial'],'COMPLETA':['#27ae60','Completa']};
+  const [c,t]=m[e]||['#80868b',e];
+  return `<span class="tag" style="background:${c}">${t}</span>`;
+}
+let cpDesde=null, cpHasta=null;
+let ocProds=[], ocSeq=0;
+
+function renderCompras(){
+  const puedeCrear = rolActual==='compras' || rolActual==='admin';
+  // rango historial: últimos 15 días
+  const hoyD=new Date(), hace15=new Date(); hace15.setDate(hace15.getDate()-14);
+  if(cpDesde===null)cpDesde=isoLocalG(hace15);
+  if(cpHasta===null)cpHasta=isoLocalG(hoyD);
+
+  const pend = compras.filter(o=>estadoOC(o)!=='COMPLETA');
+  const hist = compras.filter(o=>{
+    const f=o.fecha||(o.creado_en?isoLocalG(new Date(o.creado_en)):'');
+    return f>=cpDesde && f<=cpHasta;
+  });
+
+  const filaOC = oc => {
+    const e=estadoOC(oc);
+    const items=oc.detalle||[];
+    const tp=items.reduce((s,i)=>s+(+i.pedido||0),0), tr=items.reduce((s,i)=>s+(+i.recibido||0),0);
+    const valor=items.reduce((s,i)=>s+(+i.pedido||0)*(+i.precio||0),0);
+    return `<div class="panel" style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <b>OC ${oc.numero_oc?('N°'+oc.numero_oc):('#'+oc.id)} · ${oc.proveedor}</b>${tagOC(e)}
+      </div>
+      <div style="font-size:12px;color:#80868b;margin-bottom:8px">${(oc.fecha||'').split('-').reverse().join('/')} · ${items.length} productos · recibido ${tr}/${tp} · ${plata(valor)}</div>
+      ${items.map(it=>{const falta=(+it.pedido||0)-(+it.recibido||0);return `<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px dashed #eee;font-size:13px">
+        <span>${it.producto}</span>
+        <span>${it.recibido>=it.pedido?`<b style="color:#27ae60">✓ ${it.recibido}/${it.pedido}</b>`:`<b style="color:#d64545">${it.recibido||0}/${it.pedido}</b> <span style="color:#80868b;font-size:11px">(faltan ${falta})</span>`}</span>
+      </div>`}).join('')}
+    </div>`;
+  };
+
+  return `
+  ${puedeCrear?`
+  <div class="panel" style="max-width:900px;margin-bottom:16px">
+    <h3>Nueva orden de compra</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin:10px 0">
+      <div class="fbox"><label>Proveedor</label><input id="oc-prov" style="border:none;width:100%;font-size:13.5px" placeholder="Anasac, Coagra..."></div>
+      <div class="fbox"><label>N° orden de compra</label><input id="oc-num" style="border:none;width:100%;font-size:13.5px" placeholder="OC-1234"></div>
+      <div class="fbox"><label>Fecha</label><input type="date" id="oc-fecha" value="${isoLocalG(new Date())}" style="border:none;width:100%;font-size:13px"></div>
+    </div>
+    <div style="font-weight:700;font-size:13px;margin-bottom:6px">Productos</div>
+    <table style="font-size:12.5px;margin-bottom:8px"><thead><tr>
+      <th style="text-align:left">Producto</th><th>Cantidad</th><th>Precio unitario</th><th>Subtotal</th><th></th>
+    </tr></thead><tbody id="oc-prods"></tbody></table>
+    <button class="btn line" onclick="addProdOC()" style="font-size:12px;padding:6px 12px">+ Agregar producto</button>
+    <div id="oc-msg" style="font-size:13px;margin:10px 0"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn green" onclick="guardarOC()"><i class="ti ti-device-floppy"></i> Crear orden de compra</button>
+    </div>
+  </div>`:''}
+
+  <div class="eyebrow">Por recibir (${pend.length})</div>
+  <div style="font-size:12px;color:#80868b;margin-bottom:10px">Las compras pendientes o parciales se mantienen aquí hasta que llegue todo. No se borran.</div>
+  ${pend.length?pend.map(filaOC).join(''):'<div class="panel" style="text-align:center;color:#27ae60;font-weight:600">✓ No hay compras pendientes de recibir</div>'}
+
+  <div class="eyebrow">Historial de compras</div>
+  <div class="filters">
+    <div class="fbox"><label>Desde</label><input type="date" id="cp-desde" value="${cpDesde}" max="${cpHasta}" onchange="cpFechas()" style="border:none;font-size:13px"></div>
+    <div class="fbox"><label>Hasta</label><input type="date" id="cp-hasta" value="${cpHasta}" min="${cpDesde}" onchange="cpFechas()" style="border:none;font-size:13px"></div>
+    <button class="btn line" onclick="cpRango(15)">15 días</button>
+    <button class="btn line" onclick="cpRango(30)">30 días</button>
+    <button class="btn line" onclick="exportarComprasExcel()"><i class="ti ti-file-spreadsheet"></i> Exportar Excel</button>
+    <span style="font-size:12.5px;color:#80868b;padding-bottom:8px">${hist.length} compras</span>
+  </div>
+  ${hist.length?hist.map(filaOC).join(''):'<div class="panel" style="text-align:center;color:#80868b">Sin compras en este rango de fechas</div>'}`;
+}
+
+function cpFechas(){
+  const d=document.getElementById('cp-desde'),h=document.getElementById('cp-hasta');
+  if(d&&d.value)cpDesde=d.value; if(h&&h.value)cpHasta=h.value;
+  if(cpDesde>cpHasta){const t=cpDesde;cpDesde=cpHasta;cpHasta=t;}
+  render();
+}
+function cpRango(dias){
+  const hoyD=new Date(),desde=new Date();desde.setDate(desde.getDate()-(dias-1));
+  cpDesde=isoLocalG(desde);cpHasta=isoLocalG(hoyD);render();
+}
+function prodOptsOC(){return '<option value="">— Producto —</option>'+products.map(p=>`<option value="${p.nombre.replace(/"/g,'&quot;')}">${p.nombre}</option>`).join('');}
+function addProdOC(){
+  const id=++ocSeq; ocProds.push(id);
+  const tr=document.createElement('tr'); tr.id='ocrow-'+id;
+  tr.innerHTML=`<td><select id="ocp-nom-${id}" style="border:1px solid #eee;border-radius:4px;padding:5px;width:100%;font-size:12px">${prodOptsOC()}</select></td>
+    <td><input type="number" min="0" step="0.01" id="ocp-cant-${id}" oninput="calcOC()" style="border:1px solid #eee;border-radius:4px;padding:5px;width:75px;text-align:center"></td>
+    <td><input type="number" min="0" step="1" id="ocp-precio-${id}" oninput="calcOC()" style="border:1px solid #eee;border-radius:4px;padding:5px;width:95px;text-align:center" placeholder="$"></td>
+    <td id="ocp-sub-${id}" style="font-weight:700;color:#6E2430">—</td>
+    <td><button onclick="quitarProdOC(${id})" style="border:none;background:none;color:#d64545;cursor:pointer;font-weight:700">✕</button></td>`;
+  document.getElementById('oc-prods').appendChild(tr);
+}
+function quitarProdOC(id){ocProds=ocProds.filter(x=>x!==id);document.getElementById('ocrow-'+id)?.remove();calcOC();}
+function calcOC(){
+  ocProds.forEach(id=>{
+    const c=parseFloat(document.getElementById('ocp-cant-'+id)?.value)||0;
+    const pr=parseFloat(document.getElementById('ocp-precio-'+id)?.value)||0;
+    const el=document.getElementById('ocp-sub-'+id); if(el)el.textContent=(c&&pr)?plata(c*pr):'—';
+  });
+}
+async function guardarOC(){
+  const prov=document.getElementById('oc-prov').value.trim();
+  const num=document.getElementById('oc-num').value.trim();
+  const fecha=document.getElementById('oc-fecha').value;
+  const msg=document.getElementById('oc-msg');
+  const items=ocProds.map(id=>({
+    producto:document.getElementById('ocp-nom-'+id).value,
+    pedido:parseFloat(document.getElementById('ocp-cant-'+id).value)||0,
+    recibido:0,
+    precio:parseFloat(document.getElementById('ocp-precio-'+id).value)||0
+  })).filter(x=>x.producto&&x.pedido>0);
+
+  if(!prov||!fecha||!items.length){ msg.innerHTML='<span style="color:#d64545">Faltan datos: proveedor, fecha y al menos un producto con cantidad.</span>'; return; }
+
+  msg.innerHTML='<span style="color:#80868b">Creando orden de compra...</span>';
+  try{
+    const {error}=await sb.from('ordenes_compra').insert({
+      numero_oc:num, proveedor:prov, fecha, estado:'PENDIENTE',
+      creada_por:(document.getElementById('u-nm')?.textContent||'yanet'), detalle:items
+    });
+    if(error)throw error;
+    msg.innerHTML='<span style="color:#27ae60;font-weight:700">✓ Orden de compra creada. Le aparecerá a Freddy en la app.</span>';
+    ocProds=[];ocSeq=0;
+    await cargar();
+  }catch(e){
+    msg.innerHTML='<span style="color:#d64545">Error: '+(e.message||'')+'. ¿Existe la tabla ordenes_compra en Supabase?</span>';
+  }
+}
+function exportarComprasExcel(){
+  if(typeof XLSX==='undefined'){alert('La librería Excel no cargó.');return;}
+  const filas=[];
+  compras.forEach(oc=>{
+    (oc.detalle||[]).forEach(it=>{
+      filas.push({
+        'N° OC':oc.numero_oc||oc.id, 'Proveedor':oc.proveedor, 'Fecha':oc.fecha,
+        'Estado':estadoOC(oc), 'Producto':it.producto, 'Pedido':it.pedido,
+        'Recibido':it.recibido||0, 'Falta':(+it.pedido||0)-(+it.recibido||0),
+        'Precio unitario':it.precio||0, 'Subtotal':(+it.pedido||0)*(+it.precio||0)
+      });
+    });
+  });
+  if(!filas.length){alert('No hay compras para exportar.');return;}
+  const ws=XLSX.utils.json_to_sheet(filas);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Compras');
+  XLSX.writeFile(wb,'Compras_San_Jose_'+isoLocalG(new Date())+'.xlsx');
 }
 </script>
 </body>
