@@ -129,6 +129,7 @@
     <a data-v="ordenes" onclick="ver('ordenes')"><i class="ti ti-clipboard-list"></i>Órdenes</a>
     <a data-v="nueva" onclick="ver('nueva')"><i class="ti ti-file-plus"></i>Nueva orden</a>
     <a data-v="costos" onclick="ver('costos')"><i class="ti ti-cash"></i>Costos por cuartel</a>
+    <a data-v="asistente" onclick="ver('asistente')"><i class="ti ti-message-chatbot"></i>Asistente</a>
     <a data-v="calendario" onclick="ver('calendario')"><i class="ti ti-calendar"></i>Calendario</a>
     <a data-v="maquinaria" onclick="ver('maquinaria')"><i class="ti ti-tractor"></i>Maquinaria</a>
     <a onclick="cargar()"><i class="ti ti-refresh"></i>Actualizar datos</a>
@@ -150,38 +151,16 @@ const SUPABASE_URL='https://cmfvnluppvqyqwpfjrbs.supabase.co';
 const SUPABASE_KEY='sb_publishable_TvfWNvrb2AitDfwvW5YNww_QsR_gjD1';
 const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 const ID_UBIC={1:'Bodega Central',2:'Caseta Cerrillos',3:'Rulo',4:'Paine'};
-const PINS={'2511':'Felipe','5555':'Gerencia'};  // respaldo local si no hay conexión
+const PINS={'2511':'Felipe','5555':'Gerencia'};
 const plata=n=>'$'+Math.round(n).toLocaleString('es-CL');
 
 let products=[],stockByLoc={},movimientos=[],ordenes=[],vista='dash',charts=[];
 
-async function entrar(){
+function entrar(){
   const p=document.getElementById('pin').value.trim();
-  if(!p){document.getElementById('pin-err').textContent='Ingresa tu PIN';return;}
-  let nombre=null;
-
-  // 1) Buscar en la tabla central de usuarios
-  try{
-    const {data,error}=await sb.from('usuarios_sj').select('*').eq('pin',p).eq('activo',true).maybeSingle();
-    if(!error && data){
-      // el panel de gerencia es solo para gerencia o admin de fito
-      if(data.rol_fito==='gerencia' || data.rol_fito==='admin'){
-        nombre=data.nombre;
-      }else{
-        document.getElementById('pin-err').textContent=data.nombre+': sin acceso al panel de gerencia';
-        return;
-      }
-    }
-  }catch(e){console.warn('No se pudo consultar usuarios_sj, uso PINs locales',e);}
-
-  // 2) Respaldo local
-  if(!nombre){
-    if(PINS[p]) nombre=PINS[p];
-    else{document.getElementById('pin-err').textContent='PIN incorrecto';return;}
-  }
-
-  document.getElementById('u-nm').textContent=nombre;
-  document.getElementById('u-av').textContent=nombre[0];
+  if(!PINS[p]){document.getElementById('pin-err').textContent='PIN incorrecto';return;}
+  document.getElementById('u-nm').textContent=PINS[p];
+  document.getElementById('u-av').textContent=PINS[p][0];
   document.getElementById('login').classList.add('hide');
   document.getElementById('sidebar').classList.remove('hide');
   document.getElementById('main').classList.remove('hide');
@@ -219,7 +198,7 @@ function movsF(){const f=fundoSel();if(!f)return movimientos;const mapa={CERRILL
 function ver(v){
   vista=v;
   document.querySelectorAll('.nav a[data-v]').forEach(a=>a.classList.toggle('on',a.dataset.v===v));
-  document.getElementById('titulo').textContent=v==='dash'?'Dashboard Gerencial':v==='calendario'?'Calendario de órdenes':v==='maquinaria'?'Control de maquinaria':v==='nueva'?'Crear nueva orden':v==='costos'?'Costos por cuartel':'Control de órdenes';
+  document.getElementById('titulo').textContent=v==='dash'?'Dashboard Gerencial':v==='calendario'?'Calendario de órdenes':v==='maquinaria'?'Control de maquinaria':v==='nueva'?'Crear nueva orden':v==='costos'?'Costos por cuartel':v==='asistente'?'Asistente de Gerencia':'Control de órdenes';
   render();
 }
 
@@ -245,6 +224,7 @@ function render(){
   else if(vista==='maquinaria'){el.innerHTML='<div class="loading">Cargando flota...</div>';renderMaquinaria();}
   else if(vista==='nueva'){el.innerHTML=renderNueva();setTimeout(()=>{onFundoNueva();addProdNueva();},50);}
   else if(vista==='costos'){el.innerHTML=renderCostos();}
+  else if(vista==='asistente'){el.innerHTML=renderAsistente();setTimeout(()=>{const i=document.getElementById('asis-input');if(i)i.focus();},50);}
   else el.innerHTML=renderOrdenes();
   if(vista==='dash')setTimeout(buildCharts,60);
 }
@@ -1384,6 +1364,211 @@ function renderCostos(){
   <div style="font-size:12px;color:#80868b;margin-top:8px">Costo calculado del consumo real de órdenes terminadas, repartido por hectáreas de cada cuartel. Variedad/superficie según catastro de cuarteles.</div>`;
 }
 
+// ══════ ASISTENTE DE GERENCIA (local, sin IA externa) ══════
+const ASIS_PREGUNTAS = [
+  {grupo:'Costos', items:[
+    {t:'¿Cuánto gasté este mes?', k:'gasto_mes'},
+    {t:'Gasto total (histórico)', k:'gasto_total'},
+    {t:'Gasto por campo', k:'gasto_campo'},
+    {t:'Cuartel más caro por hectárea', k:'cuartel_caro'},
+    {t:'Costo promedio por hectárea', k:'costo_prom_ha'},
+    {t:'Costo por variedad', k:'costo_variedad'},
+    {t:'Producción vs Formación', k:'prod_form'},
+  ]},
+  {grupo:'Órdenes', items:[
+    {t:'¿Qué órdenes están en curso?', k:'en_curso'},
+    {t:'Órdenes terminadas', k:'terminadas'},
+    {t:'Órdenes estancadas', k:'estancadas'},
+    {t:'Órdenes de este mes', k:'ordenes_mes'},
+  ]},
+  {grupo:'Inventario', items:[
+    {t:'Productos por quebrarse', k:'quiebre'},
+    {t:'Productos bajo mínimo o agotados', k:'bajo_min'},
+    {t:'Valor total del inventario', k:'valor_inv'},
+    {t:'Producto más usado del mes', k:'top_prod'},
+  ]},
+  {grupo:'Cumplimiento', items:[
+    {t:'Cuarteles con carencia vigente', k:'carencias'},
+    {t:'Desviaciones teórico vs real', k:'desviaciones'},
+  ]},
+];
+
+const ASIS_KEYS = [
+  {k:'gasto_mes', w:['gast','mes','cuanto llevo','este mes']},
+  {k:'gasto_total', w:['total','historico','histórico','en total','todo']},
+  {k:'gasto_campo', w:['campo','cerrillo','rulo','paine','fundo']},
+  {k:'cuartel_caro', w:['caro','mas caro','más caro','hectárea','hectarea','/ha','por ha']},
+  {k:'costo_prom_ha', w:['promedio','prom','media']},
+  {k:'costo_variedad', w:['variedad','autumn','thompson','moscatel','cotton','sweet','sable']},
+  {k:'prod_form', w:['formaci','producci','estado']},
+  {k:'en_curso', w:['curso','activ','pendient','abiert']},
+  {k:'terminadas', w:['terminad','complet','cerrad','listas']},
+  {k:'estancadas', w:['estanc','sin iniciar','atras','detenid','parad']},
+  {k:'ordenes_mes', w:['orden','mes','cuantas']},
+  {k:'quiebre', w:['quiebr','quebr','acab','se termin']},
+  {k:'bajo_min', w:['minimo','mínimo','bajo','agotad','falta']},
+  {k:'valor_inv', w:['valor','vale','inventario','cuanto tengo']},
+  {k:'top_prod', w:['mas usado','más usado','top','frecuent']},
+  {k:'carencias', w:['carencia','cosech','reingreso','vigente']},
+  {k:'desviaciones', w:['desviaci','teorico','teórico','real','diferencia']},
+];
+
+function asisResolver(texto){
+  const t=(texto||'').toLowerCase();
+  let mejor=null,max=0;
+  ASIS_KEYS.forEach(e=>{
+    const n=e.w.filter(w=>t.includes(w)).length;
+    if(n>max){max=n;mejor=e.k;}
+  });
+  return max>0?mejor:null;
+}
+
+function asisResponder(key){
+  const A=analitica();
+  const ords=ordenesF();
+  const P=n=>plata(n);
+  switch(key){
+    case 'gasto_mes':
+      return A.costoMes>0?`Este mes llevas <b>${P(A.costoMes)}</b> en productos aplicados${fundoSel()?' en '+fundoSel():''}.`:'No hay aplicaciones registradas este mes'+(fundoSel()?' en '+fundoSel():'')+'.';
+    case 'gasto_total':{
+      const tot=A.costoHa.reduce((s,c)=>s+c.total,0);
+      return tot>0?`El gasto total aplicado (histórico cargado) es <b>${P(tot)}</b>.`:'Aún no hay aplicaciones terminadas registradas.';
+    }
+    case 'gasto_campo':{
+      if(!A.costoHa.length)return 'Todavía no hay gasto por campo registrado.';
+      return 'Gasto aplicado por campo:<br>'+A.costoHa.slice().sort((a,b)=>b.total-a.total).map(c=>`• <b>${c.campo}</b>: ${P(c.total)}${c.porHa!=null?' ('+P(c.porHa)+'/ha)':''}`).join('<br>');
+    }
+    case 'cuartel_caro':{
+      const f=asisCostoCuartel();
+      if(!f.length)return 'Aún no hay órdenes terminadas para calcular costo por cuartel.';
+      const top=f.slice().sort((a,b)=>b.porHa-a.porHa).slice(0,3);
+      return 'Cuarteles más caros por hectárea:<br>'+top.map((c,i)=>`${i+1}. <b>${c.cuartel}</b> (${c.variedad}) — ${P(c.porHa)}/ha`).join('<br>');
+    }
+    case 'costo_prom_ha':{
+      const v=A.costoHa.filter(x=>x.porHa);
+      if(!v.length)return 'Sin datos suficientes para el promedio.';
+      const prom=v.reduce((s,x)=>s+x.porHa,0)/v.length;
+      return `El costo promedio por hectárea aplicada es <b>${P(prom)}/ha</b>.`;
+    }
+    case 'costo_variedad':{
+      const f=asisCostoCuartel();
+      if(!f.length)return 'Aún no hay datos por variedad.';
+      const porVar={};
+      f.forEach(c=>{if(!porVar[c.variedad])porVar[c.variedad]={costo:0,ha:0};porVar[c.variedad].costo+=c.costo;porVar[c.variedad].ha+=c.ha;});
+      return 'Costo por variedad:<br>'+Object.entries(porVar).sort((a,b)=>b[1].costo-a[1].costo).map(([v,d])=>`• <b>${v}</b>: ${P(d.costo)}${d.ha>0?' ('+P(d.costo/d.ha)+'/ha)':''}`).join('<br>');
+    }
+    case 'prod_form':{
+      const f=asisCostoCuartel();
+      const est={'PRODUCCIÓN':0,'FORMACIÓN':0};
+      f.forEach(c=>{const e=(CUARTEL_INFO[c.cuartel]?.estado||'').toUpperCase();if(est[e]!==undefined)est[e]+=c.costo;});
+      return `Gasto por estado del cuartel:<br>• <b>Producción</b>: ${P(est['PRODUCCIÓN'])}<br>• <b>Formación</b>: ${P(est['FORMACIÓN'])}`;
+    }
+    case 'en_curso':{
+      const a=ords.filter(o=>['EN CURSO','INICIADA'].includes(o.estado));
+      return a.length?`Tienes <b>${a.length} órdenes activas</b>:<br>`+a.map(o=>`• ${numOrden(o)} — ${o.detalle?.fundo||o.campo} (${o.estado==='INICIADA'?'iniciada':'creada'})`).join('<br>'):'No hay órdenes en curso ahora mismo.';
+    }
+    case 'terminadas':{
+      const t=ords.filter(o=>o.estado==='TERMINADA');
+      return `Hay <b>${t.length} órdenes terminadas</b>${A.durProm?'. Duración promedio de aplicación: '+A.durProm.toFixed(1)+' h':''}.`;
+    }
+    case 'estancadas':
+      return A.estancadas.length?`⚠️ <b>${A.estancadas.length} órdenes sin iniciar hace 2+ días</b>:<br>`+A.estancadas.map(e=>`• ${e.orden} — ${e.campo} (${e.dias} días)`).join('<br>'):'✓ No hay órdenes estancadas. Todo al día.';
+    case 'ordenes_mes':{
+      const m=new Date().getMonth(),y=new Date().getFullYear();
+      const n=ords.filter(o=>{const f=o.detalle?.fecha;if(!f)return false;const d=new Date(f);return d.getMonth()===m&&d.getFullYear()===y;}).length;
+      return `Este mes se han creado <b>${n} órdenes</b>${fundoSel()?' en '+fundoSel():''}.`;
+    }
+    case 'quiebre':
+      return A.quiebre.length?'Productos por quebrarse (ritmo últimos 30 días):<br>'+A.quiebre.map(q=>`• <b>${q.producto}</b> — ${q.dias} días (quedan ${q.stock.toFixed(1)})`).join('<br>'):'✓ Ningún producto en riesgo de quiebre próximo.';
+    case 'bajo_min':{
+      const bajo=products.filter(p=>{const t=totalStock(p.id);return t>0&&t<=p.minimo;});
+      const out=products.filter(p=>totalStock(p.id)<=0);
+      if(!bajo.length&&!out.length)return '✓ Todo el stock está sobre el mínimo.';
+      let r='';
+      if(out.length)r+=`<b>Agotados (${out.length}):</b><br>`+out.slice(0,8).map(p=>'• '+p.nombre).join('<br>')+'<br>';
+      if(bajo.length)r+=`<b>Bajo mínimo (${bajo.length}):</b><br>`+bajo.slice(0,8).map(p=>`• ${p.nombre} (${totalStock(p.id).toFixed(1)})`).join('<br>');
+      return r;
+    }
+    case 'valor_inv':{
+      const v=products.reduce((s,p)=>s+totalStock(p.id)*p.precio,0);
+      return `El valor total del inventario es <b>${P(v)}</b> en ${products.length} productos.`;
+    }
+    case 'top_prod':
+      return A.top5.length?'Productos más usados este mes (en $):<br>'+A.top5.map(([n,v],i)=>`${i+1}. <b>${n}</b> — ${P(v)}`).join('<br>'):'Sin consumo registrado este mes.';
+    case 'carencias':
+      return A.carencias.length?'⚠️ Cuarteles con carencia vigente (no cosechar):<br>'+A.carencias.map(c=>`• <b>${c.cuarteles}</b> (${c.fundo}) — libre el ${fmtFecha(c.hasta)}, ${c.rest===0?'HOY':'faltan '+c.rest+' días'}`).join('<br>'):'✓ Ningún cuartel con carencia vigente.';
+    case 'desviaciones':
+      return A.desv.length?'Mayores desviaciones teórico vs real:<br>'+A.desv.slice(0,5).map(d=>`• ${d.orden} — ${d.producto}: ${d.pct>0?'+':''}${d.pct.toFixed(0)}% (teó. ${d.teo}, real ${d.real})`).join('<br>'):'Aún no hay órdenes terminadas con real registrado.';
+    default:
+      return null;
+  }
+}
+
+function asisCostoCuartel(){
+  const precio=n=>{const p=products.find(x=>x.nombre===n);return p?p.precio:0;};
+  const cc={};
+  ordenesF().filter(o=>o.estado==='TERMINADA').forEach(o=>{
+    const d=o.detalle||{},ia=d.infoAplicacion;
+    if(!ia||!ia.realAplicado)return;
+    const cuarts=(d.cuartelesFinales||d.cuarteles||[]);
+    const totHa=cuarts.reduce((s,c)=>s+(c.ha||0),0)||1;
+    ia.realAplicado.forEach(ra=>{
+      const val=ra.cantidad*precio(ra.producto);
+      cuarts.forEach(c=>{
+        const info=CUARTEL_INFO[c.c]||{campo:(d.fundo||o.campo),variedad:'—',ha:c.ha};
+        if(!cc[c.c])cc[c.c]={costo:0,ha:info.ha||c.ha||0,variedad:info.variedad};
+        cc[c.c].costo+=val*(c.ha||0)/totHa;
+      });
+    });
+  });
+  return Object.entries(cc).map(([cuartel,v])=>({cuartel,...v,porHa:v.ha>0?v.costo/v.ha:0}));
+}
+
+let asisHist=[];
+function renderAsistente(){
+  const chips=ASIS_PREGUNTAS.map(g=>`
+    <div style="margin-bottom:10px">
+      <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9E3D4A;margin-bottom:5px">${g.grupo}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        ${g.items.map(it=>`<span onclick="asisPreguntar('${it.k}','${it.t.replace(/'/g,"\\'")}')" style="border:1px solid #dadce0;background:#fff;border-radius:16px;padding:7px 13px;font-size:12px;cursor:pointer;color:#3c4043" onmouseover="this.style.background='#f4eef0';this.style.borderColor='#9E3D4A'" onmouseout="this.style.background='#fff';this.style.borderColor='#dadce0'">${it.t}</span>`).join('')}
+      </div>
+    </div>`).join('');
+
+  const historial = asisHist.length?asisHist.map(m=>
+    `<div style="max-width:82%;padding:10px 13px;border-radius:12px;font-size:13.5px;line-height:1.5;${m.who==='user'?'background:#6E2430;color:#fff;align-self:flex-end;border-bottom-right-radius:3px':'background:#fff;border:1px solid #e6e6e6;align-self:flex-start;border-bottom-left-radius:3px'}">${m.txt}</div>`
+  ).join(''):`<div style="max-width:82%;padding:10px 13px;border-radius:12px;font-size:13.5px;line-height:1.5;background:#fff;border:1px solid #e6e6e6;align-self:flex-start;border-bottom-left-radius:3px">Hola 👋 Puedo responder sobre costos, órdenes, inventario y cumplimiento con tus datos reales. Toca una pregunta abajo o escríbela.${fundoSel()?'<br><br><i>Filtro activo: '+fundoSel()+'</i>':''}</div>`;
+
+  return `
+  <div class="panel" style="padding:0;overflow:hidden;max-width:900px">
+    <div style="background:linear-gradient(90deg,#6E2430,#9E3D4A);color:#fff;padding:14px 18px">
+      <div style="font-size:15px;font-weight:700">💬 Asistente de Gerencia</div>
+      <div style="font-size:12px;opacity:.85;margin-top:2px">Responde con tus datos cargados · sin costo · privado</div>
+    </div>
+    <div id="asis-body" style="padding:16px;height:320px;overflow-y:auto;background:#fafafa;display:flex;flex-direction:column;gap:10px">${historial}</div>
+    <div style="padding:12px 16px;border-top:1px solid #eee;background:#fff;max-height:230px;overflow-y:auto">${chips}</div>
+    <div style="display:flex;gap:8px;padding:12px 16px;border-top:1px solid #eee;background:#fff">
+      <input id="asis-input" placeholder="Escribe tu pregunta..." style="flex:1;border:1px solid #dadce0;border-radius:9px;padding:10px 12px;font-size:13.5px" onkeydown="if(event.key==='Enter')asisEnviar()">
+      <button class="btn green" onclick="asisEnviar()">Enviar</button>
+      ${asisHist.length?'<button class="btn line" onclick="asisHist=[];render()" title="Limpiar conversación">🗑️</button>':''}
+    </div>
+  </div>`;
+}
+
+function asisPintar(){const b=document.getElementById('asis-body');if(b)b.scrollTop=b.scrollHeight;}
+function asisPreguntar(key,texto){
+  asisHist.push({who:'user',txt:texto});
+  asisHist.push({who:'bot',txt:asisResponder(key)||'No tengo esa respuesta todavía.'});
+  render();setTimeout(asisPintar,30);
+}
+function asisEnviar(){
+  const i=document.getElementById('asis-input');
+  const q=(i?.value||'').trim();
+  if(!q)return;
+  asisHist.push({who:'user',txt:q});
+  const key=asisResolver(q);
+  asisHist.push({who:'bot',txt:key?asisResponder(key):'No entendí bien esa pregunta 🤔 Prueba una de las sugeridas abajo — puedo ayudarte con costos, órdenes, inventario y cumplimiento.'});
+  render();setTimeout(()=>{asisPintar();const inp=document.getElementById('asis-input');if(inp)inp.focus();},30);
+}
 </script>
 </body>
 </html>
