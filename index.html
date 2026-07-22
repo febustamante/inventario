@@ -576,7 +576,7 @@ async function syncData() {
         ordenNum: m.orden_id || '',
         obs: m.observaciones || '',
         fecha: m.fecha ? new Date(m.fecha).toLocaleDateString('es-CL') : '',
-        fechaRaw: m.fecha ? new Date(m.fecha).toISOString().slice(0,10) : '',
+        fechaRaw: m.fecha ? isoLocal(new Date(m.fecha)) : '',
         estado: m.estado || 'ACTIVO'
       };
     });
@@ -3019,9 +3019,8 @@ function renderHistorial(){
   // Rango por defecto: últimos 5 días (hoy incluido)
   const hoyD = new Date();
   const hace5 = new Date(); hace5.setDate(hace5.getDate()-4);
-  const iso = d=>d.toISOString().slice(0,10);
-  if(histDesde===null) histDesde = iso(hace5);
-  if(histHasta===null) histHasta = iso(hoyD);
+  if(histDesde===null) histDesde = isoLocal(hace5);
+  if(histHasta===null) histHasta = isoLocal(hoyD);
 
   const list = [...movimientos].reverse().filter(m=>{
     const f = m.fechaRaw || '';
@@ -3090,6 +3089,10 @@ function renderHistorial(){
 }
 // Estado y acciones del filtro de fechas del historial
 let histDesde=null, histHasta=null;
+// Fecha YYYY-MM-DD en hora LOCAL (evita el desfase de toISOString que cambia el día en Chile)
+function isoLocal(d){
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
 function histAplicarFechas(){
   const d=document.getElementById('hist-desde'), h=document.getElementById('hist-hasta');
   if(d&&d.value) histDesde=d.value;
@@ -3099,8 +3102,7 @@ function histAplicarFechas(){
 }
 function histRangoRapido(dias){
   const hoyD=new Date(), desde=new Date(); desde.setDate(desde.getDate()-(dias-1));
-  const iso=x=>x.toISOString().slice(0,10);
-  histDesde=iso(desde); histHasta=iso(hoyD);
+  histDesde=isoLocal(desde); histHasta=isoLocal(hoyD);
   render();
 }
 // ══ GERENCIA ══
