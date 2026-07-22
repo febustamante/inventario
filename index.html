@@ -361,11 +361,11 @@ const LOC_ICONS = {'Bodega Central':'🏭','Caseta Cerrillos':'🏠','Rulo':'�
 const LOC_COLORS = {'Bodega Central':'#7B2D2D','Caseta Cerrillos':'#3d5a80','Rulo':'#2d6b3a','Paine':'#8a5e00'};
 
 const USERS = [
-  {id:'maestro',name:'Felipe',     full:'FELIPE · Maestro',  role:'maestro',    pin:'7788',av:'av-m',desc:'Acceso total'},
+  {id:'maestro',name:'Felipe',     full:'FELIPE · Maestro',  role:'maestro',    pin:'2511',av:'av-m',desc:'Acceso total'},
   {id:'bodeg',  name:'Encarg. Bodega',  full:'FREDDY · Encargado de Bodega',role:'bodeguero',  pin:'2222',av:'av-b',desc:'Bodega Central'},
   {id:'rulo',   name:'Rulo',       full:'Rulo · JOSÉ',    role:'dosificador',pin:'3333',av:'av-d',desc:'Dosificador Rulo'},
   {id:'paine',  name:'paine',        full:'HECTOR· Paine',       role:'dosificador',pin:'4444',av:'av-d',desc:'Dosificador Paine'},
-  {id:'geren',  name:'Gerencia',   full:'Vista Gerencial',   role:'gerencia',   pin:'9999',av:'av-g',desc:'Vista ejecutiva'},
+  {id:'geren',  name:'Gerencia',   full:'Vista Gerencial',   role:'gerencia',   pin:'5555',av:'av-g',desc:'Vista ejecutiva'},
   {id:'cerrillos', name:'Eduardo', full:'EDUARDO · Cerrillos', role:'dosificador', pin:'6666', av:'av-d', desc:'Caseta Cerrillos'},
 ];
 
@@ -576,6 +576,7 @@ async function syncData() {
         ordenNum: m.orden_id || '',
         obs: m.observaciones || '',
         fecha: m.fecha ? new Date(m.fecha).toLocaleDateString('es-CL') : '',
+        fechaRaw: m.fecha ? new Date(m.fecha).toISOString().slice(0,10) : '',
         estado: m.estado || 'ACTIVO'
       };
     });
@@ -856,19 +857,9 @@ function updatePinDots() {
   for(let i=0;i<4;i++) document.getElementById('d'+i)?.classList.toggle('filled',i<pinBuffer.length);
 }
 
-async function attemptLogin() {
+function attemptLogin() {
   if(!selUser) return;
-  // Validar el PIN contra la tabla central; si coincide con un usuario de fito
-  // y corresponde al usuario elegido, entra. Respaldo: pin local del array.
-  let pinOk = (pinBuffer===selUser.pin);  // respaldo local
-  try{
-    const {data,error}=await sb.from('usuarios_sj').select('*').eq('pin',pinBuffer).eq('activo',true).maybeSingle();
-    if(!error && data){
-      // el PIN existe en la tabla: debe tener acceso a fito y ser el usuario elegido
-      pinOk = !!data.rol_fito && (pinBuffer===selUser.pin);
-    }
-  }catch(e){console.warn('No se pudo consultar usuarios_sj, uso pin local',e);}
-  if(pinOk) {
+  if(pinBuffer===selUser.pin) {
     curUser = selUser;
     document.getElementById('sl').classList.remove('active');
     document.getElementById('sa').classList.add('active');
@@ -1186,11 +1177,12 @@ function renderRecibir(){
   <div class="section-header"><div class="section-title">Recibir compra</div><div class="section-sub">Registrar entrada de productos</div></div>
   <div class="form-box">
     <div class="form-title"><div class="form-title-icon">📥</div>Nueva entrada</div>
-    <div class="form-group"><label class="form-label">Producto <span class="required">*</span></label><select class="form-control" id="r-p">${prodOpts()}</select></div>
+    <div class="form-group"><label class="form-label">Producto <span class="required">*</span></label><select class="form-control" id="r-p" onchange="updRecibir()">${prodOpts()}</select></div>
     <div class="form-row">
-      <div class="form-group"><label class="form-label">Cantidad <span class="required">*</span></label><input type="number" class="form-control" id="r-c" min="0.01" step="0.01" placeholder="0" inputmode="decimal"/></div>
-      <div class="form-group"><label class="form-label">Destino <span class="required">*</span></label><select class="form-control" id="r-loc">${locOpts('Bodega Central')}</select></div>
+      <div class="form-group"><label class="form-label">Cantidad <span class="required">*</span></label><input type="number" class="form-control" id="r-c" min="0.01" step="0.01" placeholder="0" inputmode="decimal" oninput="updRecibir()"/></div>
+      <div class="form-group"><label class="form-label">Destino <span class="required">*</span></label><select class="form-control" id="r-loc" onchange="updRecibir()">${locOpts('Bodega Central')}</select></div>
     </div>
+    <div id="r-av" class="form-avail" style="margin:-4px 0 10px">Elige producto y cantidad</div>
     <div class="form-group"><label class="form-label">Proveedor</label><input type="text" class="form-control" id="r-pv" placeholder="Ej: COPESAL" autocomplete="off"/></div>
     <div class="form-group"><label class="form-label">N° Factura</label><input type="text" class="form-control" id="r-f" placeholder="FAC-001" autocomplete="off"/></div>
     <button class="btn-primary" onclick="doRecibir()">✓ Registrar entrada</button>
@@ -1198,12 +1190,43 @@ function renderRecibir(){
   <div class="section-label">Ultimas entradas</div>
   <div class="card">${ents.length?ents.map(m=>`<div class="move-item"><div class="move-dot" style="background:var(--green)"></div><div class="move-body"><div class="move-prod">${m.producto}</div><div class="move-detail">${m.destino||''} · ${m.proveedor||'Sin proveedor'}</div></div><div class="move-right"><div class="move-qty" style="color:var(--green)">+${m.cantidad}</div><div class="move-date">${m.fecha}</div></div></div>`).join(''):`<div class="empty-state"><div class="empty-icon">📥</div><div class="empty-text">Sin entradas registradas</div></div>`}</div>`;
 }
+function updRecibir(){
+  const pid=parseInt(document.getElementById('r-p')?.value);
+  const loc=document.getElementById('r-loc')?.value;
+  const cant=parseFloat(document.getElementById('r-c')?.value)||0;
+  const el=document.getElementById('r-av');
+  if(!el)return;
+  if(!pid||!loc){el.className='form-avail';el.textContent='Elige producto y cantidad';return;}
+  const actual=stockAt(pid,loc);
+  if(cant>0){
+    el.className='form-avail';
+    el.textContent=`En ${loc}: ${fmt(actual)} → quedará ${fmt(actual+cant)}`;
+  }else{
+    el.className='form-avail';
+    el.textContent=`En ${loc} hay actualmente ${fmt(actual)}`;
+  }
+}
+// Promedio de entradas previas de un producto (para detectar cantidad anómala)
+function promedioEntradas(nombre){
+  const ents=movimientos.filter(m=>m.tipo==='entrada'&&m.producto===nombre&&m.cantidad>0).map(m=>m.cantidad);
+  if(ents.length<2)return null;
+  return ents.reduce((a,b)=>a+b,0)/ents.length;
+}
 async function doRecibir(){
   const pid=parseInt(document.getElementById('r-p').value);
   const cant=parseFloat(document.getElementById('r-c').value)||0;
   const loc=document.getElementById('r-loc').value;
-  if(cant<=0) return showToast('Ingresa una cantidad valida','err');
   const p=products.find(x=>x.id===pid);
+  // Validaciones de cantidad
+  if(!p) return showToast('Elige un producto','err');
+  if(isNaN(cant)||cant<=0) return showToast('Ingresa una cantidad válida (mayor a 0)','err');
+  if(cant>100000) return showToast('Cantidad demasiado alta, revisa el valor','err');
+  // ¿Cantidad anómala vs historial? (posible cero de más)
+  const prom=promedioEntradas(p.nombre);
+  if(prom&&cant>prom*10){
+    const ok=confirm('⚠️ Cantidad inusual\n\nVas a ingresar '+fmt(cant)+' de '+p.nombre+'.\nNormalmente recibes alrededor de '+fmt(Math.round(prom))+'.\n\n¿El valor es correcto?');
+    if(!ok){ showToast('Entrada cancelada, corrige la cantidad','info'); return; }
+  }
   addStock(pid,loc,cant);
   const mov={id:nextMov++,tipo:'entrada',producto:p.nombre,cantidad:cant,destino:loc,proveedor:document.getElementById('r-pv').value.trim(),obs:document.getElementById('r-f').value.trim(),fecha:hoy(),usuario:curUser.id};
   movimientos.push(mov);
@@ -1333,6 +1356,17 @@ async function doTransferir(){
         'err'
       );
     }
+  }
+
+  // Aviso: transferencias que vacían casi todo el stock (posible dedo pegado)
+  const sospechosas = lineas.filter(l => {
+    const disp = stockAt(l.pid, origen);
+    return disp > 0 && l.cantidad >= disp * 0.9 && l.cantidad !== disp;
+  });
+  if(sospechosas.length){
+    const txt = sospechosas.map(l=>'• '+l.producto+': mueves '+fmt(l.cantidad)+' de '+fmt(stockAt(l.pid,origen))+' disponibles').join('\n');
+    const ok = confirm('⚠️ Vas a transferir casi todo el stock de:\n\n'+txt+'\n\n¿Es correcto?');
+    if(!ok){ showToast('Transferencia cancelada, revisa las cantidades','info'); return; }
   }
 
   showToast('Guardando transferencias...', 'info');
@@ -2982,12 +3016,39 @@ function renderHistorial(){
     perdida:{color:'var(--red)',dot:'#a32d2d',label:'Pérdida'}
   };
 
-  const list = [...movimientos].reverse();
+  // Rango por defecto: últimos 5 días (hoy incluido)
+  const hoyD = new Date();
+  const hace5 = new Date(); hace5.setDate(hace5.getDate()-4);
+  const iso = d=>d.toISOString().slice(0,10);
+  if(histDesde===null) histDesde = iso(hace5);
+  if(histHasta===null) histHasta = iso(hoyD);
+
+  const list = [...movimientos].reverse().filter(m=>{
+    const f = m.fechaRaw || '';
+    if(!f) return true; // sin fecha: mostrar por seguridad
+    return f>=histDesde && f<=histHasta;
+  });
+
+  const btnRango = (lbl,dias)=>`<button onclick="histRangoRapido(${dias})" style="padding:6px 10px;border:1px solid var(--bd2);border-radius:7px;background:white;color:var(--tx2);font-size:12px;cursor:pointer">${lbl}</button>`;
 
   return `
   <div class="section-header">
     <div class="section-title">Historial</div>
-    <div class="section-sub">${list.length} movimientos totales</div>
+    <div class="section-sub">${list.length} movimientos · ${histDesde.split('-').reverse().slice(0,2).join('/')} al ${histHasta.split('-').reverse().slice(0,2).join('/')}</div>
+  </div>
+
+  <div class="card" style="padding:12px;margin-bottom:12px">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+      <div><label style="font-size:11px;color:var(--tx3);font-weight:600;display:block;margin-bottom:3px">Desde</label>
+        <input type="date" id="hist-desde" value="${histDesde}" max="${histHasta}" onchange="histAplicarFechas()" style="font-size:12px;padding:6px"></div>
+      <div><label style="font-size:11px;color:var(--tx3);font-weight:600;display:block;margin-bottom:3px">Hasta</label>
+        <input type="date" id="hist-hasta" value="${histHasta}" min="${histDesde}" onchange="histAplicarFechas()" style="font-size:12px;padding:6px"></div>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+      ${btnRango('Últimos 5 días',5)}
+      ${btnRango('15 días',15)}
+      ${btnRango('30 días',30)}
+    </div>
   </div>
 
   <div class="card">
@@ -3023,9 +3084,24 @@ function renderHistorial(){
     }).join('') : `
       <div class="empty-state">
         <div class="empty-icon">📋</div>
-        <div class="empty-text">Sin movimientos registrados aun</div>
+        <div class="empty-text">Sin movimientos en este rango de fechas</div>
       </div>`}
   </div>`;
+}
+// Estado y acciones del filtro de fechas del historial
+let histDesde=null, histHasta=null;
+function histAplicarFechas(){
+  const d=document.getElementById('hist-desde'), h=document.getElementById('hist-hasta');
+  if(d&&d.value) histDesde=d.value;
+  if(h&&h.value) histHasta=h.value;
+  if(histDesde>histHasta){ const t=histDesde; histDesde=histHasta; histHasta=t; }
+  render();
+}
+function histRangoRapido(dias){
+  const hoyD=new Date(), desde=new Date(); desde.setDate(desde.getDate()-(dias-1));
+  const iso=x=>x.toISOString().slice(0,10);
+  histDesde=iso(desde); histHasta=iso(hoyD);
+  render();
 }
 // ══ GERENCIA ══
 function renderGerencia(){
