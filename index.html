@@ -924,7 +924,6 @@ function getTabs(role) {
   const all = [
     {k:'stock',    icon:'📦',label:'Stock',    roles:['maestro','bodeguero','gerencia'], render:renderStock,       prim:true},
     {k:'recibir',  icon:'📥',label:'Recibir',  roles:['maestro','bodeguero'],            render:renderRecibir,     prim:false},
-    {k:'compras',  icon:'🛒',label:'Compras',  roles:['maestro','bodeguero'],            render:renderComprasBodega, prim:true},
     {k:'transfer', icon:'↔️',label:'Mover',    roles:['maestro','bodeguero'],            render:renderTransferir,  prim:false},
     {k:'devol',    icon:'↩️',label:'Devolver', roles:['maestro','bodeguero'],render:renderDevolucion,prim:false},
     {k:'perdida',  icon:'⚠️',label:'Pérdida',  roles:['maestro'],render:renderPerdida,prim:false},
@@ -1280,12 +1279,47 @@ async function recibirOC(ocId){
   }
 }
 
+let subRecibir='compras'; // 'compras' | 'manual'
+function setSubRecibir(v){subRecibir=v;refresh();}
 function renderRecibir(){
   const ents=movimientos.filter(m=>m.tipo==='entrada').slice(-5).reverse();
+  const pend=compras.filter(o=>estadoOCb(o)!=='COMPLETA');
+  const tabBtn=(v,txt,n)=>`<button onclick="setSubRecibir('${v}')" style="flex:1;padding:10px;border:none;border-bottom:3px solid ${subRecibir===v?'var(--vino)':'transparent'};background:none;font-size:13.5px;font-weight:${subRecibir===v?'700':'500'};color:${subRecibir===v?'var(--vino)':'var(--tx3)'};cursor:pointer">${txt}${n?` <span style="background:var(--vino);color:#fff;border-radius:9px;padding:1px 7px;font-size:11px">${n}</span>`:''}</button>`;
+
+  return `
+  <div class="section-header"><div class="section-title">Recibir</div><div class="section-sub">Desde una compra de Yanet o entrada manual</div></div>
+  <div style="display:flex;background:#fff;border:1px solid var(--bd);border-radius:10px;overflow:hidden;margin-bottom:14px">
+    ${tabBtn('compras','Desde compra',pend.length)}
+    ${tabBtn('manual','Entrada manual')}
+  </div>
+  ${subRecibir==='compras'?renderRecibirDesdeCompra():renderEntradaManual(ents)}`;
+}
+
+function renderRecibirDesdeCompra(){
+  const pend=compras.filter(o=>estadoOCb(o)!=='COMPLETA');
+  const tag=e=>{const m={'PENDIENTE':['#8a5e00','#fdf3dc','Pendiente'],'PARCIAL':['#1a4a8a','#e8f0fb','Parcial'],'COMPLETA':['#2d6b2d','#e8f5ec','Completa']};const[c,b,t]=m[e]||['#555','#eee',e];return`<span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:11px;color:${c};background:${b}">${t}</span>`;};
+  if(!pend.length)return '<div class="card" style="text-align:center;color:var(--green);font-weight:600;padding:30px">✓ No hay compras pendientes de recibir</div>';
+  return pend.map(oc=>{
+    const e=estadoOCb(oc),items=oc.detalle||[];
+    return `<div class="card" style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <b style="font-size:14px">OC ${oc.numero_oc?('N°'+oc.numero_oc):('#'+oc.id)} · ${oc.proveedor}</b>${tag(e)}
+      </div>
+      <div style="font-size:11.5px;color:var(--tx3);margin-bottom:8px">${(oc.fecha||'').split('-').reverse().join('/')} · llega a Bodega Central</div>
+      ${items.map((it,idx)=>{const falta=(+it.pedido||0)-(+it.recibido||0);return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px dashed var(--bd)">
+        <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600">${it.producto}</div>
+        <div style="font-size:11px;color:var(--tx3)">Pedido ${it.pedido} · recibido ${it.recibido||0}${falta>0?` · <b style="color:var(--red)">faltan ${falta}</b>`:' · <b style="color:var(--green)">completo</b>'}</div></div>
+        ${falta>0?`<input type="number" min="0" max="${falta}" id="rc-${oc.id}-${idx}" placeholder="0" style="width:70px;text-align:center;padding:6px;border:1px solid var(--bd2);border-radius:7px" inputmode="decimal">`:''}
+      </div>`}).join('')}
+      ${e!=='COMPLETA'?`<button class="btn-primary" style="margin-top:10px" onclick="recibirOC('${oc.id}')">✓ Confirmar lo recibido</button>`:''}
+    </div>`;
+  }).join('');
+}
+
+function renderEntradaManual(ents){
   return`
-  <div class="section-header"><div class="section-title">Recibir compra</div><div class="section-sub">Registrar entrada de productos</div></div>
   <div class="form-box">
-    <div class="form-title"><div class="form-title-icon">📥</div>Nueva entrada</div>
+    <div class="form-title"><div class="form-title-icon">📥</div>Nueva entrada manual</div>
     <div class="form-group"><label class="form-label">Producto <span class="required">*</span></label><select class="form-control" id="r-p" onchange="updRecibir()">${prodOpts()}</select></div>
     <div class="form-row">
       <div class="form-group"><label class="form-label">Cantidad <span class="required">*</span></label><input type="number" class="form-control" id="r-c" min="0.01" step="0.01" placeholder="0" inputmode="decimal" oninput="updRecibir()"/></div>
