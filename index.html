@@ -1310,21 +1310,41 @@ function renderRecibir(){
 
 function renderRecibirDesdeCompra(){
   const pend=compras.filter(o=>estadoOCb(o)!=='COMPLETA');
-  const tag=e=>{const m={'PENDIENTE':['#8a5e00','#fdf3dc','Pendiente'],'PARCIAL':['#1a4a8a','#e8f0fb','Parcial'],'COMPLETA':['#2d6b2d','#e8f5ec','Completa']};const[c,b,t]=m[e]||['#555','#eee',e];return`<span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:11px;color:${c};background:${b}">${t}</span>`;};
-  if(!pend.length)return '<div class="card" style="text-align:center;color:var(--green);font-weight:600;padding:30px">✓ No hay compras pendientes de recibir</div>';
+  const tag=e=>{const m={'PENDIENTE':['#8a5e00','#fdf3dc','Pendiente'],'PARCIAL':['#1a4a8a','#e8f0fb','Parcial'],'COMPLETA':['#2d6b2d','#e8f5ec','Completa']};const[c,b,t]=m[e]||['#555','#eee',e];return`<span style="font-size:12px;font-weight:700;padding:4px 12px;border-radius:12px;color:${c};background:${b}">${t}</span>`;};
+  if(!pend.length)return '<div class="card" style="text-align:center;color:var(--green);font-weight:600;padding:34px 18px">✓ No hay compras pendientes de recibir</div>';
   return pend.map(oc=>{
     const e=estadoOCb(oc),items=oc.detalle||[];
-    return `<div class="card" style="margin-bottom:10px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-        <b style="font-size:14px">OC ${oc.numero_oc?('N°'+oc.numero_oc):('#'+oc.id)} · ${oc.proveedor}</b>${tag(e)}
+    const valor=items.reduce((s,i)=>s+(+i.pedido||0)*(+i.precio||0),0);
+    return `<div class="card" style="padding:16px;margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px">
+        <div style="min-width:0">
+          <div style="font-size:16px;font-weight:800;color:var(--tx1);line-height:1.2">OC N°${oc.numero_oc||oc.id}</div>
+          <div style="font-size:13px;color:var(--tx2);font-weight:600;margin-top:1px">${oc.proveedor}</div>
+        </div>
+        ${tag(e)}
       </div>
-      <div style="font-size:11.5px;color:var(--tx3);margin-bottom:8px">${(oc.fecha||'').split('-').reverse().join('/')} · llega a Bodega Central</div>
-      ${items.map((it,idx)=>{const falta=(+it.pedido||0)-(+it.recibido||0);return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px dashed var(--bd)">
-        <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600">${it.producto}</div>
-        <div style="font-size:11px;color:var(--tx3)">Pedido ${it.pedido} · recibido ${it.recibido||0}${falta>0?` · <b style="color:var(--red)">faltan ${falta}</b>`:' · <b style="color:var(--green)">completo</b>'}</div></div>
-        ${falta>0?`<input type="number" min="0" max="${falta}" id="rc-${oc.id}-${idx}" placeholder="0" style="width:70px;text-align:center;padding:6px;border:1px solid var(--bd2);border-radius:7px" inputmode="decimal">`:''}
-      </div>`}).join('')}
-      ${e!=='COMPLETA'?`<button class="btn-primary" style="margin-top:10px" onclick="recibirOC('${oc.id}')">✓ Confirmar lo recibido</button>`:''}
+      <div style="font-size:12px;color:var(--tx3);padding-bottom:12px;border-bottom:1px solid var(--bd);margin-bottom:12px">
+        <span style="margin-right:10px">📅 ${(oc.fecha||'').split('-').reverse().join('/')}</span>
+        <span>📍 Bodega Central</span>
+      </div>
+      ${items.map((it,idx)=>{
+        const falta=(+it.pedido||0)-(+it.recibido||0);
+        const completo=falta<=0;
+        return `<div style="padding:10px 0;${idx<items.length-1?'border-bottom:1px dashed var(--bd);':''}">
+          <div style="font-size:14px;font-weight:700;color:var(--tx1);margin-bottom:6px">${it.producto}</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+            <div style="font-size:12px;color:var(--tx3);line-height:1.4">
+              Pedido <b style="color:var(--tx2)">${it.pedido}</b> · recibido <b style="color:var(--tx2)">${it.recibido||0}</b><br>
+              ${completo?'<b style="color:var(--green)">✓ Completo</b>':`<b style="color:var(--red)">Faltan ${falta}</b>`}
+            </div>
+            ${!completo?`<div style="text-align:center">
+              <div style="font-size:10px;color:var(--tx3);font-weight:600;text-transform:uppercase;margin-bottom:3px">Llegó ahora</div>
+              <input type="number" min="0" max="${falta}" id="rc-${oc.id}-${idx}" placeholder="0" inputmode="decimal" style="width:82px;text-align:center;padding:10px;border:1.5px solid var(--bd2);border-radius:9px;font-size:16px;font-weight:700">
+            </div>`:'<span style="font-size:22px">✅</span>'}
+          </div>
+        </div>`;
+      }).join('')}
+      ${e!=='COMPLETA'?`<button class="btn-primary" onclick="recibirOC('${oc.id}')">✓ Confirmar lo recibido</button>`:''}
     </div>`;
   }).join('');
 }
