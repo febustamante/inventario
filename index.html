@@ -791,6 +791,19 @@ async function editarMovimientoSupabase(movId, datos){
       console.error('Edición de movimiento OK, pero falló la actualización del real en la orden:', e2);
     }
   }
+
+  // Si es una recepción de orden de compra, ajustar el "recibido" de la OC por la diferencia
+  if (String(m.tipo).toLowerCase() === 'entrada' && /Recepci[oó]n OC/i.test(m.observaciones||'')) {
+    try {
+      const prodNombre = (products.find(p => p.id === m.producto_id)?.nombre || '').trim();
+      const diff = Number(m.cantidad) - nuevaCant; // lo que hay que descontar del recibido
+      if (diff !== 0) {
+        await revertirRecepcionOC({obs:m.observaciones, producto:prodNombre}, diff);
+      }
+    } catch(e3) {
+      console.error('Edición OK, pero falló el ajuste de la orden de compra:', e3);
+    }
+  }
 }
 
 // "Recalcular" ya NO existe como tal: el stock siempre esta correcto.
@@ -3627,6 +3640,10 @@ async function anularMovimiento(idRegistro, tipo){
 
   const hoja = hojaPorTipo(tipo);
 
+  // ¿Es una recepción de orden de compra? Buscar el movimiento en memoria por su obs
+  const movMem = movimientos.find(m=>String(m.idRegistro)===String(idRegistro));
+  const esRecepcionOC = movMem && String(movMem.tipo).toLowerCase()==='entrada' && /Recepci[oó]n OC/i.test(movMem.obs||'');
+
   showToast('Anulando...', 'info');
 
   await postSheets({
@@ -3636,7 +3653,35 @@ async function anularMovimiento(idRegistro, tipo){
     usuario: curUser ? curUser.id : ''
   });
 
+  // Revertir lo recibido en la orden de compra correspondiente
+  if(esRecepcionOC){
+    try{ await revertirRecepcionOC(movMem); }
+    catch(e){ console.error('No se pudo revertir la OC:', e); showToast('Stock revertido, pero revisa la orden de compra','err'); }
+  }
+
   showToast('Movimiento anulado');
+}
+
+// Descuenta del "recibido" de la orden de compra la cantidad de un movimiento de recepción anulado/editado
+async function revertirRecepcionOC(mov, cantidadRevertir){
+  // Extraer identificador de OC desde la observación: "Recepción OC N°123" o "Recepción OC 123"
+  const m = String(mov.obs||'').match(/Recepci[oó]n OC\s*N?°?\s*([A-Za-z0-9\-]+)/i);
+  if(!m) return;
+  const ref = m[1];
+  const cant = cantidadRevertir!=null ? cantidadRevertir : mov.cantidad;
+  // Buscar la OC por numero_oc o por id
+  const { data: ocs, error } = await sb.from('ordenes_compra').select('*');
+  if(error || !ocs) return;
+  const oc = ocs.find(o=>String(o.numero_oc)===String(ref) || String(o.id)===String(ref));
+  if(!oc) return;
+  const det = oc.detalle||[];
+  const linea = det.find(x=>String(x.producto).trim()===String(mov.producto).trim());
+  if(!linea) return;
+  linea.recibido = Math.max(0, (+linea.recibido||0) - (+cant||0));
+  // Recalcular estado
+  const tp=det.reduce((s,i)=>s+(+i.pedido||0),0), tr=det.reduce((s,i)=>s+(+i.recibido||0),0);
+  const estado = tr<=0?'PENDIENTE':(tr>=tp?'COMPLETA':'PARCIAL');
+  await sb.from('ordenes_compra').update({detalle:det,estado}).eq('id',oc.id);
 }
 // ══ TIEMPO REAL ══
 let canalRealtime = null;
