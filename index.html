@@ -1271,20 +1271,40 @@ async function recibirOC(ocId){
 
   showToast('Registrando recepción...','info');
   try{
-    // 1) Sumar stock a Bodega Central + registrar movimiento de entrada por cada producto
+    // 1) Sumar stock a Bodega Central + registrar entrada + actualizar precio promedio ponderado
     for(const r of recibidos){
       const prod=products.find(p=>p.nombre===r.producto);
       if(!prod)continue;
+
+      // Precio de este producto en la OC
+      const lineaOC=(oc.detalle||[]).find(x=>String(x.producto).trim()===String(r.producto).trim());
+      const precioCompra=lineaOC?(+lineaOC.precio||0):0;
+
+      // Promedio ponderado: (stock_actual × precio_actual + cant × precio_compra) / (stock_actual + cant)
+      const stockAntes=totalStock(prod.id);
+      const precioAntes=(+prod.precio||0);
+      if(precioCompra>0){
+        const valorAntes=stockAntes*precioAntes;
+        const valorNuevo=r.cant*precioCompra;
+        const stockDespues=stockAntes+r.cant;
+        const precioProm=stockDespues>0?((valorAntes+valorNuevo)/stockDespues):precioCompra;
+        // Guardar en la base y en memoria (redondeado a 2 decimales)
+        const precioFinal=Math.round(precioProm*100)/100;
+        try{
+          await sb.from('productos').update({precio_unitario:precioFinal}).eq('id',prod.id);
+          prod.precio=precioFinal;
+        }catch(ep){ console.error('No se pudo actualizar el precio promedio:',ep); }
+      }
+
       addStock(prod.id,'Bodega Central',r.cant);
       await postSheets({action:'entrada',fecha:hoy(),producto:r.producto,cantidad:r.cant,destino:'Bodega Central',proveedor:oc.proveedor,factura:('OC '+(oc.numero_oc||oc.id)),usuario:curUser.id,obs:'Recepción OC '+(oc.numero_oc||oc.id)});
-      // reflejar en el detalle local
       oc.detalle[r.idx].recibido=(+oc.detalle[r.idx].recibido||0)+r.cant;
     }
     // 2) Actualizar la orden de compra (detalle + estado)
     const nuevoEstado=estadoOCb(oc);
     const { error } = await sb.from('ordenes_compra').update({detalle:oc.detalle,estado:nuevoEstado}).eq('id',oc.id);
     if(error)throw error;
-    showToast(nuevoEstado==='COMPLETA'?'✓ Compra completa. Stock actualizado.':'Recepción parcial guardada. Queda pendiente el resto.');
+    showToast(nuevoEstado==='COMPLETA'?'✓ Compra completa. Stock y precio actualizados.':'Recepción parcial guardada. Queda pendiente el resto.');
     refresh();
   }catch(e){
     console.error(e);
