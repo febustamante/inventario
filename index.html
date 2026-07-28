@@ -1378,7 +1378,10 @@ function renderMateriales(){
     <div class="section-sub">${materiales.length} materiales · alambres, protectores, herramientas</div>
   </div>
 
-  ${puedeEditar?`<button class="btn-primary" style="margin-bottom:14px" onclick="abrirNuevoMaterial()"><i class="ti ti-plus"></i> Agregar material</button>`:''}
+  ${puedeEditar?`<div style="display:flex;gap:8px;margin-bottom:14px">
+    <button class="btn-primary" style="margin:0;flex:1" onclick="abrirNuevoMaterial()"><i class="ti ti-plus"></i> Agregar material</button>
+    <button class="btn-sec" style="flex-shrink:0;padding:0 16px;display:flex;align-items:center;gap:6px" onclick="exportarMaterialesExcel()"><i class="ti ti-file-spreadsheet"></i> Excel</button>
+  </div>`:''}
 
   <div id="fam-filters" style="display:flex;gap:7px;overflow-x:auto;padding-bottom:6px;margin-bottom:14px">
     ${chip('','Todos')}
@@ -1419,6 +1422,31 @@ function renderMateriales(){
 }
 
 function setMatCat(c){ matCatFiltro=c; refresh(); }
+
+function exportarMaterialesExcel(){
+  if(typeof XLSX==='undefined'){ showToast('La librería Excel no cargó','err'); return; }
+  if(!materiales.length){ showToast('No hay materiales para exportar','err'); return; }
+  // Hoja 1: catálogo actual
+  const cat = materiales.map(m=>({
+    'Material':m.nombre, 'Categoría':m.categoria||'Otros', 'Unidad':m.unidad,
+    'Cantidad':m.cantidad, 'Mínimo':m.minimo||0,
+    'Estado': m.cantidad<=0?'Agotado':(m.minimo>0&&m.cantidad<=m.minimo?'Stock bajo':'En stock')
+  }));
+  // Hoja 2: movimientos
+  const movs = materialesMov.map(mv=>({
+    'Fecha': mv.fecha?new Date(mv.fecha).toLocaleString('es-CL'):'',
+    'Material': mv.material_nom||'',
+    'Tipo': mv.tipo==='entrada'?'Entrada':'Salida',
+    'Cantidad': mv.cantidad,
+    'Motivo/Referencia': mv.motivo||'',
+    'Usuario': mv.usuario||''
+  }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cat), 'Materiales');
+  if(movs.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(movs), 'Movimientos');
+  XLSX.writeFile(wb, 'Materiales_San_Jose_'+isoLocal(new Date())+'.xlsx');
+  showToast('Excel generado');
+}
 
 function abrirNuevoMaterial(){
   const cont = document.getElementById('panels-container');
