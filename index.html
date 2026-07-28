@@ -376,7 +376,7 @@ const USERS = [
 // Estado
 let stockByLoc = {};
 let products = [];
-let movimientos = [], ordenes = [], compras = [];
+let movimientos = [], ordenes = [], compras = [], materiales = [], materialesMov = [];
 let nextMov = 1, nextOrden = 1;
 let curUser = null, selUser = null, curTab = 0;
 let chartInst = {}, extraLines = 4;
@@ -548,6 +548,15 @@ async function syncData() {
       if(!e5) ocs = ocData||[];
     }catch(_){ ocs=[]; }
 
+    // 6) Materiales de campo (tablas nuevas; si no existen, no rompe)
+    let mats=[], matsMov=[];
+    try{
+      const { data: mData, error: e6 } = await sb.from('materiales').select('*').order('categoria');
+      if(!e6) mats = mData||[];
+      const { data: mmData, error: e7 } = await sb.from('materiales_mov').select('*').order('fecha',{ascending:false});
+      if(!e7) matsMov = mmData||[];
+    }catch(_){ mats=[]; matsMov=[]; }
+
     // ── Armar products y stockByLoc con el formato que usa la app ──
     const nuevosProducts = [];
     const nuevoStockByLoc = {};
@@ -613,6 +622,8 @@ async function syncData() {
     movimientos = nuevosMovimientos;
     ordenes = nuevasOrdenes;
     compras = ocs;
+    materiales = mats;
+    materialesMov = matsMov;
 
     sheetsConnected = true;
     setSyncStatus('on', 'Conectado · ' + products.length + ' productos');
@@ -966,6 +977,7 @@ function getTabs(role) {
     {k:'orden',    icon:'ti-droplet',        label:'Aplicar',  roles:['maestro','dosificador','gerencia'], render:renderOrden,     prim:true},
     {k:'historial',icon:'ti-clipboard-list', label:'Historial',roles:['maestro','bodeguero','gerencia'], render:renderHistorial,   prim:true},
     {k:'gerencia', icon:'ti-chart-bar',      label:'Gerencia', roles:['maestro','gerencia'],             render:renderGerencia,    prim:true},
+    {k:'materiales',icon:'ti-tool',          label:'Materiales',roles:['maestro','bodeguero','gerencia'],render:renderMateriales,  prim:false},
     {k:'admin',    icon:'ti-settings',       label:'Admin',    roles:['maestro'],                        render:renderAdmin,       prim:false},
   ];
   return all.filter(t=>t.roles.includes(role));
@@ -1347,6 +1359,114 @@ async function recibirOC(ocId){
 
 let subRecibir='compras'; // 'compras' | 'manual'
 function setSubRecibir(v){subRecibir=v;refresh();}
+// ══════ MATERIALES DE CAMPO (alambres, protectores, clavos, herramientas) ══════
+const CAT_MATERIALES = ['Alambres','Protectores','Fijaciones','Herramientas','Otros'];
+let matCatFiltro = '';
+
+function renderMateriales(){
+  const cats = [...new Set(materiales.map(m=>m.categoria||'Otros'))];
+  const lista = matCatFiltro ? materiales.filter(m=>(m.categoria||'Otros')===matCatFiltro) : materiales;
+  const puedeEditar = ['maestro','bodeguero','gerencia'].includes(curUser.role);
+
+  const chip = (c,txt)=>`<button onclick="setMatCat('${c}')" class="filter-chip${matCatFiltro===c?' active':''}">${txt}</button>`;
+
+  const movs = materialesMov.slice(0,10);
+
+  return `
+  <div class="section-header">
+    <div class="section-title">Materiales</div>
+    <div class="section-sub">${materiales.length} materiales · alambres, protectores, herramientas</div>
+  </div>
+
+  ${puedeEditar?`<button class="btn-primary" style="margin-bottom:14px" onclick="abrirNuevoMaterial()"><i class="ti ti-plus"></i> Agregar material</button>`:''}
+
+  <div id="fam-filters" style="display:flex;gap:7px;overflow-x:auto;padding-bottom:6px;margin-bottom:14px">
+    ${chip('','Todos')}
+    ${CAT_MATERIALES.filter(c=>cats.includes(c)).map(c=>chip(c,c)).join('')}
+  </div>
+
+  ${lista.length ? lista.map(m=>{
+    const bajo = m.minimo>0 && m.cantidad<=m.minimo;
+    const col = m.cantidad<=0?'var(--red)':bajo?'var(--amber)':'var(--green)';
+    const est = m.cantidad<=0?'Agotado':bajo?'Stock bajo':'En stock';
+    return `<div class="card" style="padding:14px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+        <div style="min-width:0">
+          <div style="font-size:15px;font-weight:700">${m.nombre}</div>
+          <div style="font-size:11px;color:var(--tx3)">${m.categoria||'Otros'}</div>
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div style="font-size:20px;font-weight:800;line-height:1">${fmt(m.cantidad)} <span style="font-size:12px;font-weight:600;color:var(--tx3)">${m.unidad}</span></div>
+          <div style="font-size:11px;font-weight:600;color:${col}">${est}</div>
+        </div>
+      </div>
+      ${puedeEditar?`<div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn-sec" style="flex:1;font-size:12px;padding:8px;color:var(--green);display:flex;align-items:center;justify-content:center;gap:5px" onclick="movMaterial('${m.id}','entrada')"><i class="ti ti-plus"></i> Entrada</button>
+        <button class="btn-sec" style="flex:1;font-size:12px;padding:8px;color:var(--red);display:flex;align-items:center;justify-content:center;gap:5px" onclick="movMaterial('${m.id}','salida')"><i class="ti ti-minus"></i> Salida</button>
+      </div>`:''}
+    </div>`;
+  }).join('') : '<div class="card" style="text-align:center;color:var(--tx3);padding:30px">Aún no hay materiales. Agrega el primero con el botón de arriba.</div>'}
+
+  <div class="section-label">Últimos movimientos</div>
+  <div class="card">${movs.length?movs.map(mv=>{
+    const esEnt = mv.tipo==='entrada';
+    return `<div class="move-item">
+      <div class="move-dot" style="background:${esEnt?'#2d6b2d':'#a32d2d'}"></div>
+      <div class="move-body"><div class="move-prod">${mv.material_nom||''}</div><div class="move-detail">${esEnt?'Entrada':'Salida'}${mv.motivo?' · '+mv.motivo:''}${mv.usuario?' · '+mv.usuario:''}</div></div>
+      <div class="move-right"><div class="move-qty" style="color:${esEnt?'var(--green)':'var(--red)'}">${esEnt?'+':'-'}${fmt(mv.cantidad)}</div><div class="move-date">${mv.fecha?fechaCorta(isoLocal(new Date(mv.fecha))):''}</div></div>
+    </div>`;
+  }).join(''):'<div class="empty-state"><div class="empty-icon">📦</div><div class="empty-text">Sin movimientos de materiales</div></div>'}</div>`;
+}
+
+function setMatCat(c){ matCatFiltro=c; refresh(); }
+
+function abrirNuevoMaterial(){
+  const nombre = prompt('Nombre del material (ej: Alambre N°14, Pala, Clavos 3\'\'):');
+  if(!nombre||!nombre.trim()) return;
+  const unidad = prompt('Unidad de medida (rollo, metro, unidad, kilo):','unidad') || 'unidad';
+  const categoria = prompt('Categoría — escribe una: '+CAT_MATERIALES.join(', '),'Otros') || 'Otros';
+  guardarNuevoMaterial(nombre.trim(), unidad.trim(), categoria.trim());
+}
+async function guardarNuevoMaterial(nombre, unidad, categoria){
+  showToast('Agregando material...','info');
+  try{
+    const { error } = await sb.from('materiales').insert({nombre, unidad, categoria, cantidad:0});
+    if(error) throw error;
+    showToast('Material "'+nombre+'" agregado');
+    await syncData();
+  }catch(e){
+    showToast('Error: '+(e.message||'')+' — ¿existe la tabla materiales?','err');
+  }
+}
+
+async function movMaterial(matId, tipo){
+  const m = materiales.find(x=>String(x.id)===String(matId));
+  if(!m) return;
+  const verbo = tipo==='entrada'?'ingresar':'sacar';
+  const txt = prompt(`¿Cuánto ${verbo} de ${m.nombre}? (en ${m.unidad})`);
+  if(txt===null) return;
+  const cant = parseFloat(txt)||0;
+  if(cant<=0){ showToast('Cantidad inválida','err'); return; }
+  if(tipo==='salida' && cant>m.cantidad){ showToast('No puedes sacar más de lo que hay ('+fmt(m.cantidad)+' '+m.unidad+')','err'); return; }
+  const motivo = tipo==='salida' ? (prompt('¿Para qué o para quién? (opcional)')||'') : (prompt('Proveedor / referencia (opcional)')||'');
+
+  const nuevaCant = tipo==='entrada' ? m.cantidad+cant : m.cantidad-cant;
+  showToast('Guardando...','info');
+  try{
+    const { error: e1 } = await sb.from('materiales').update({cantidad:nuevaCant}).eq('id',m.id);
+    if(e1) throw e1;
+    const { error: e2 } = await sb.from('materiales_mov').insert({
+      material_id:m.id, material_nom:m.nombre, tipo, cantidad:cant, motivo, usuario:curUser.id
+    });
+    if(e2) throw e2;
+    m.cantidad = nuevaCant; // reflejar en memoria
+    showToast((tipo==='entrada'?'+':'-')+cant+' '+m.unidad+' · '+m.nombre);
+    await syncData();
+  }catch(e){
+    showToast('Error: '+(e.message||''),'err');
+  }
+}
+
 function renderRecibir(){
   const ents=movimientos.filter(m=>m.tipo==='entrada').slice(-5).reverse();
   const pend=compras.filter(o=>estadoOCb(o)!=='COMPLETA');
