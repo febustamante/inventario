@@ -1406,6 +1406,7 @@ function renderMateriales(){
       ${puedeEditar?`<div style="display:flex;gap:8px;margin-top:10px">
         <button class="btn-sec" style="flex:1;font-size:12px;padding:8px;color:var(--green);display:flex;align-items:center;justify-content:center;gap:5px" onclick="movMaterial('${m.id}','entrada')"><i class="ti ti-plus"></i> Entrada</button>
         <button class="btn-sec" style="flex:1;font-size:12px;padding:8px;color:var(--red);display:flex;align-items:center;justify-content:center;gap:5px" onclick="movMaterial('${m.id}','salida')"><i class="ti ti-minus"></i> Salida</button>
+        <button class="btn-sec" style="flex-shrink:0;font-size:12px;padding:8px 12px;display:flex;align-items:center;gap:5px" onclick="editarMaterial('${m.id}')" title="Editar"><i class="ti ti-pencil"></i></button>
       </div>`:''}
     </div>`;
   }).join('') : '<div class="card" style="text-align:center;color:var(--tx3);padding:30px">Aún no hay materiales. Agrega el primero con el botón de arriba.</div>'}
@@ -1498,6 +1499,92 @@ function confirmarNuevoMaterial(){
   if(!nombre){ showToast('Escribe el nombre del material','err'); return; }
   document.getElementById('modal-material').remove();
   guardarNuevoMaterial(nombre, window._nmUni||'unidad', window._nmCat||'Otros');
+}
+
+function editarMaterial(matId){
+  const m = materiales.find(x=>String(x.id)===String(matId));
+  if(!m) return;
+  const prev = document.getElementById('modal-material');
+  if(prev) prev.remove();
+  const div = document.createElement('div');
+  div.id = 'modal-material';
+  div.style = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;display:flex;align-items:flex-end;justify-content:center';
+  div.innerHTML = `
+    <div style="background:#fff;width:100%;max-width:480px;border-radius:18px 18px 0 0;padding:20px;max-height:85vh;overflow-y:auto">
+      <div style="font-size:17px;font-weight:800;margin-bottom:16px">Editar material</div>
+
+      <label style="font-size:12px;font-weight:700;color:var(--tx3);text-transform:uppercase">Nombre</label>
+      <input id="nm-nombre" value="${(m.nombre||'').replace(/"/g,'&quot;')}" style="width:100%;padding:11px;border:1px solid var(--bd2);border-radius:9px;font-size:14px;margin:5px 0 14px">
+
+      <label style="font-size:12px;font-weight:700;color:var(--tx3);text-transform:uppercase">Categoría</label>
+      <div id="nm-cat" style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 14px">
+        ${CAT_MATERIALES.map(c=>{const on=(m.categoria||'Otros')===c;return `<button type="button" onclick="selNmCat(this,'${c}')" class="nm-chip" style="padding:8px 14px;border-radius:20px;border:1.5px solid ${on?'var(--vino)':'var(--bd2)'};background:${on?'var(--vino)':'#fff'};color:${on?'#fff':'var(--tx2)'};font-size:13px;font-weight:600;cursor:pointer">${c}</button>`;}).join('')}
+      </div>
+
+      <label style="font-size:12px;font-weight:700;color:var(--tx3);text-transform:uppercase">Unidad</label>
+      <div id="nm-uni" style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 14px">
+        ${['unidad','rollo','metro','kilo','caja'].map(u=>{const on=m.unidad===u;return `<button type="button" onclick="selNmUni(this,'${u}')" class="nm-chip" style="padding:8px 14px;border-radius:20px;border:1.5px solid ${on?'var(--vino)':'var(--bd2)'};background:${on?'var(--vino)':'#fff'};color:${on?'#fff':'var(--tx2)'};font-size:13px;font-weight:600;cursor:pointer">${u}</button>`;}).join('')}
+      </div>
+
+      <label style="font-size:12px;font-weight:700;color:var(--tx3);text-transform:uppercase">Ajustar cantidad</label>
+      <input id="nm-cant" type="number" step="0.01" value="${m.cantidad}" style="width:100%;padding:11px;border:1px solid var(--bd2);border-radius:9px;font-size:14px;margin:5px 0 4px">
+      <div style="font-size:11px;color:var(--tx3);margin-bottom:18px">Cambiar aquí la cantidad queda registrado como "corrección de inventario" en el historial.</div>
+
+      <div style="display:flex;gap:10px;margin-bottom:10px">
+        <button class="btn-sec" style="flex:1" onclick="document.getElementById('modal-material').remove()">Cancelar</button>
+        <button class="btn-primary" style="flex:1;margin:0" onclick="guardarEdicionMaterial('${m.id}')">Guardar</button>
+      </div>
+      <button class="btn-sec" style="width:100%;color:var(--red);border-color:var(--red)" onclick="eliminarMaterial('${m.id}')"><i class="ti ti-trash"></i> Eliminar material</button>
+    </div>`;
+  document.body.appendChild(div);
+  window._nmCat = m.categoria||'Otros';
+  window._nmUni = m.unidad||'unidad';
+}
+
+async function guardarEdicionMaterial(matId){
+  const m = materiales.find(x=>String(x.id)===String(matId));
+  if(!m) return;
+  const nombre = (document.getElementById('nm-nombre').value||'').trim();
+  if(!nombre){ showToast('El nombre no puede quedar vacío','err'); return; }
+  const nuevaCant = parseFloat(document.getElementById('nm-cant').value);
+  const cantFinal = isNaN(nuevaCant) ? m.cantidad : nuevaCant;
+  const huboAjuste = cantFinal !== m.cantidad;
+  document.getElementById('modal-material').remove();
+  showToast('Guardando cambios...','info');
+  try{
+    const { error } = await sb.from('materiales').update({
+      nombre, categoria:window._nmCat||'Otros', unidad:window._nmUni||'unidad', cantidad:cantFinal
+    }).eq('id',m.id);
+    if(error) throw error;
+    // Si cambió la cantidad, dejar rastro en el historial
+    if(huboAjuste){
+      const dif = cantFinal - m.cantidad;
+      await sb.from('materiales_mov').insert({
+        material_id:m.id, material_nom:nombre, tipo: dif>=0?'entrada':'salida',
+        cantidad:Math.abs(dif), motivo:'Corrección de inventario', usuario:curUser.id
+      });
+    }
+    showToast('Material actualizado');
+    await syncData();
+  }catch(e){
+    showToast('Error: '+(e.message||''),'err');
+  }
+}
+
+async function eliminarMaterial(matId){
+  const m = materiales.find(x=>String(x.id)===String(matId));
+  if(!m) return;
+  if(!confirm('¿Eliminar "'+m.nombre+'"?\n\nEsto quita el material del catálogo. Su historial de movimientos se conserva.')) return;
+  showToast('Eliminando...','info');
+  try{
+    const { error } = await sb.from('materiales').delete().eq('id',m.id);
+    if(error) throw error;
+    const mm = document.getElementById('modal-material'); if(mm) mm.remove();
+    showToast('Material eliminado');
+    await syncData();
+  }catch(e){
+    showToast('Error: '+(e.message||''),'err');
+  }
 }
 async function guardarNuevoMaterial(nombre, unidad, categoria){
   showToast('Agregando material...','info');
