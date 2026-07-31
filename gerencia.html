@@ -129,6 +129,7 @@
     <a data-v="ordenes" onclick="ver('ordenes')"><i class="ti ti-clipboard-list"></i>Órdenes</a>
     <a data-v="nueva" onclick="ver('nueva')"><i class="ti ti-file-plus"></i>Nueva orden</a>
     <a data-v="costos" onclick="ver('costos')"><i class="ti ti-cash"></i>Costos por cuartel</a>
+    <a data-v="pendiente" onclick="ver('pendiente')"><i class="ti ti-clipboard-check"></i>Por aplicar</a>
     <a data-v="asistente" onclick="ver('asistente')"><i class="ti ti-message-chatbot"></i>Asistente</a>
     <a data-v="compras" onclick="ver('compras')"><i class="ti ti-shopping-cart"></i>Compras</a>
     <a data-v="calendario" onclick="ver('calendario')"><i class="ti ti-calendar"></i>Calendario</a>
@@ -213,7 +214,7 @@ function movsF(){const f=fundoSel();if(!f)return movimientos;const mapa={CERRILL
 function ver(v){
   vista=v;
   document.querySelectorAll('.nav a[data-v]').forEach(a=>a.classList.toggle('on',a.dataset.v===v));
-  document.getElementById('titulo').textContent=v==='dash'?'Dashboard Gerencial':v==='calendario'?'Calendario de órdenes':v==='maquinaria'?'Control de maquinaria':v==='nueva'?'Crear nueva orden':v==='costos'?'Costos por cuartel':v==='asistente'?'Asistente de Gerencia':v==='compras'?'Compras':'Control de órdenes';
+  document.getElementById('titulo').textContent=v==='dash'?'Dashboard Gerencial':v==='calendario'?'Calendario de órdenes':v==='maquinaria'?'Control de maquinaria':v==='nueva'?'Crear nueva orden':v==='costos'?'Costos por cuartel':v==='asistente'?'Asistente de Gerencia':v==='compras'?'Compras':v==='pendiente'?'Productos por aplicar':'Control de órdenes';
   render();
 }
 
@@ -241,6 +242,7 @@ function render(){
   else if(vista==='costos'){el.innerHTML=renderCostos();}
   else if(vista==='asistente'){el.innerHTML=renderAsistente();setTimeout(()=>{const i=document.getElementById('asis-input');if(i)i.focus();},50);}
   else if(vista==='compras'){el.innerHTML=renderCompras();setTimeout(()=>{if(typeof ocProds!=='undefined'&&!ocProds.length&&document.getElementById('oc-prods'))addProdOC();},50);}
+  else if(vista==='pendiente'){el.innerHTML=renderPendiente();}
   else el.innerHTML=renderOrdenes();
   if(vista==='dash')setTimeout(buildCharts,60);
 }
@@ -1745,6 +1747,61 @@ function exportarComprasExcel(){
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,'Compras');
   XLSX.writeFile(wb,'Compras_San_Jose_'+isoLocalG(new Date())+'.xlsx');
+}
+
+// ══════ PRODUCTOS POR APLICAR (total teórico de órdenes no terminadas) ══════
+function renderPendiente(){
+  const ords = ordenesF().filter(o=>{
+    const e = String(o.estado||'').toUpperCase();
+    return e==='EN CURSO' || e==='INICIADA';
+  });
+  const porProd = {};
+  let nOrdenes = 0;
+  ords.forEach(o=>{
+    const d = o.detalle||{};
+    const prods = d.productos||[];
+    if(!prods.length) return;
+    nOrdenes++;
+    prods.forEach(p=>{
+      const nom = (p.nombre||'').trim();
+      if(!nom) return;
+      const cant = parseFloat(p.totalProd)||parseFloat(p.totalTeorico)||0;
+      if(!porProd[nom]) porProd[nom] = {cant:0, unidad:p.unidad||'', ordenes:0};
+      porProd[nom].cant += cant;
+      porProd[nom].ordenes++;
+    });
+  });
+  const filas = Object.entries(porProd)
+    .map(([nom,d])=>({nombre:nom, ...d, precio:(products.find(x=>x.nombre===nom)?.precio||0)}))
+    .sort((a,b)=>b.cant-a.cant);
+  const totalValor = filas.reduce((s,f)=>s+f.cant*f.precio,0);
+
+  return `
+  <div class="eyebrow">Órdenes no terminadas · ${nOrdenes} con productos</div>
+  <div style="font-size:12.5px;color:#80868b;margin-bottom:16px">Total teórico de producto sumado de todas las órdenes creadas e iniciadas (lo que falta por aplicar).</div>
+
+  <div class="panel" style="max-width:900px;padding:0;overflow:hidden">
+    <table style="width:100%;font-size:13.5px">
+      <thead><tr>
+        <th style="text-align:left;padding:12px 14px">Producto</th>
+        <th style="text-align:right;padding:12px 14px">Total teórico</th>
+        <th style="text-align:right;padding:12px 14px">En órdenes</th>
+        <th style="text-align:right;padding:12px 14px">Valor aprox.</th>
+      </tr></thead>
+      <tbody>
+      ${filas.length ? filas.map(f=>`<tr style="border-top:1px solid #EEE">
+        <td style="padding:11px 14px;font-weight:600">${f.nombre}</td>
+        <td style="text-align:right;padding:11px 14px"><b style="font-size:15px;color:#6E2430">${f.cant.toFixed(2)}</b> <span style="font-size:11px;color:#80868b">${f.unidad}</span></td>
+        <td style="text-align:right;padding:11px 14px;color:#80868b">${f.ordenes}</td>
+        <td style="text-align:right;padding:11px 14px">${f.precio>0?plata(f.cant*f.precio):'—'}</td>
+      </tr>`).join('') : '<tr><td colspan="4" style="text-align:center;padding:30px;color:#80868b">No hay órdenes pendientes con productos</td></tr>'}
+      </tbody>
+      ${filas.length&&totalValor>0?`<tfoot><tr style="border-top:2px solid #DDD;font-weight:700">
+        <td style="padding:12px 14px" colspan="3">Valor total teórico por aplicar</td>
+        <td style="text-align:right;padding:12px 14px;color:#6E2430">${plata(totalValor)}</td>
+      </tr></tfoot>`:''}
+    </table>
+  </div>`;
 }
 </script>
 </body>
