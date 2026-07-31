@@ -566,6 +566,7 @@ async function syncData() {
         id: row.id,
         nombre: String(row.nombre || '').trim(),
         familia: String(row.familia || 'SIN FAMILIA').trim(),
+        ingActivo: String(row.ingrediente_activo || '').trim(),
         vencido: row.vencido === true,
         minimo: parseFloat(row.minimo_alerta) || 5,
         precio: parseFloat(row.precio_unitario) || 0
@@ -970,9 +971,9 @@ function doLogout() {
 function getTabs(role) {
   const all = [
     {k:'stock',    icon:'ti-box',            label:'Stock',    roles:['maestro','bodeguero','gerencia'], render:renderStock,       prim:true},
-    {k:'recibir',  icon:'ti-package-import', label:'Recibir',  roles:['maestro','bodeguero'],            render:renderRecibir,     prim:false},
-    {k:'transfer', icon:'ti-arrows-exchange',label:'Mover',    roles:['maestro','bodeguero'],            render:renderTransferir,  prim:false},
-    {k:'devol',    icon:'ti-arrow-back-up',  label:'Devolver', roles:['maestro','bodeguero'],            render:renderDevolucion,  prim:false},
+    {k:'recibir',  icon:'ti-package-import', label:'Recepción',  roles:['maestro','bodeguero'],            render:renderRecibir,     prim:false},
+    {k:'transfer', icon:'ti-arrows-exchange',label:'Despacho',    roles:['maestro','bodeguero'],            render:renderTransferir,  prim:false},
+    {k:'devol',    icon:'ti-arrow-back-up',  label:'Devolución', roles:['maestro','bodeguero'],            render:renderDevolucion,  prim:false},
     {k:'perdida',  icon:'ti-alert-triangle', label:'Pérdida',  roles:['maestro'],                        render:renderPerdida,     prim:false},
     {k:'orden',    icon:'ti-droplet',        label:'Aplicar',  roles:['maestro','dosificador','gerencia'], render:renderOrden,     prim:true},
     {k:'historial',icon:'ti-clipboard-list', label:'Historial',roles:['maestro','bodeguero','gerencia'], render:renderHistorial,   prim:true},
@@ -1632,7 +1633,7 @@ function renderRecibir(){
   const tabBtn=(v,txt,n)=>`<button onclick="setSubRecibir('${v}')" style="flex:1;padding:10px;border:none;border-bottom:3px solid ${subRecibir===v?'var(--vino)':'transparent'};background:none;font-size:13.5px;font-weight:${subRecibir===v?'700':'500'};color:${subRecibir===v?'var(--vino)':'var(--tx3)'};cursor:pointer">${txt}${n?` <span style="background:var(--vino);color:#fff;border-radius:9px;padding:1px 7px;font-size:11px">${n}</span>`:''}</button>`;
 
   return `
-  <div class="section-header"><div class="section-title">Recibir</div><div class="section-sub">Desde una compra de Yanet o entrada manual</div></div>
+  <div class="section-header"><div class="section-title">Recepción</div><div class="section-sub">Desde una compra de Yanet o entrada manual</div></div>
   <div style="display:flex;background:#fff;border:1px solid var(--bd);border-radius:10px;overflow:hidden;margin-bottom:14px">
     ${tabBtn('compras','Desde compra',pend.length)}
     ${tabBtn('manual','Entrada manual')}
@@ -1748,7 +1749,7 @@ async function doRecibir(){
 function renderTransferir(){
   const ts=movimientos.filter(m=>m.tipo==='transferencia').slice(-5).reverse();
   return`
-  <div class="section-header"><div class="section-title">Transferir stock</div><div class="section-sub">Mover producto entre ubicaciones</div></div>
+  <div class="section-header"><div class="section-title">Despacho</div><div class="section-sub">Mover producto entre ubicaciones</div></div>
   <div class="form-box">
     <div class="form-title"><div class="form-title-icon">↔️</div>Nueva transferencia</div>
  <div class="form-row">
@@ -1915,7 +1916,7 @@ function renderDevolucion(){
   const locDef=curUser.id==='rulo'?'Rulo':curUser.id==='paine'?'Paine':'Caseta Cerrillos';
   const devs=movimientos.filter(m=>m.tipo==='devolucion').slice(-5).reverse();
   return`
-  <div class="section-header"><div class="section-title">Devolucion</div><div class="section-sub">Devolver sobrante a Bodega Central</div></div>
+  <div class="section-header"><div class="section-title">Devolución</div><div class="section-sub">Devolver sobrante a Bodega Central</div></div>
   <div class="form-box">
     <div class="form-title"><div class="form-title-icon">↩️</div>Registrar devolucion</div>
     <div class="form-group"><label class="form-label">Producto <span class="required">*</span></label><select class="form-control" id="dv-p">${prodOpts()}</select></div>
@@ -2407,9 +2408,13 @@ function addProdOrden(){
 function onProdOrdenChange(id){
   const sel = document.getElementById('opa-prod-'+id);
   const nombre = sel.options[sel.selectedIndex]?.text || '';
-  // Ingrediente activo
+  // Ingrediente activo: primero del producto (base de datos), luego del diccionario legado
+  const prodObj = products.find(p=>p.nombre===nombre);
   const iaEl = document.getElementById('opa-ia-'+id);
-  if(iaEl) iaEl.textContent = INGREDIENTE_ACTIVO[nombre] || '—';
+  if(iaEl){
+    const ia = (prodObj && prodObj.ingActivo) ? prodObj.ingActivo : (typeof INGREDIENTE_ACTIVO!=='undefined' ? INGREDIENTE_ACTIVO[nombre] : '') || '';
+    iaEl.textContent = ia || '—';
+  }
   // Aviso tóxico
   const toxEl = document.getElementById('opa-tox-'+id);
   if(toxEl){
