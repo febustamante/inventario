@@ -75,6 +75,11 @@ body.login-activo{overflow:hidden;position:fixed;width:100%;height:100%}
 .main-area{display:flex;flex-direction:column;flex:1;min-height:0;min-width:0;overflow:hidden}
 /* Sidebar oculto en móvil */
 .side-nav{display:none}
+/* En móvil, garantizar que la barra inferior siempre se vea */
+@media(max-width:899px){
+  .bottom-nav{position:fixed;left:0;right:0;bottom:0;z-index:60}
+  .app-scroll{padding-bottom:calc(90px + var(--safe-b))}
+}
 
 /* ══ ESCRITORIO: sidebar lateral ══ */
 @media(min-width:900px){
