@@ -34,7 +34,6 @@ input,select,textarea,button{font-family:'Inter',system-ui,sans-serif;font-size:
 .screen:not(.active){display:none !important}
 /* Con el login visible, la página no debe hacer scroll; el login queda fijo y centrado */
 body.login-activo{overflow:hidden;position:fixed;width:100%;height:100%}
-body:not(.login-activo){overflow:hidden;height:100vh;height:100dvh}
 
 /* LOGIN */
 #sl{height:100vh;height:100dvh;overflow:hidden;background:#f3eee9;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:calc(var(--safe-t) + 1rem) 1.25rem 1rem}
@@ -1023,6 +1022,7 @@ function getTabs(role) {
     {k:'devol',    icon:'ti-arrow-back-up',  label:'Devolución', roles:['maestro','bodeguero'],            render:renderDevolucion,  prim:false},
     {k:'perdida',  icon:'ti-alert-triangle', label:'Pérdida',  roles:['maestro'],                        render:renderPerdida,     prim:false},
     {k:'orden',    icon:'ti-droplet',        label:'Aplicar',  roles:['maestro','dosificador','gerencia'], render:renderOrden,     prim:true},
+    {k:'mistock',  icon:'ti-box',            label:'Mi Stock', roles:['dosificador'],                     render:renderMiStock,   prim:true},
     {k:'historial',icon:'ti-clipboard-list', label:'Historial',roles:['maestro','bodeguero','gerencia'], render:renderHistorial,   prim:true},
     {k:'gerencia', icon:'ti-chart-bar',      label:'Gerencia', roles:['maestro','gerencia'],             render:renderGerencia,    prim:true},
     {k:'materiales',icon:'ti-tool',          label:'Materiales',roles:['maestro','bodeguero','gerencia'],render:renderMateriales,  prim:false},
@@ -1427,6 +1427,37 @@ function setSubRecibir(v){subRecibir=v;refresh();}
 // ══════ MATERIALES DE CAMPO (alambres, protectores, clavos, herramientas) ══════
 const CAT_MATERIALES = ['Alambres','Herramientas','Protectores','Clavos','Otros'];
 let matCatFiltro = '';
+
+// ══════ MI STOCK (dosificador ve solo su bodega, solo lo que tiene) ══════
+function bodegaDeDosificador(){
+  const m = {rulo:'Rulo', paine:'Paine', cerrillos:'Caseta Cerrillos'};
+  return m[curUser.id] || '';
+}
+function renderMiStock(){
+  const loc = bodegaDeDosificador();
+  if(!loc) return '<div class="card" style="text-align:center;padding:30px;color:var(--tx3)">No se pudo identificar tu bodega.</div>';
+  const items = products
+    .map(p=>({p, cant: stockAt(p.id, loc)}))
+    .filter(x=>x.cant>0)
+    .sort((a,b)=>a.p.nombre.localeCompare(b.p.nombre));
+  const buscar = (document.getElementById('mistock-q')?.value||'').toLowerCase();
+  const filtrados = buscar ? items.filter(x=>x.p.nombre.toLowerCase().includes(buscar)) : items;
+  return `
+  <div class="section-header"><div class="section-title">Mi Stock</div><div class="section-sub">${loc} · ${items.length} productos disponibles</div></div>
+  <div style="position:relative;margin-bottom:14px">
+    <input id="mistock-q" oninput="refresh()" value="${buscar.replace(/"/g,'&quot;')}" placeholder="Buscar producto..." style="width:100%;padding:12px 14px;border:1px solid var(--bd2);border-radius:12px;font-size:14px">
+  </div>
+  ${filtrados.length ? filtrados.map(x=>`
+    <div class="card" style="padding:14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">
+      <div style="min-width:0">
+        <div style="font-size:15px;font-weight:700">${x.p.nombre}</div>
+        <div style="font-size:11px;color:var(--tx3)">${x.p.familia}</div>
+      </div>
+      <div style="text-align:right;flex-shrink:0;margin-left:10px">
+        <div style="font-size:20px;font-weight:800;color:var(--vino)">${fmt(x.cant)}</div>
+      </div>
+    </div>`).join('') : '<div class="card" style="text-align:center;padding:30px;color:var(--tx3)">Sin productos con ese nombre</div>'}`;
+}
 
 function renderMateriales(){
   const cats = [...new Set(materiales.map(m=>m.categoria||'Otros'))];
