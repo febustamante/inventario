@@ -130,6 +130,7 @@
     <a data-v="nueva" onclick="ver('nueva')"><i class="ti ti-file-plus"></i>Nueva orden</a>
     <a data-v="costos" onclick="ver('costos')"><i class="ti ti-cash"></i>Costos por cuartel</a>
     <a data-v="pendiente" onclick="ver('pendiente')"><i class="ti ti-clipboard-check"></i>Por aplicar</a>
+    <a data-v="realaplicado" onclick="ver('realaplicado')"><i class="ti ti-droplet-check"></i>Real aplicado</a>
     <a data-v="asistente" onclick="ver('asistente')"><i class="ti ti-message-chatbot"></i>Asistente</a>
     <a data-v="compras" onclick="ver('compras')"><i class="ti ti-shopping-cart"></i>Compras</a>
     <a data-v="calendario" onclick="ver('calendario')"><i class="ti ti-calendar"></i>Calendario</a>
@@ -214,7 +215,7 @@ function movsF(){const f=fundoSel();if(!f)return movimientos;const mapa={CERRILL
 function ver(v){
   vista=v;
   document.querySelectorAll('.nav a[data-v]').forEach(a=>a.classList.toggle('on',a.dataset.v===v));
-  document.getElementById('titulo').textContent=v==='dash'?'Dashboard Gerencial':v==='calendario'?'Calendario de órdenes':v==='maquinaria'?'Control de maquinaria':v==='nueva'?'Crear nueva orden':v==='costos'?'Costos por cuartel':v==='asistente'?'Asistente de Gerencia':v==='compras'?'Compras':v==='pendiente'?'Productos por aplicar':'Control de órdenes';
+  document.getElementById('titulo').textContent=v==='dash'?'Dashboard Gerencial':v==='calendario'?'Calendario de órdenes':v==='maquinaria'?'Control de maquinaria':v==='nueva'?'Crear nueva orden':v==='costos'?'Costos por cuartel':v==='asistente'?'Asistente de Gerencia':v==='compras'?'Compras':v==='pendiente'?'Productos por aplicar':v==='realaplicado'?'Real aplicado':'Control de órdenes';
   render();
 }
 
@@ -243,6 +244,7 @@ function render(){
   else if(vista==='asistente'){el.innerHTML=renderAsistente();setTimeout(()=>{const i=document.getElementById('asis-input');if(i)i.focus();},50);}
   else if(vista==='compras'){el.innerHTML=renderCompras();setTimeout(()=>{if(typeof ocProds!=='undefined'&&!ocProds.length&&document.getElementById('oc-prods'))addProdOC();},50);}
   else if(vista==='pendiente'){el.innerHTML=renderPendiente();}
+  else if(vista==='realaplicado'){el.innerHTML=renderRealAplicado();}
   else el.innerHTML=renderOrdenes();
   if(vista==='dash')setTimeout(buildCharts,60);
 }
@@ -1803,6 +1805,98 @@ function renderPendiente(){
     </table>
   </div>`;
 }
+
+// ══════ REAL APLICADO (entre fechas de término) ══════
+let raDesde=null, raHasta=null, raTipo='';
+function renderRealAplicado(){
+  const hoyD=new Date(), hace30=new Date(); hace30.setDate(hace30.getDate()-29);
+  if(raDesde===null)raDesde=isoLocalG(hace30);
+  if(raHasta===null)raHasta=isoLocalG(hoyD);
+
+  const terminadas = ordenesF().filter(o=>{
+    if(String(o.estado||'').toUpperCase()!=='TERMINADA')return false;
+    const d=o.detalle||{}, ia=d.infoAplicacion;
+    const fin=(ia&&ia.fechaTermino)||'';
+    if(!fin) return false;
+    if(raTipo==='herbicida' && d.tipo!=='herbicida') return false;
+    if(raTipo==='fito' && d.tipo==='herbicida') return false;
+    return fin>=raDesde && fin<=raHasta;
+  });
+
+  const porProd = {};
+  terminadas.forEach(o=>{
+    const ia=(o.detalle||{}).infoAplicacion;
+    if(!ia||!ia.realAplicado)return;
+    ia.realAplicado.forEach(r=>{
+      const n=(r.producto||'').trim(); if(!n)return;
+      if(!porProd[n]) porProd[n]={cant:0, unidad:r.unidad||'', ordenes:0};
+      porProd[n].cant += (parseFloat(r.cantidad)||0);
+      porProd[n].ordenes++;
+    });
+  });
+  const filasProd = Object.entries(porProd).map(([n,d])=>({nombre:n,...d})).sort((a,b)=>b.cant-a.cant);
+
+  const chip=(v,txt)=>`<button onclick="raSetTipo('${v}')" class="btn line" style="${raTipo===v?'background:#6E2430;color:#fff;border-color:#6E2430':''}">${txt}</button>`;
+
+  return `
+  <div class="filters">
+    <div class="fbox"><label>Desde (término)</label><input type="date" id="ra-desde" value="${raDesde}" max="${raHasta}" onchange="raFechas()" style="border:none;font-size:13px"></div>
+    <div class="fbox"><label>Hasta (término)</label><input type="date" id="ra-hasta" value="${raHasta}" min="${raDesde}" onchange="raFechas()" style="border:none;font-size:13px"></div>
+    <button class="btn line" onclick="raRango(30)">30 días</button>
+    <button class="btn line" onclick="raRango(90)">90 días</button>
+  </div>
+  <div style="display:flex;gap:7px;margin-bottom:16px">
+    ${chip('','Todos')} ${chip('herbicida','Herbicida')} ${chip('fito','Fito')}
+  </div>
+
+  <div class="eyebrow">Total real aplicado por producto</div>
+  <div style="font-size:12.5px;color:#80868b;margin-bottom:10px">Suma de lo realmente aplicado en órdenes terminadas entre ${raDesde.split('-').reverse().join('/')} y ${raHasta.split('-').reverse().join('/')} · ${terminadas.length} órdenes</div>
+
+  <div class="panel" style="max-width:900px;padding:0;overflow:hidden;margin-bottom:20px">
+    <table style="width:100%;font-size:13.5px">
+      <thead><tr>
+        <th style="text-align:left;padding:12px 14px">Producto</th>
+        <th style="text-align:right;padding:12px 14px">Real aplicado</th>
+        <th style="text-align:right;padding:12px 14px">En órdenes</th>
+      </tr></thead>
+      <tbody>
+      ${filasProd.length?filasProd.map(f=>`<tr style="border-top:1px solid #EEE">
+        <td style="padding:11px 14px;font-weight:600">${f.nombre}</td>
+        <td style="text-align:right;padding:11px 14px"><b style="font-size:15px;color:#6E2430">${f.cant.toFixed(2)}</b> <span style="font-size:11px;color:#80868b">${f.unidad}</span></td>
+        <td style="text-align:right;padding:11px 14px;color:#80868b">${f.ordenes}</td>
+      </tr>`).join(''):'<tr><td colspan="3" style="text-align:center;padding:30px;color:#80868b">No hay aplicaciones terminadas en este rango</td></tr>'}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="eyebrow">Órdenes en el rango</div>
+  ${terminadas.length?terminadas.slice().sort((a,b)=>{
+    const fa=(a.detalle.infoAplicacion?.fechaTermino||''), fb=(b.detalle.infoAplicacion?.fechaTermino||'');
+    return fb.localeCompare(fa);
+  }).map(o=>{
+    const d=o.detalle||{}, ia=d.infoAplicacion||{};
+    const reales=(ia.realAplicado||[]).map(r=>`${r.producto}: ${r.cantidad} ${r.unidad||''}`).join(' · ');
+    return `<div class="panel" style="margin-bottom:8px;max-width:900px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <b>${numOrden(o)}</b>
+        <span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:11px;background:${d.tipo==='herbicida'?'#e8f0fb':'#f0e8f5'};color:${d.tipo==='herbicida'?'#1a4a8a':'#6E2430'}">${d.tipo==='herbicida'?'Herbicida':'Fito'}</span>
+      </div>
+      <div style="font-size:12px;color:#80868b;margin-bottom:6px">${d.fundo||o.campo} · ${(d.cuarteles||[]).map(c=>c.c).join(', ')} · Terminada ${(ia.fechaTermino||'').split('-').reverse().join('/')} ${ia.horaTermino||''}</div>
+      <div style="font-size:12.5px;color:#3c4043">${reales||'<i style="color:#80868b">Sin detalle de real</i>'}</div>
+    </div>`;
+  }).join(''):'<div class="panel" style="text-align:center;color:#80868b;max-width:900px">Sin órdenes terminadas en este rango</div>'}`;
+}
+function raFechas(){
+  const d=document.getElementById('ra-desde'),h=document.getElementById('ra-hasta');
+  if(d&&d.value)raDesde=d.value; if(h&&h.value)raHasta=h.value;
+  if(raDesde>raHasta){const t=raDesde;raDesde=raHasta;raHasta=t;}
+  render();
+}
+function raRango(dias){
+  const hoyD=new Date(),desde=new Date();desde.setDate(desde.getDate()-(dias-1));
+  raDesde=isoLocalG(desde);raHasta=isoLocalG(hoyD);render();
+}
+function raSetTipo(t){ raTipo=t; render(); }
 </script>
 </body>
 </html>
