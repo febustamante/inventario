@@ -153,8 +153,8 @@ const SUPABASE_URL='https://cmfvnluppvqyqwpfjrbs.supabase.co';
 const SUPABASE_KEY='sb_publishable_TvfWNvrb2AitDfwvW5YNww_QsR_gjD1';
 const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 const ID_UBIC={1:'Bodega Central',2:'Caseta Cerrillos',3:'Rulo',4:'Paine'};
-const PINS={'2511':'Felipe','5555':'Gerencia','3232':'Yanet'};
-const ROL_USER={'2511':'admin','5555':'admin','3232':'compras'}; // compras = solo pestaña Compras
+const PINS={'2511':'Felipe','5555':'Gerencia','3232':'Yanet','7777':'Gerencia'};
+const ROL_USER={'2511':'admin','5555':'admin','3232':'compras','7777':'consulta'}; // compras=solo Compras; consulta=solo Órdenes/Por aplicar/Real aplicado
 let rolActual='admin';
 const plata=n=>'$'+Math.round(n).toLocaleString('es-CL');
 
@@ -173,9 +173,15 @@ function entrar(){
   // Yanet (rol compras): solo ve la pestaña Compras
   if(rolActual==='compras'){
     document.querySelectorAll('.nav a[data-v]').forEach(a=>{ if(a.dataset.v!=='compras') a.style.display='none'; });
-    // ocultar accesos que no le corresponden
     document.querySelectorAll('.nav a:not([data-v])').forEach(a=>{ if(!/Actualizar/i.test(a.textContent)) a.style.display='none'; });
     vista='compras';
+  }
+  // Consulta (gerencia acotada): solo Órdenes, Por aplicar y Real aplicado
+  if(rolActual==='consulta'){
+    const permitidas=['ordenes','pendiente','realaplicado'];
+    document.querySelectorAll('.nav a[data-v]').forEach(a=>{ if(!permitidas.includes(a.dataset.v)) a.style.display='none'; });
+    document.querySelectorAll('.nav a:not([data-v])').forEach(a=>{ if(!/Actualizar/i.test(a.textContent)) a.style.display='none'; });
+    vista='ordenes';
   }
   cargar();
 }
