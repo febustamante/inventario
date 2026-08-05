@@ -1714,12 +1714,18 @@ async function guardarOC(){
   const num=document.getElementById('oc-num').value.trim();
   const fecha=document.getElementById('oc-fecha').value;
   const msg=document.getElementById('oc-msg');
-  const items=ocProds.map(id=>({
-    producto:document.getElementById('ocp-nom-'+id).value,
-    pedido:parseFloat(document.getElementById('ocp-cant-'+id).value)||0,
-    recibido:0,
-    precio:parseFloat(document.getElementById('ocp-precio-'+id).value)||0
-  })).filter(x=>x.producto&&x.pedido>0);
+  const items=ocProds.map(id=>{
+    const nomEl=document.getElementById('ocp-nom-'+id);
+    const cantEl=document.getElementById('ocp-cant-'+id);
+    const precioEl=document.getElementById('ocp-precio-'+id);
+    if(!nomEl||!cantEl) return null; // fila ya no existe, ignorar
+    return {
+      producto:nomEl.value,
+      pedido:parseFloat(cantEl.value)||0,
+      recibido:0,
+      precio:precioEl?(parseFloat(precioEl.value)||0):0
+    };
+  }).filter(x=>x&&x.producto&&x.pedido>0);
 
   if(!prov||!fecha||!items.length){ msg.innerHTML='<span style="color:#d64545">Faltan datos: proveedor, fecha y al menos un producto con cantidad.</span>'; return; }
 
