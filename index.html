@@ -2417,11 +2417,15 @@ ${misOrdenes.length ? misOrdenes.map(o => {
 `}
 
 ${(()=>{
-  // Historial: últimas 10 órdenes terminadas de este dosificador
+  // Historial: órdenes terminadas de este dosificador, ordenadas por fecha de término (más reciente primero)
   const hist = ordenes.filter(o=>
     String(o.dosificador).toLowerCase()===String(curUser.id).toLowerCase() &&
     String(o.estado).toUpperCase()==='TERMINADA'
-  ).slice(-10).reverse();
+  ).sort((a,b)=>{
+    const fa=(a.detalle?.infoAplicacion?.fechaTermino||'')+' '+(a.detalle?.infoAplicacion?.horaTermino||'');
+    const fb=(b.detalle?.infoAplicacion?.fechaTermino||'')+' '+(b.detalle?.infoAplicacion?.horaTermino||'');
+    return fb.localeCompare(fa);
+  }).slice(0,10);
   if(!hist.length) return '';
   return `
   <div class="section-header" style="margin-top:24px">
