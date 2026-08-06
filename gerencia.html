@@ -131,6 +131,7 @@
     <a data-v="costos" onclick="ver('costos')"><i class="ti ti-cash"></i>Costos por cuartel</a>
     <a data-v="pendiente" onclick="ver('pendiente')"><i class="ti ti-clipboard-check"></i>Por aplicar</a>
     <a data-v="realaplicado" onclick="ver('realaplicado')"><i class="ti ti-droplet-check"></i>Real aplicado</a>
+    <a data-v="prodcuartel" onclick="ver('prodcuartel')"><i class="ti ti-map-search"></i>Producto x cuartel</a>
     <a data-v="asistente" onclick="ver('asistente')"><i class="ti ti-message-chatbot"></i>Asistente</a>
     <a data-v="compras" onclick="ver('compras')"><i class="ti ti-shopping-cart"></i>Compras</a>
     <a data-v="calendario" onclick="ver('calendario')"><i class="ti ti-calendar"></i>Calendario</a>
@@ -221,7 +222,7 @@ function movsF(){const f=fundoSel();if(!f)return movimientos;const mapa={CERRILL
 function ver(v){
   vista=v;
   document.querySelectorAll('.nav a[data-v]').forEach(a=>a.classList.toggle('on',a.dataset.v===v));
-  document.getElementById('titulo').textContent=v==='dash'?'Dashboard Gerencial':v==='calendario'?'Calendario de órdenes':v==='maquinaria'?'Control de maquinaria':v==='nueva'?'Crear nueva orden':v==='costos'?'Costos por cuartel':v==='asistente'?'Asistente de Gerencia':v==='compras'?'Compras':v==='pendiente'?'Productos por aplicar':v==='realaplicado'?'Real aplicado':'Control de órdenes';
+  document.getElementById('titulo').textContent=v==='dash'?'Dashboard Gerencial':v==='calendario'?'Calendario de órdenes':v==='maquinaria'?'Control de maquinaria':v==='nueva'?'Crear nueva orden':v==='costos'?'Costos por cuartel':v==='asistente'?'Asistente de Gerencia':v==='compras'?'Compras':v==='pendiente'?'Productos por aplicar':v==='realaplicado'?'Real aplicado':v==='prodcuartel'?'Producto por cuartel':'Control de órdenes';
   render();
 }
 
@@ -251,6 +252,7 @@ function render(){
   else if(vista==='compras'){el.innerHTML=renderCompras();setTimeout(()=>{if(typeof ocProds!=='undefined'&&!ocProds.length&&document.getElementById('oc-prods'))addProdOC();},50);}
   else if(vista==='pendiente'){el.innerHTML=renderPendiente();}
   else if(vista==='realaplicado'){el.innerHTML=renderRealAplicado();}
+  else if(vista==='prodcuartel'){el.innerHTML=renderProdCuartel();}
   else el.innerHTML=renderOrdenes();
   if(vista==='dash')setTimeout(buildCharts,60);
 }
@@ -1909,6 +1911,82 @@ function raRango(dias){
   raDesde=isoLocalG(desde);raHasta=isoLocalG(hoyD);render();
 }
 function raSetTipo(t){ raTipo=t; render(); }
+
+// ══════ PRODUCTO POR CUARTEL (dónde se aplicó un producto) ══════
+let pcProducto='';
+function renderProdCuartel(){
+  // Lista de productos que tienen alguna aplicación real registrada
+  const conAplicacion = new Set();
+  ordenesF().forEach(o=>{
+    if(String(o.estado||'').toUpperCase()!=='TERMINADA')return;
+    const ia=(o.detalle||{}).infoAplicacion;
+    if(ia&&ia.realAplicado) ia.realAplicado.forEach(r=>{ if(r.producto) conAplicacion.add(r.producto); });
+  });
+  const opciones=[...conAplicacion].sort();
+
+  // Recolectar aplicaciones del producto elegido, por cuartel
+  let filas=[];
+  if(pcProducto){
+    ordenesF().forEach(o=>{
+      if(String(o.estado||'').toUpperCase()!=='TERMINADA')return;
+      const d=o.detalle||{}, ia=d.infoAplicacion;
+      if(!ia||!ia.realAplicado)return;
+      const ra=ia.realAplicado.find(r=>r.producto===pcProducto);
+      if(!ra)return;
+      const fecha=ia.fechaTermino||d.fecha||'';
+      const cuarts=d.cuartelesFinales||d.cuarteles||[];
+      // Buscar el reparto por cuartel del producto en la orden
+      const prodPlan=(d.productos||[]).find(p=>p.nombre===pcProducto);
+      const totalHa=cuarts.reduce((s,c)=>s+(c.ha||0),0)||1;
+      cuarts.forEach(c=>{
+        let cant=null;
+        if(prodPlan&&Array.isArray(prodPlan.porCuartel)){
+          const pc=prodPlan.porCuartel.find(x=>x.c===c.c);
+          if(pc) cant=pc.val;
+        }
+        if(cant===null){ // repartir el real total por hectáreas
+          cant=+(ra.cantidad*(c.ha||0)/totalHa).toFixed(2);
+        }
+        filas.push({cuartel:c.c, fundo:d.fundo||o.campo, fecha, cant, unidad:ra.unidad||'', orden:numOrden(o)});
+      });
+    });
+    filas.sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
+  }
+
+  const totalCant=filas.reduce((s,f)=>s+(f.cant||0),0);
+
+  return `
+  <div class="panel" style="max-width:700px;margin-bottom:16px">
+    <label style="font-size:12px;font-weight:700;color:#80868b;text-transform:uppercase">Elige un producto</label>
+    <select onchange="pcProducto=this.value;render()" style="width:100%;padding:11px;border:1px solid #dadce0;border-radius:9px;font-size:14px;margin-top:6px">
+      <option value="">— Selecciona un producto —</option>
+      ${opciones.map(n=>`<option value="${n.replace(/"/g,'&quot;')}" ${n===pcProducto?'selected':''}>${n}</option>`).join('')}
+    </select>
+  </div>
+
+  ${!pcProducto ? '<div class="panel" style="text-align:center;color:#80868b;max-width:700px">Elige un producto para ver en qué cuarteles se aplicó.</div>' :
+    filas.length ? `
+    <div class="eyebrow">${pcProducto} · ${filas.length} aplicaciones · total ${totalCant.toFixed(2)} ${filas[0].unidad}</div>
+    <div class="panel" style="max-width:900px;padding:0;overflow:hidden">
+      <table style="width:100%;font-size:13.5px">
+        <thead><tr>
+          <th style="text-align:left;padding:12px 14px">Cuartel</th>
+          <th style="text-align:left;padding:12px 14px">Fundo</th>
+          <th style="text-align:left;padding:12px 14px">Fecha</th>
+          <th style="text-align:right;padding:12px 14px">Cantidad</th>
+        </tr></thead>
+        <tbody>
+        ${filas.map(f=>`<tr style="border-top:1px solid #EEE">
+          <td style="padding:10px 14px;font-weight:700">${f.cuartel}</td>
+          <td style="padding:10px 14px;color:#5a544c">${f.fundo}</td>
+          <td style="padding:10px 14px;color:#80868b">${(f.fecha||'').split('-').reverse().join('/')}</td>
+          <td style="text-align:right;padding:10px 14px"><b>${(f.cant||0).toFixed(2)}</b> <span style="font-size:11px;color:#80868b">${f.unidad}</span></td>
+        </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>` :
+    '<div class="panel" style="text-align:center;color:#80868b;max-width:700px">Este producto no tiene aplicaciones registradas en cuarteles.</div>'}`;
+}
 </script>
 </body>
 </html>
