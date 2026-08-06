@@ -216,7 +216,9 @@ body.login-activo{overflow:hidden;position:fixed;width:100%;height:100%}
 .btn-sec{padding:10px 16px;border-radius:var(--r);border:1.5px solid var(--bd2);background:var(--surf);color:var(--tx2);font-size:14px;font-weight:500;cursor:pointer}
 .btn-sec:active{background:var(--surf3)}
 
-.orden-line{background:var(--surf3);border:1px solid var(--bd);border-radius:var(--r);padding:10px 12px;margin-bottom:8px;display:grid;grid-template-columns:1fr 90px 36px;gap:8px;align-items:center}
+.orden-line{background:var(--surf3);border:1px solid var(--bd);border-radius:var(--r);padding:10px 12px;margin-bottom:8px;display:grid;grid-template-columns:minmax(0,1fr) 78px 40px;gap:8px;align-items:center}
+.orden-line select,.orden-line input{min-width:0;width:100%;box-sizing:border-box;padding:11px 10px;border:1px solid var(--bd2);border-radius:9px;font-size:14px;background:#fff}
+.orden-line input[type=number]{text-align:center}
 .orden-line select,.orden-line input{padding:10px;border:1.5px solid var(--bd2);border-radius:8px;background:var(--surf);color:var(--tx);font-size:14px;outline:none;-webkit-appearance:none;appearance:none}
 .orden-line select:focus,.orden-line input:focus{border-color:var(--vino)}
 
@@ -1785,7 +1787,7 @@ function renderRecibirDesdeCompra(){
 function renderEntradaManual(ents){
   return`
   <div class="form-box">
-    <div class="form-title"><div class="form-title-icon">📥</div>Nueva entrada manual</div>
+    <div class="form-title"><div class="form-title-icon"><i class="ti ti-package-import"></i></div>Nueva entrada manual</div>
     <div class="form-group"><label class="form-label">Producto <span class="required">*</span></label><select class="form-control" id="r-p" onchange="updRecibir()">${prodOpts()}</select></div>
     <div class="form-row">
       <div class="form-group"><label class="form-label">Cantidad <span class="required">*</span></label><input type="number" class="form-control" id="r-c" min="0.01" step="0.01" placeholder="0" inputmode="decimal" oninput="updRecibir()"/></div>
@@ -1851,7 +1853,7 @@ function renderTransferir(){
   return`
   <div class="section-header"><div class="section-title">Despacho</div><div class="section-sub">Mover producto entre ubicaciones</div></div>
   <div class="form-box">
-    <div class="form-title"><div class="form-title-icon">↔️</div>Nueva transferencia</div>
+    <div class="form-title"><div class="form-title-icon"><i class="ti ti-arrows-exchange"></i></div>Nueva transferencia</div>
  <div class="form-row">
   <div class="form-group">
     <label class="form-label">Origen <span class="required">*</span></label>
@@ -1877,9 +1879,9 @@ function renderTransferir(){
 <button class="btn-sec" onclick="addLineaTransfer()" style="width:100%;margin-bottom:.75rem">
   + Agregar producto
 </button>
-    <button class="btn-primary" onclick="doTransferir()">↔️ Confirmar transferencia</button>
+    <button class="btn-primary" onclick="doTransferir()"><i class="ti ti-arrows-exchange"></i> Confirmar transferencia</button>
   </div>
-  <div class="section-label">Ultimas transferencias</div>
+  <div class="section-label">Últimas transferencias</div>
   <div class="card">${ts.length?ts.map(m=>`<div class="move-item"><div class="move-dot" style="background:var(--blue)"></div><div class="move-body"><div class="move-prod">${m.producto}</div><div class="move-detail">${m.origen} → ${m.destino}</div></div><div class="move-right"><div class="move-qty" style="color:var(--blue)">${m.cantidad}</div><div class="move-date">${m.fecha}</div></div></div>`).join(''):`<div class="empty-state"><div class="empty-icon">↔️</div><div class="empty-text">Sin transferencias</div></div>`}</div>`;
 }
 function updTA(){
@@ -1906,9 +1908,7 @@ function lineaTransferHTML(i){
 
       <button type="button"
               onclick="removeLineaTransfer(${i})"
-              style="padding:10px;border:1px solid var(--bd2);border-radius:8px;background:var(--surf2);color:var(--tx2)">
-        ✕
-      </button>
+              style="padding:10px;border:1px solid var(--bd2);border-radius:8px;background:var(--surf2);color:var(--tx2)"><i class="ti ti-x"></i></button>
     </div>
   `;
 }
@@ -2018,16 +2018,16 @@ function renderDevolucion(){
   return`
   <div class="section-header"><div class="section-title">Devolución</div><div class="section-sub">Devolver sobrante a Bodega Central</div></div>
   <div class="form-box">
-    <div class="form-title"><div class="form-title-icon">↩️</div>Registrar devolucion</div>
+    <div class="form-title"><div class="form-title-icon"><i class="ti ti-arrow-back-up"></i></div>Registrar devolución</div>
     <div class="form-group"><label class="form-label">Producto <span class="required">*</span></label><select class="form-control" id="dv-p">${prodOpts()}</select></div>
     <div class="form-row">
       <div class="form-group"><label class="form-label">Cantidad <span class="required">*</span></label><input type="number" class="form-control" id="dv-c" min="0.01" step="0.01" placeholder="0" inputmode="decimal"/></div>
       <div class="form-group"><label class="form-label">Desde <span class="required">*</span></label><select class="form-control" id="dv-or">${fieldLocsExclude('Bodega Central',locDef)}</select></div>
     </div>
     <div class="form-group"><label class="form-label">Motivo</label><textarea class="form-control" id="dv-obs" rows="2" placeholder="Sobrante, buen estado..." style="resize:none"></textarea></div>
-    <button class="btn-primary" onclick="doDevolucion()">↩️ Registrar devolucion</button>
+    <button class="btn-primary" onclick="doDevolucion()"><i class="ti ti-arrow-back-up"></i> Registrar devolución</button>
   </div>
-  <div class="section-label">Ultimas devoluciones</div>
+  <div class="section-label">Últimas devoluciones</div>
   <div class="card">${devs.length?devs.map(m=>`<div class="move-item"><div class="move-dot" style="background:var(--purple)"></div><div class="move-body"><div class="move-prod">${m.producto}</div><div class="move-detail">${m.origen} → Bodega Central</div></div><div class="move-right"><div class="move-qty" style="color:var(--purple)">${m.cantidad}</div><div class="move-date">${m.fecha}</div></div></div>`).join(''):`<div class="empty-state"><div class="empty-icon">↩️</div><div class="empty-text">Sin devoluciones</div></div>`}</div>`;
 }
 async function doDevolucion(){
