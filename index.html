@@ -2018,8 +2018,23 @@ async function doTransferir(){
       }
     });
     for(const l of lineas){
+      // AVISO (nuevo): todo despacho -> Freddy + dosificador del destino
+      fetch('https://cmfvnluppvqyqwpfjrbs.supabase.co/functions/v1/aviso-despacho', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+          tipo: 'despacho',
+          producto: l.producto,
+          cantidad: fmt(l.cantidad),
+          origen: origen,
+          destino: dest,
+          usuario: curUser.name || curUser.id,
+          fecha: hoy()
+        })
+      }).catch(()=>{});
+
+      // ALERTA (existente): solo a gerencia, cuando el producto no tiene orden pendiente
       if(!productosConOrden.has(l.producto.trim())){
-        // este producto no tiene orden pendiente -> alertar
         fetch('https://cmfvnluppvqyqwpfjrbs.supabase.co/functions/v1/alerta-despacho', {
           method:'POST',
           headers:{'Content-Type':'application/json'},
@@ -2070,6 +2085,20 @@ async function doDevolucion(){
   movimientos.push({id:nextMov++,tipo:'devolucion',producto:p.nombre,cantidad:cant,origen,destino:'Bodega Central',obs,fecha:hoy(),usuario:curUser.id});
   showToast('Guardando...','info');
   await postSheets({action:'devolucion',fecha:hoy(),producto:p.nombre,cantidad:cant,origen,usuario:curUser.id,motivo:obs});
+  // Aviso por correo: devolución -> Freddy + dosificador que devuelve (según origen)
+  fetch('https://cmfvnluppvqyqwpfjrbs.supabase.co/functions/v1/aviso-despacho', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      tipo: 'devolucion',
+      producto: p.nombre,
+      cantidad: fmt(cant),
+      origen: origen,
+      destino: 'Bodega Central',
+      usuario: curUser.name || curUser.id,
+      fecha: hoy()
+    })
+  }).catch(()=>{});
   showToast('Devuelto '+cant+' de '+p.nombre+' a Bodega');
   refresh();
 }
