@@ -1838,13 +1838,18 @@ async function doRecibir(){
     const ok=confirm('⚠️ Cantidad inusual\n\nVas a ingresar '+fmt(cant)+' de '+p.nombre+'.\nNormalmente recibes alrededor de '+fmt(Math.round(prom))+'.\n\n¿El valor es correcto?');
     if(!ok){ showToast('Entrada cancelada, corrige la cantidad','info'); return; }
   }
-  addStock(pid,loc,cant);
-  const mov={id:nextMov++,tipo:'entrada',producto:p.nombre,cantidad:cant,destino:loc,proveedor:document.getElementById('r-pv').value.trim(),obs:document.getElementById('r-f').value.trim(),fecha:hoy(),usuario:curUser.id};
-  movimientos.push(mov);
-  showToast('Guardando...','info');
-  await postSheets({action:'entrada',fecha:mov.fecha,producto:p.nombre,cantidad:cant,destino:loc,proveedor:mov.proveedor,factura:mov.obs,usuario:curUser.id,obs:mov.obs});
-  showToast('+'+cant+' de '+p.nombre+' guardado');
-  refresh();
+  if(!bloquearAccion('recibir')){ return; } // evita doble envío
+  try{
+    addStock(pid,loc,cant);
+    const mov={id:nextMov++,tipo:'entrada',producto:p.nombre,cantidad:cant,destino:loc,proveedor:document.getElementById('r-pv').value.trim(),obs:document.getElementById('r-f').value.trim(),fecha:hoy(),usuario:curUser.id};
+    movimientos.push(mov);
+    showToast('Guardando...','info');
+    await postSheets({action:'entrada',fecha:mov.fecha,producto:p.nombre,cantidad:cant,destino:loc,proveedor:mov.proveedor,factura:mov.obs,usuario:curUser.id,obs:mov.obs});
+    showToast('+'+cant+' de '+p.nombre+' guardado');
+    refresh();
+  } finally {
+    liberarAccion('recibir');
+  }
 }
 
 // ══ TRANSFERIR ══
@@ -1978,6 +1983,7 @@ async function doTransferir(){
     if(!ok){ showToast('Transferencia cancelada, revisa las cantidades','info'); return; }
   }
 
+  if(!bloquearAccion('transferir')){ return; } // evita doble envío
   showToast('Guardando transferencias...', 'info');
 
   for(const l of lineas){
@@ -2051,6 +2057,7 @@ async function doTransferir(){
     }
   }catch(_){ /* la alerta nunca debe romper la transferencia */ }
 
+  liberarAccion('transferir');
   showToast('Transferencia guardada correctamente');
   await syncData();
 }
@@ -2081,6 +2088,7 @@ async function doDevolucion(){
   const disp=stockAt(pid,origen);
   if(cant>disp) return showToast('Insuficiente en '+origen+': '+fmt(disp)+' disp.','err');
   const p=products.find(x=>x.id===pid);
+  if(!bloquearAccion('devolucion')){ return; } // evita doble envío
   addStock(pid,origen,-cant); addStock(pid,'Bodega Central',cant);
   movimientos.push({id:nextMov++,tipo:'devolucion',producto:p.nombre,cantidad:cant,origen,destino:'Bodega Central',obs,fecha:hoy(),usuario:curUser.id});
   showToast('Guardando...','info');
@@ -2099,6 +2107,7 @@ async function doDevolucion(){
       fecha: hoy()
     })
   }).catch(()=>{});
+  liberarAccion('devolucion');
   showToast('Devuelto '+cant+' de '+p.nombre+' a Bodega');
   refresh();
 }
@@ -4095,6 +4104,15 @@ function addUser(){
 }
 
 // ══ TOAST ══
+// Candado anti-doble-envío: evita que una acción se ejecute dos veces seguidas
+const _enCurso = {};
+function bloquearAccion(nombre){
+  if(_enCurso[nombre]) return false; // ya se está ejecutando -> rechazar
+  _enCurso[nombre] = true;
+  return true;
+}
+function liberarAccion(nombre){ _enCurso[nombre] = false; }
+
 function showToast(msg,type='ok'){
   const el=document.getElementById('toast');
   el.textContent=msg; el.className=type; el.style.display='block';
