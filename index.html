@@ -2007,11 +2007,38 @@ async function doTransferir(){
     });
   }
 
+  // Alerta: productos movidos que NO tienen ninguna orden de aplicación pendiente
+  // (EN CURSO o INICIADA, en cualquier fundo). Envía correo vía Edge Function.
+  try{
+    const productosConOrden = new Set();
+    ordenes.forEach(o=>{
+      const est = String(o.estado||'').toUpperCase();
+      if(est==='EN CURSO' || est==='INICIADA'){
+        (o.detalle?.productos||[]).forEach(p=>{ if(p&&p.nombre) productosConOrden.add(p.nombre.trim()); });
+      }
+    });
+    for(const l of lineas){
+      if(!productosConOrden.has(l.producto.trim())){
+        // este producto no tiene orden pendiente -> alertar
+        fetch('https://cmfvnluppvqyqwpfjrbs.supabase.co/functions/v1/alerta-despacho', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({
+            producto: l.producto,
+            cantidad: fmt(l.cantidad),
+            origen: origen,
+            destino: dest,
+            usuario: curUser.name || curUser.id,
+            fecha: hoy()
+          })
+        }).catch(()=>{}); // si falla el correo, no interrumpe la transferencia
+      }
+    }
+  }catch(_){ /* la alerta nunca debe romper la transferencia */ }
+
   showToast('Transferencia guardada correctamente');
   await syncData();
 }
-
-// ══ DEVOLUCION ══
 function renderDevolucion(){
   const locDef=curUser.id==='rulo'?'Rulo':curUser.id==='paine'?'Paine':'Caseta Cerrillos';
   const devs=movimientos.filter(m=>m.tipo==='devolucion').slice(-5).reverse();
