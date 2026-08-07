@@ -2027,7 +2027,11 @@ async function doTransferir(){
       // AVISO (nuevo): todo despacho -> Freddy + dosificador del destino
       fetch('https://cmfvnluppvqyqwpfjrbs.supabase.co/functions/v1/aviso-despacho', {
         method:'POST',
-        headers:{'Content-Type':'application/json'},
+        headers:{
+          'Content-Type':'application/json',
+          'apikey': SUPABASE_KEY,
+          'Authorization': 'Bearer '+SUPABASE_KEY
+        },
         body: JSON.stringify({
           tipo: 'despacho',
           producto: l.producto,
@@ -2037,13 +2041,17 @@ async function doTransferir(){
           usuario: curUser.name || curUser.id,
           fecha: hoy()
         })
-      }).catch(()=>{});
+      }).then(r=>r.json()).then(d=>console.log('aviso-despacho:',d)).catch(e=>console.error('aviso-despacho ERROR:',e));
 
       // ALERTA (existente): solo a gerencia, cuando el producto no tiene orden pendiente
       if(!productosConOrden.has(l.producto.trim())){
         fetch('https://cmfvnluppvqyqwpfjrbs.supabase.co/functions/v1/alerta-despacho', {
           method:'POST',
-          headers:{'Content-Type':'application/json'},
+          headers:{
+            'Content-Type':'application/json',
+            'apikey': SUPABASE_KEY,
+            'Authorization': 'Bearer '+SUPABASE_KEY
+          },
           body: JSON.stringify({
             producto: l.producto,
             cantidad: fmt(l.cantidad),
@@ -2052,7 +2060,7 @@ async function doTransferir(){
             usuario: curUser.name || curUser.id,
             fecha: hoy()
           })
-        }).catch(()=>{}); // si falla el correo, no interrumpe la transferencia
+        }).catch(()=>{});
       }
     }
   }catch(_){ /* la alerta nunca debe romper la transferencia */ }
@@ -2096,7 +2104,11 @@ async function doDevolucion(){
   // Aviso por correo: devolución -> Freddy + dosificador que devuelve (según origen)
   fetch('https://cmfvnluppvqyqwpfjrbs.supabase.co/functions/v1/aviso-despacho', {
     method:'POST',
-    headers:{'Content-Type':'application/json'},
+    headers:{
+      'Content-Type':'application/json',
+      'apikey': SUPABASE_KEY,
+      'Authorization': 'Bearer '+SUPABASE_KEY
+    },
     body: JSON.stringify({
       tipo: 'devolucion',
       producto: p.nombre,
@@ -2106,7 +2118,7 @@ async function doDevolucion(){
       usuario: curUser.name || curUser.id,
       fecha: hoy()
     })
-  }).catch(()=>{});
+  }).then(r=>r.json()).then(d=>console.log('aviso-devolucion:',d)).catch(e=>console.error('aviso-devolucion ERROR:',e));
   liberarAccion('devolucion');
   showToast('Devuelto '+cant+' de '+p.nombre+' a Bodega');
   refresh();
