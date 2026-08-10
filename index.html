@@ -598,7 +598,7 @@ async function syncData() {
     // 3) Movimientos activos (historial)
     const { data: movs, error: e3 } = await sb
       .from('movimientos').select('*')
-      .eq('estado','ACTIVO').order('fecha', {ascending:false});
+      .eq('estado','ACTIVO').order('id', {ascending:false});
     if (e3) throw e3;
 
     // 4) Ordenes
@@ -1743,7 +1743,7 @@ async function movMaterial(matId, tipo){
 }
 
 function renderRecibir(){
-  const ents=movimientos.filter(m=>m.tipo==='entrada').slice(-5).reverse();
+  const ents=movimientos.filter(m=>m.tipo==='entrada').slice(0,5);
   const pend=compras.filter(o=>estadoOCb(o)!=='COMPLETA');
   const tabBtn=(v,txt,n)=>`<button onclick="setSubRecibir('${v}')" style="flex:1;padding:10px;border:none;border-bottom:3px solid ${subRecibir===v?'var(--vino)':'transparent'};background:none;font-size:13.5px;font-weight:${subRecibir===v?'700':'500'};color:${subRecibir===v?'var(--vino)':'var(--tx3)'};cursor:pointer">${txt}${n?` <span style="background:var(--vino);color:#fff;border-radius:9px;padding:1px 7px;font-size:11px">${n}</span>`:''}</button>`;
 
@@ -1869,7 +1869,7 @@ async function doRecibir(){
 // ══ TRANSFERIR ══
 function renderTransferir(){
   const ts=movimientos.filter(m=>m.tipo==='transferencia')
-    .slice().sort((a,b)=>(b.id||0)-(a.id||0)).slice(0,5);
+    .slice().sort((a,b)=>(b.idRegistro||0)-(a.idRegistro||0)).slice(0,5);
   return`
   <div class="section-header"><div class="section-title">Despacho</div><div class="section-sub">Mover producto entre ubicaciones</div></div>
   <div class="form-box">
@@ -2094,7 +2094,7 @@ async function doTransferir(){
 }
 function renderDevolucion(){
   const locDef=curUser.id==='rulo'?'Rulo':curUser.id==='paine'?'Paine':'Caseta Cerrillos';
-  const devs=movimientos.filter(m=>m.tipo==='devolucion').slice(-5).reverse();
+  const devs=movimientos.filter(m=>m.tipo==='devolucion').slice(0,5);
   return`
   <div class="section-header"><div class="section-title">Devolución</div><div class="section-sub">Devolver sobrante a Bodega Central</div></div>
   <div class="form-box">
@@ -2150,7 +2150,7 @@ async function doDevolucion(){
 
 // ══ PÉRDIDAS / MERMAS ══
 function renderPerdida(){
-  const perds=movimientos.filter(m=>m.tipo==='perdida').slice(-5).reverse();
+  const perds=movimientos.filter(m=>m.tipo==='perdida').slice(0,5);
   return`
   <div class="section-header"><div class="section-title">Pérdida / Merma</div><div class="section-sub">Registrar producto perdido (derrame, rotura, vencimiento)</div></div>
   <div class="form-box">
@@ -3744,7 +3744,7 @@ function renderHistorial(){
   if(histDesde===null) histDesde = isoLocal(hace5);
   if(histHasta===null) histHasta = isoLocal(hoyD);
 
-  const list = [...movimientos].reverse().filter(m=>{
+  const list = [...movimientos].filter(m=>{
     const f = m.fechaRaw || '';
     if(!f) return true; // sin fecha: mostrar por seguridad
     return f>=histDesde && f<=histHasta;
@@ -4088,7 +4088,7 @@ function renderGerencia(){
   ${alertas.length||agotados.length?`<div class="section-label" style="color:var(--red)">Alertas de stock</div>${agotados.slice(0,3).map(p=>`<div class="alert-item crit">🔴 <strong>${p.nombre}</strong> — Agotado</div>`).join('')}${alertas.slice(0,4).map(p=>`<div class="alert-item warn">🟡 <strong>${p.nombre}</strong> — Stock: ${fmt(totalStock(p.id))} (min: ${p.minimo})</div>`).join('')}`:''}
 
   <div class="section-label">Últimos movimientos</div>
-  <div class="card">${[...movimientos].reverse().slice(0,8).map(m=>{const dots={entrada:'var(--green)',transferencia:'var(--blue)',aplicacion:'var(--amber)',devolucion:'var(--purple)'};return`<div class="move-item"><div class="move-dot" style="background:${dots[m.tipo]||'#999'}"></div><div class="move-body"><div class="move-prod">${m.producto}</div><div class="move-detail">${m.tipo}${m.campo?' · '+m.campo:''}${m.ordenNum?' · Orden #'+m.ordenNum:''}</div></div><div class="move-right"><div class="move-qty">${fmt(m.cantidad)}</div><div class="move-date">${m.fecha}</div></div></div>`;}).join('')||`<div class="empty-state"><div class="empty-text">Sin movimientos aun</div></div>`}</div>`;
+  <div class="card">${[...movimientos].slice(0,8).map(m=>{const dots={entrada:'var(--green)',transferencia:'var(--blue)',aplicacion:'var(--amber)',devolucion:'var(--purple)'};return`<div class="move-item"><div class="move-dot" style="background:${dots[m.tipo]||'#999'}"></div><div class="move-body"><div class="move-prod">${m.producto}</div><div class="move-detail">${m.tipo}${m.campo?' · '+m.campo:''}${m.ordenNum?' · Orden #'+m.ordenNum:''}</div></div><div class="move-right"><div class="move-qty">${fmt(m.cantidad)}</div><div class="move-date">${m.fecha}</div></div></div>`;}).join('')||`<div class="empty-state"><div class="empty-text">Sin movimientos aun</div></div>`}</div>`;
 }
 function buildCharts(){
   const COLORS=['#7B2D2D','#C4933F','#3d5a80','#2d6b3a','#8a5e00','#9d6b4f','#a0522d','#5f7a8a'];
