@@ -2014,14 +2014,14 @@ function renderVales(){
   <div class="panel" style="max-width:700px">
     <div style="font-size:14px;margin-bottom:6px"><b>${term.length}</b> órdenes terminadas en el rango</div>
     <div style="font-size:12.5px;color:#80868b;margin-bottom:16px">
-      Genera archivos CSV (formato que acepta el ERP): una fila por producto por cuartel. N° de vale desde el que indiques, glosa FITO-N°/HER-N°, movimiento SALIDA, sucursal 1, bodega según el fundo (B1 Cerrillos · B2 Paine · B3 Rulo).
+      Genera el XLS para el ERP + un CSV de verificación: una fila por producto por cuartel. N° de vale desde el que indiques, glosa FITO-N°/HER-N°, movimiento SALIDA, sucursal 1, bodega según el fundo (B1 Cerrillos · B2 Paine · B3 Rulo).
     </div>
     <div class="fbox" style="max-width:220px;margin-bottom:14px">
       <label>N° de vale inicial</label>
       <input type="number" id="v-vale" value="1026" style="border:none;font-size:14px;font-weight:700">
     </div>
     <button class="btn green" onclick="exportarVales()" ${term.length?'':'disabled'}>
-      <i class="ti ti-file-export"></i> Generar CSV de vales
+      <i class="ti ti-file-export"></i> Generar vales (XLS)
     </button>
   </div>
   <div class="panel" style="max-width:700px;font-size:12px;color:#80868b">
@@ -2113,29 +2113,30 @@ function exportarVales(){
   // Columnas OFICIALES del ERP (en orden, sin la de verificación)
   const headers=['NUMERO VALE','FECHA VALE','MOVIMIENTO','TIPO VALE','SUCURSAL','GLOSAS','CODIGOS','CANTIDAD','BODEGA','COSTO','NUMERO OT','NUMERO OP','NUMERO LOTE','VENCIMIENTO','NUMERO SERIE','CTA CONTABLE','CENTRO COSTO','BODEGA TRASPASO'];
 
-  // Escapar valor para CSV
-  const esc=(v)=>{
-    let s = (v===null||v===undefined) ? '' : String(v);
-    if(/[",;\n]/.test(s)) s = '"'+s.replace(/"/g,'""')+'"';
-    return s;
-  };
-
-  // 1) CSV para el ERP (solo columnas oficiales, con títulos exactos)
-  let csv = headers.join(';') + '\n';
-  filas.forEach(f=>{
-    csv += headers.map(h=>esc(f[h])).join(';') + '\n';
+  // 1) ARCHIVO PARA EL ERP: formato XLS (Excel 97-2003 / compatible con XLS 5.0)
+  const filasERP = filas.map(f=>{
+    const o={}; headers.forEach(h=>o[h]=f[h]); return o;
   });
-  descargarTexto(csv, 'Vales_ERP_'+vDesde+'_a_'+vHasta+'.csv');
+  const ws=XLSX.utils.json_to_sheet(filasERP,{header:headers});
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Vales');
+  // bookType 'biff8' = .xls clásico (Excel 97-2003), el formato viejo que pide el ERP
+  try{
+    XLSX.writeFile(wb,'Vales_ERP_'+vDesde+'_a_'+vHasta+'.xls',{bookType:'biff8'});
+  }catch(err){
+    // si biff8 falla, intentar biff5 (Excel 5.0 exacto)
+    try{ XLSX.writeFile(wb,'Vales_ERP_'+vDesde+'_a_'+vHasta+'.xls',{bookType:'biff5'}); }
+    catch(e2){ XLSX.writeFile(wb,'Vales_ERP_'+vDesde+'_a_'+vHasta+'.xls'); }
+  }
 
   // 2) CSV de verificación (con nombre del producto, para que Felipe revise)
+  const esc=(v)=>{ let s=(v===null||v===undefined)?'':String(v); if(/[",;\n]/.test(s)) s='"'+s.replace(/"/g,'""')+'"'; return s; };
   const headersV = headers.concat(['PRODUCTO (verificación)']);
   let csvV = headersV.join(';') + '\n';
-  filas.forEach(f=>{
-    csvV += headersV.map(h=>esc(f[h])).join(';') + '\n';
-  });
+  filas.forEach(f=>{ csvV += headersV.map(h=>esc(f[h])).join(';') + '\n'; });
   descargarTexto(csvV, 'Vales_VERIFICACION_'+vDesde+'_a_'+vHasta+'.csv');
 
-  let aviso='Se generaron 2 archivos:\n\n1) Vales_ERP...csv  → este SUBES al ERP\n2) Vales_VERIFICACION...csv  → este es para que revises (tiene el nombre del producto)\n\nFilas: '+filas.length;
+  let aviso='Se generaron 2 archivos:\n\n1) Vales_ERP...XLS  → este SUBES al ERP\n2) Vales_VERIFICACION...csv  → para que revises (tiene el nombre del producto)\n\nFilas: '+filas.length;
   if(sinCodigo.size) aviso+='\n\n⚠️ Productos SIN código:\n'+[...sinCodigo].join('\n');
   if(sinCcosto.size) aviso+='\n\n⚠️ Cuarteles SIN centro de costo:\n'+[...sinCcosto].join(', ');
   alert(aviso);
