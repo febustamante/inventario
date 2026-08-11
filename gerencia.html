@@ -2038,6 +2038,8 @@ function exportarVales(){
   if(typeof XLSX==='undefined'){ alert('La librería Excel no cargó'); return; }
   let numVale = parseInt(document.getElementById('v-vale').value)||1026;
   const BOD_FUNDO = { 'CERRILLOS':'B1', 'PAINE':'B2', 'RULO':'B3' };
+  // Centro de costo por cuartel (código del ERP)
+  const CCOSTO_CUARTEL = {'A03':'10017-10','A04':'10017-11','A05':'10017-12','A06':'10017-13','A07':'10017-14','A08':'10017-15','A09':'10017-16','A10':'10017-17','A11':'10017-18','R01':'10017-2','R02':'10017-3','R03':'10017-4','R04':'10017-5','R05':'10017-6','R06':'10017-7','A01':'10017-8','A02':'10017-9','V01':'10018-2','V02':'10018-3','V03':'10018-4','V04':'10018-5','V05':'10018-6','V06':'10018-7','V07':'10018-8','V08':'10018-9','P12':'10019-10','P13':'10019-11','P14':'10019-12','P15':'10019-13','P16':'10019-14','P17':'10019-15','P18':'10019-16','P01':'10019-2','P02':'10019-3','P03':'10019-4','P04':'10019-5','P05':'10019-6','P06':'10019-7','P07':'10019-8','P11':'10019-9','C09':'10020-10','C10':'10020-11','C11':'10020-12','C12':'10020-13','C13':'10020-14','C14':'10020-15','C15':'10020-16','C16':'10020-17','C17':'10020-18','C18':'10020-19','C01':'10020-2','C19':'10020-20','C20':'10020-21','C21':'10020-22','C22':'10020-23','C23':'10020-24','C24':'10020-25','C25':'10020-26','C26':'10020-27','C27':'10020-28','C28':'10020-29','C02':'10020-3','C29':'10020-30','C30':'10020-31','C37':'10020-32','C38':'10020-33','C39':'10020-34','C40':'10020-35','C41':'10020-36','C42':'10020-37','C43':'10020-38','C44':'10020-39','C03':'10020-4','C45':'10020-40','C46':'10020-41','C50':'10020-42','C51':'10020-43','C52':'10020-44','C53':'10020-45','C54':'10020-46','C55':'10020-47','C56':'10020-48','C04':'10020-5','C05':'10020-6','C06':'10020-7','C07':'10020-8','C08':'10020-9'};
 
   const term = ordenes.filter(o=>{
     if(String(o.estado||'').toUpperCase()!=='TERMINADA')return false;
@@ -2050,10 +2052,12 @@ function exportarVales(){
 
   const filas=[];
   const sinCodigo=new Set();
+  const sinCcosto=new Set();
 
   term.forEach(o=>{
     const d=o.detalle||{};
     const ia=d.infoAplicacion||{};
+    if(!ia.realAplicado || !ia.realAplicado.length) return;
     const fechaTermino=ia.fechaTermino||d.fecha||'';
     const fundo=(d.fundo||o.campo||'').toUpperCase();
     const bodega=BOD_FUNDO[fundo]||'';
@@ -2061,13 +2065,20 @@ function exportarVales(){
     const glosa = (d.tipo==='herbicida' ? 'HER-' : 'FITO-') + numO;
     const valeDeEstaOrden = numVale;
 
+    // Reparto REAL por cuartel (misma fórmula que el PDF): real_total * ha_cuartel / ha_total
+    const cuartsF = (d.cuartelesFinales||d.cuarteles||[]);
+    const totHa = cuartsF.reduce((s,c)=>s+(c.ha||0),0) || 1;
+
     let huboFila=false;
-    (d.productos||[]).forEach(p=>{
-      const prodObj = products.find(x=>x.nombre===p.nombre);
+    ia.realAplicado.forEach(ra=>{
+      const prodObj = products.find(x=>x.nombre===ra.producto);
       const codigo = prodObj?.codigo || '';
-      if(!codigo) sinCodigo.add(p.nombre);
-      (p.porCuartel||[]).forEach(pc=>{
-        if(!pc || !pc.val) return;
+      if(!codigo) sinCodigo.add(ra.producto);
+      cuartsF.forEach(c=>{
+        const val = +((ra.cantidad||0)*(c.ha||0)/totHa).toFixed(2);
+        if(val<=0) return;
+        const ccosto = CCOSTO_CUARTEL[c.c] || '';
+        if(!ccosto) sinCcosto.add(c.c);
         filas.push({
           'NUMERO VALE':valeDeEstaOrden,
           'FECHA VALE':fechaTermino,
@@ -2076,8 +2087,18 @@ function exportarVales(){
           'SUCURSAL':1,
           'GLOSAS':glosa,
           'CODIGOS':codigo,
-          'CANTIDAD':pc.val,
-          'BODEGA':bodega
+          'CANTIDAD':val,
+          'BODEGA':bodega,
+          'COSTO':'',
+          'NUMERO OT':'',
+          'NUMERO OP':'',
+          'NUMERO LOTE':'',
+          'VENCIMIENTO':'',
+          'NUMERO SERIE':'',
+          'CTA CONTABLE':'',
+          'CENTRO COSTO':ccosto,
+          'BODEGA TRASPASO':'',
+          'PRODUCTO (verificación)':ra.producto
         });
         huboFila=true;
       });
@@ -2085,17 +2106,18 @@ function exportarVales(){
     if(huboFila) numVale++;
   });
 
-  if(!filas.length){ alert('No hay filas para exportar en este rango (¿las órdenes tienen productos con cuarteles?)'); return; }
+  if(!filas.length){ alert('No hay filas para exportar en este rango (¿las órdenes tienen real aplicado y cuarteles?)'); return; }
 
-  const headers=['NUMERO VALE','FECHA VALE','MOVIMIENTO','TIPO VALE','SUCURSAL','GLOSAS','CODIGOS','CANTIDAD','BODEGA'];
+  const headers=['NUMERO VALE','FECHA VALE','MOVIMIENTO','TIPO VALE','SUCURSAL','GLOSAS','CODIGOS','CANTIDAD','BODEGA','COSTO','NUMERO OT','NUMERO OP','NUMERO LOTE','VENCIMIENTO','NUMERO SERIE','CTA CONTABLE','CENTRO COSTO','BODEGA TRASPASO','PRODUCTO (verificación)'];
   const ws=XLSX.utils.json_to_sheet(filas,{header:headers});
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,'Vales');
   XLSX.writeFile(wb,'Vales_'+vDesde+'_a_'+vHasta+'.xlsx');
 
-  if(sinCodigo.size){
-    alert('Excel generado.\n\n⚠️ OJO: estos productos no tienen código y salieron en blanco:\n\n'+[...sinCodigo].join('\n')+'\n\nAsígnales código en la base y vuelve a exportar.');
-  }
+  let aviso='Excel generado con '+filas.length+' filas.';
+  if(sinCodigo.size) aviso+='\n\n⚠️ Productos SIN código (columna en blanco):\n'+[...sinCodigo].join('\n');
+  if(sinCcosto.size) aviso+='\n\n⚠️ Cuarteles SIN centro de costo:\n'+[...sinCcosto].join(', ');
+  if(sinCodigo.size||sinCcosto.size) alert(aviso);
 }
 </script>
 </body>
