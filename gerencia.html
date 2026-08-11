@@ -1212,7 +1212,9 @@ function calcNueva(){
     set('np-dha-'+id,(d100&&moj&&lts&&has)?dHa.toFixed(3):'—');
   });
 }
+let _creandoOrden = false;
 async function guardarNueva(){
+  if(_creandoOrden){ return; } // ya se está creando, evita doble envío
   const tipo=document.getElementById('n-tipo').value;
   const numeroOrden=parseInt(document.getElementById('n-num').value)||0;
   const fundo=document.getElementById('n-fundo').value;
@@ -1276,6 +1278,9 @@ async function guardarNueva(){
   }
 
   msg.innerHTML='<span style="color:#80868b">Creando orden...</span>';
+  _creandoOrden = true;
+  const btnCrear = document.querySelector('button[onclick="guardarNueva()"]');
+  if(btnCrear){ btnCrear.disabled=true; btnCrear.style.opacity='0.5'; btnCrear.style.pointerEvents='none'; }
   try{
     const { error } = await sb.from('ordenes').insert({
       campo_id: UBIC_ID_N[FUNDO_UBIC_N[fundo]]||null,
@@ -1296,7 +1301,11 @@ async function guardarNueva(){
     setTimeout(()=>ver('ordenes'),1200);
   }catch(e){
     console.error(e);
-    msg.innerHTML='<span style="color:#d64545">Error al crear: '+(e.message||'')+'</span>';
+    msg.innerHTML='<span style="color:#d64545">No se pudo crear la orden. Revisa tu conexión y reintenta. ('+(e.message||'')+')</span>';
+    // reactivar el botón para que pueda reintentar
+    if(btnCrear){ btnCrear.disabled=false; btnCrear.style.opacity=''; btnCrear.style.pointerEvents=''; }
+  } finally {
+    _creandoOrden = false;
   }
 }
 
