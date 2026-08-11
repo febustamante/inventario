@@ -132,6 +132,7 @@
     <a data-v="pendiente" onclick="ver('pendiente')"><i class="ti ti-clipboard-check"></i>Por aplicar</a>
     <a data-v="realaplicado" onclick="ver('realaplicado')"><i class="ti ti-droplet-check"></i>Real aplicado</a>
     <a data-v="prodcuartel" onclick="ver('prodcuartel')"><i class="ti ti-map-search"></i>Producto x cuartel</a>
+    <a data-v="vales" onclick="ver('vales')"><i class="ti ti-file-export"></i>Exportar vales</a>
     <a data-v="asistente" onclick="ver('asistente')"><i class="ti ti-message-chatbot"></i>Asistente</a>
     <a data-v="compras" onclick="ver('compras')"><i class="ti ti-shopping-cart"></i>Compras</a>
     <a data-v="calendario" onclick="ver('calendario')"><i class="ti ti-calendar"></i>Calendario</a>
@@ -196,7 +197,7 @@ async function cargar(){
       sb.from('movimientos').select('*').eq('estado','ACTIVO').order('fecha',{ascending:false}),
       sb.from('ordenes').select('*').order('creado_en',{ascending:false})
     ]);
-    products=(prods||[]).map(r=>({id:r.id,nombre:String(r.nombre||'').trim(),familia:String(r.familia||'SIN FAMILIA').trim(),minimo:parseFloat(r.minimo_alerta)||5,precio:parseFloat(r.precio_unitario)||0}));
+    products=(prods||[]).map(r=>({id:r.id,nombre:String(r.nombre||'').trim(),familia:String(r.familia||'SIN FAMILIA').trim(),codigo:String(r.codigo||'').trim(),minimo:parseFloat(r.minimo_alerta)||5,precio:parseFloat(r.precio_unitario)||0}));
     stockByLoc={};
     products.forEach(p=>stockByLoc[p.id]={'Bodega Central':0,'Caseta Cerrillos':0,'Rulo':0,'Paine':0});
     (stk||[]).forEach(s=>{const l=ID_UBIC[s.ubicacion_id];if(stockByLoc[s.producto_id]&&l)stockByLoc[s.producto_id][l]=parseFloat(s.cantidad)||0;});
@@ -222,7 +223,7 @@ function movsF(){const f=fundoSel();if(!f)return movimientos;const mapa={CERRILL
 function ver(v){
   vista=v;
   document.querySelectorAll('.nav a[data-v]').forEach(a=>a.classList.toggle('on',a.dataset.v===v));
-  document.getElementById('titulo').textContent=v==='dash'?'Dashboard Gerencial':v==='calendario'?'Calendario de órdenes':v==='maquinaria'?'Control de maquinaria':v==='nueva'?'Crear nueva orden':v==='costos'?'Costos por cuartel':v==='asistente'?'Asistente de Gerencia':v==='compras'?'Compras':v==='pendiente'?'Productos por aplicar':v==='realaplicado'?'Real aplicado':v==='prodcuartel'?'Producto por cuartel':'Control de órdenes';
+  document.getElementById('titulo').textContent=v==='dash'?'Dashboard Gerencial':v==='calendario'?'Calendario de órdenes':v==='maquinaria'?'Control de maquinaria':v==='nueva'?'Crear nueva orden':v==='costos'?'Costos por cuartel':v==='asistente'?'Asistente de Gerencia':v==='compras'?'Compras':v==='pendiente'?'Productos por aplicar':v==='realaplicado'?'Real aplicado':v==='prodcuartel'?'Producto por cuartel':v==='vales'?'Exportar vales al ERP':'Control de órdenes';
   render();
 }
 
@@ -253,6 +254,7 @@ function render(){
   else if(vista==='pendiente'){el.innerHTML=renderPendiente();}
   else if(vista==='realaplicado'){el.innerHTML=renderRealAplicado();}
   else if(vista==='prodcuartel'){el.innerHTML=renderProdCuartel();}
+  else if(vista==='vales'){el.innerHTML=renderVales();}
   else el.innerHTML=renderOrdenes();
   if(vista==='dash')setTimeout(buildCharts,60);
 }
@@ -1918,9 +1920,11 @@ function renderProdCuartel(){
   // Lista de productos que tienen alguna aplicación real registrada
   const conAplicacion = new Set();
   ordenesF().forEach(o=>{
-    if(String(o.estado||'').toUpperCase()!=='TERMINADA')return;
-    const ia=(o.detalle||{}).infoAplicacion;
-    if(ia&&ia.realAplicado) ia.realAplicado.forEach(r=>{ if(r.producto) conAplicacion.add(r.producto); });
+    try{
+      if(String(o.estado||'').toUpperCase()!=='TERMINADA')return;
+      const ia=(o.detalle||{}).infoAplicacion;
+      if(ia&&Array.isArray(ia.realAplicado)) ia.realAplicado.forEach(r=>{ if(r&&r.producto) conAplicacion.add(r.producto); });
+    }catch(err){}
   });
   const opciones=[...conAplicacion].sort();
 
@@ -1928,27 +1932,28 @@ function renderProdCuartel(){
   let filas=[];
   if(pcProducto){
     ordenesF().forEach(o=>{
+      try{
       if(String(o.estado||'').toUpperCase()!=='TERMINADA')return;
       const d=o.detalle||{}, ia=d.infoAplicacion;
-      if(!ia||!ia.realAplicado)return;
-      const ra=ia.realAplicado.find(r=>r.producto===pcProducto);
+      if(!ia||!Array.isArray(ia.realAplicado))return;
+      const ra=ia.realAplicado.find(r=>r&&r.producto===pcProducto);
       if(!ra)return;
       const fecha=ia.fechaTermino||d.fecha||'';
-      const cuarts=d.cuartelesFinales||d.cuarteles||[];
-      // Buscar el reparto por cuartel del producto en la orden
-      const prodPlan=(d.productos||[]).find(p=>p.nombre===pcProducto);
-      const totalHa=cuarts.reduce((s,c)=>s+(c.ha||0),0)||1;
+      const cuarts=(d.cuartelesFinales||d.cuarteles||[]).filter(c=>c&&c.c);
+      const prodPlan=(d.productos||[]).find(p=>p&&p.nombre===pcProducto);
+      const totalHa=cuarts.reduce((s,c)=>s+(parseFloat(c.ha)||0),0)||1;
       cuarts.forEach(c=>{
         let cant=null;
         if(prodPlan&&Array.isArray(prodPlan.porCuartel)){
-          const pc=prodPlan.porCuartel.find(x=>x.c===c.c);
-          if(pc) cant=pc.val;
+          const pc=prodPlan.porCuartel.find(x=>x&&x.c===c.c);
+          if(pc) cant=parseFloat(pc.val)||0;
         }
-        if(cant===null){ // repartir el real total por hectáreas
-          cant=+(ra.cantidad*(c.ha||0)/totalHa).toFixed(2);
+        if(cant===null){
+          cant=+((parseFloat(ra.cantidad)||0)*(parseFloat(c.ha)||0)/totalHa).toFixed(2);
         }
-        filas.push({cuartel:c.c, fundo:d.fundo||o.campo, fecha, cant, unidad:ra.unidad||'', orden:numOrden(o)});
+        filas.push({cuartel:c.c, fundo:d.fundo||o.campo||'', fecha, cant, unidad:ra.unidad||'', orden:numOrden(o)});
       });
+      }catch(err){ /* orden con datos incompletos, se ignora */ }
     });
     filas.sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
   }
@@ -1986,6 +1991,111 @@ function renderProdCuartel(){
       </table>
     </div>` :
     '<div class="panel" style="text-align:center;color:#80868b;max-width:700px">Este producto no tiene aplicaciones registradas en cuarteles.</div>'}`;
+}
+
+// ══════ EXPORTAR VALES AL ERP ══════
+let vDesde=null, vHasta=null;
+function renderVales(){
+  const hoyD=new Date(), hace7=new Date(); hace7.setDate(hace7.getDate()-6);
+  if(vDesde===null)vDesde=isoLocalG(hace7);
+  if(vHasta===null)vHasta=isoLocalG(hoyD);
+
+  const term = ordenes.filter(o=>{
+    if(String(o.estado||'').toUpperCase()!=='TERMINADA')return false;
+    const fin=(o.detalle?.infoAplicacion?.fechaTermino)||'';
+    return fin>=vDesde && fin<=vHasta;
+  });
+
+  return `
+  <div class="filters">
+    <div class="fbox"><label>Desde (término)</label><input type="date" id="v-desde" value="${vDesde}" onchange="vFechas()" style="border:none;font-size:13px"></div>
+    <div class="fbox"><label>Hasta (término)</label><input type="date" id="v-hasta" value="${vHasta}" onchange="vFechas()" style="border:none;font-size:13px"></div>
+  </div>
+  <div class="panel" style="max-width:700px">
+    <div style="font-size:14px;margin-bottom:6px"><b>${term.length}</b> órdenes terminadas en el rango</div>
+    <div style="font-size:12.5px;color:#80868b;margin-bottom:16px">
+      Genera el Excel en el formato del ERP: una fila por producto por cuartel. N° de vale desde el que indiques, glosa FITO-N°/HER-N°, movimiento SALIDA, sucursal 1, bodega según el fundo (B1 Cerrillos · B2 Paine · B3 Rulo).
+    </div>
+    <div class="fbox" style="max-width:220px;margin-bottom:14px">
+      <label>N° de vale inicial</label>
+      <input type="number" id="v-vale" value="1026" style="border:none;font-size:14px;font-weight:700">
+    </div>
+    <button class="btn green" onclick="exportarVales()" ${term.length?'':'disabled'}>
+      <i class="ti ti-file-spreadsheet"></i> Generar Excel de vales
+    </button>
+  </div>
+  <div class="panel" style="max-width:700px;font-size:12px;color:#80868b">
+    <b>Recuerda:</b> lleva el control de hasta qué fecha ya subiste, para no repetir órdenes en el ERP. Cada exportación toma todas las terminadas del rango elegido.
+  </div>`;
+}
+function vFechas(){
+  const d=document.getElementById('v-desde'),h=document.getElementById('v-hasta');
+  if(d&&d.value)vDesde=d.value; if(h&&h.value)vHasta=h.value;
+  if(vDesde>vHasta){const t=vDesde;vDesde=vHasta;vHasta=t;}
+  render();
+}
+function exportarVales(){
+  if(typeof XLSX==='undefined'){ alert('La librería Excel no cargó'); return; }
+  let numVale = parseInt(document.getElementById('v-vale').value)||1026;
+  const BOD_FUNDO = { 'CERRILLOS':'B1', 'PAINE':'B2', 'RULO':'B3' };
+
+  const term = ordenes.filter(o=>{
+    if(String(o.estado||'').toUpperCase()!=='TERMINADA')return false;
+    const fin=(o.detalle?.infoAplicacion?.fechaTermino)||'';
+    return fin>=vDesde && fin<=vHasta;
+  }).sort((a,b)=>{
+    const fa=a.detalle?.infoAplicacion?.fechaTermino||'', fb=b.detalle?.infoAplicacion?.fechaTermino||'';
+    return fa.localeCompare(fb);
+  });
+
+  const filas=[];
+  const sinCodigo=new Set();
+
+  term.forEach(o=>{
+    const d=o.detalle||{};
+    const ia=d.infoAplicacion||{};
+    const fechaTermino=ia.fechaTermino||d.fecha||'';
+    const fundo=(d.fundo||o.campo||'').toUpperCase();
+    const bodega=BOD_FUNDO[fundo]||'';
+    const numO = d.numeroOrden||o.idOrden;
+    const glosa = (d.tipo==='herbicida' ? 'HER-' : 'FITO-') + numO;
+    const valeDeEstaOrden = numVale;
+
+    let huboFila=false;
+    (d.productos||[]).forEach(p=>{
+      const prodObj = products.find(x=>x.nombre===p.nombre);
+      const codigo = prodObj?.codigo || '';
+      if(!codigo) sinCodigo.add(p.nombre);
+      (p.porCuartel||[]).forEach(pc=>{
+        if(!pc || !pc.val) return;
+        filas.push({
+          'NUMERO VALE':valeDeEstaOrden,
+          'FECHA VALE':fechaTermino,
+          'MOVIMIENTO':'SALIDA',
+          'TIPO VALE':'',
+          'SUCURSAL':1,
+          'GLOSAS':glosa,
+          'CODIGOS':codigo,
+          'CANTIDAD':pc.val,
+          'BODEGA':bodega
+        });
+        huboFila=true;
+      });
+    });
+    if(huboFila) numVale++;
+  });
+
+  if(!filas.length){ alert('No hay filas para exportar en este rango (¿las órdenes tienen productos con cuarteles?)'); return; }
+
+  const headers=['NUMERO VALE','FECHA VALE','MOVIMIENTO','TIPO VALE','SUCURSAL','GLOSAS','CODIGOS','CANTIDAD','BODEGA'];
+  const ws=XLSX.utils.json_to_sheet(filas,{header:headers});
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Vales');
+  XLSX.writeFile(wb,'Vales_'+vDesde+'_a_'+vHasta+'.xlsx');
+
+  if(sinCodigo.size){
+    alert('Excel generado.\n\n⚠️ OJO: estos productos no tienen código y salieron en blanco:\n\n'+[...sinCodigo].join('\n')+'\n\nAsígnales código en la base y vuelve a exportar.');
+  }
 }
 </script>
 </body>
