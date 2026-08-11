@@ -2873,6 +2873,7 @@ async function crearOrdenNueva(){
     }
   }
 
+  if(!bloquearAccion('crearOrden')){ return; } // evita doble envío / duplicados
   const okCrear=await postSheets({
     action: 'crearOrden',
     fecha: fecha || hoy(),
@@ -2885,7 +2886,8 @@ async function crearOrdenNueva(){
     obs: `Fundo: ${fundo} · Cuarteles: ${cuartelesSel.join(', ')} · ${has.toFixed(2)} ha · Mojamiento: ${mojamiento} · Lts/maq: ${ltsMaq}${obs?' · '+obs:''}`
   });
 
-  if(!okCrear){ showToast('No se pudo crear la orden. Revisa tu conexión y reintenta.','err'); return; }
+  if(!okCrear){ liberarAccion('crearOrden'); showToast('No se pudo crear la orden. Revisa tu conexión y reintenta.','err'); return; }
+  liberarAccion('crearOrden');
   showToast('Orden creada correctamente');
   ordProds = [];
   await syncData();
