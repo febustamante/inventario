@@ -2757,7 +2757,7 @@ function buildBodegaTabla(){
 
 async function crearOrdenNueva(){
   const tipoOrden = document.getElementById('ord-tipo')?.value || 'fitosanitario';
-  const numeroOrden = document.getElementById('ord-num').value.trim();
+  const numeroOrden = document.getElementById('ord-num').value.trim().toUpperCase();
   const fundo = document.getElementById('ord-fundo').value;
   const fecha = document.getElementById('ord-fecha').value;
   const has = hectareasOrden();
