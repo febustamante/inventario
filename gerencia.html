@@ -1112,7 +1112,7 @@ function renderNueva(){
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px">
       <div class="fbox"><label>Tipo de orden</label>
         <select id="n-tipo" onchange="onTipoNueva()"><option value="fitosanitario">Fitosanitario</option><option value="herbicida">Herbicida</option></select></div>
-      <div class="fbox"><label>N° orden (editable)</label><input type="number" id="n-num" style="border:none;width:100%;font-size:13.5px;font-weight:700" title="Se rellena solo, pero puedes cambiarlo para completar órdenes anteriores"></div>
+      <div class="fbox"><label>N° orden (editable)</label><input type="text" inputmode="text" id="n-num" style="border:none;width:100%;font-size:13.5px;font-weight:700" placeholder="Ej: 21 o 21B" title="Se rellena solo. Puedes agregar letra (21B) para continuar una orden"></div>
       <div class="fbox"><label>Fundo</label>
         <select id="n-fundo" onchange="onFundoNueva()"><option value="">— elegir —</option><option value="CERRILLOS">El Cerrillo</option><option value="RULO">El Rulo</option><option value="PAINE">Paine</option></select></div>
       <div class="fbox"><label>Fecha</label><input type="date" id="n-fecha" style="border:none;width:100%;font-size:13px"></div>
@@ -1216,7 +1216,7 @@ let _creandoOrden = false;
 async function guardarNueva(){
   if(_creandoOrden){ return; } // ya se está creando, evita doble envío
   const tipo=document.getElementById('n-tipo').value;
-  const numeroOrden=parseInt(document.getElementById('n-num').value)||0;
+  const numeroOrden=(document.getElementById('n-num').value||'').trim().toUpperCase();
   const fundo=document.getElementById('n-fundo').value;
   const fecha=document.getElementById('n-fecha').value;
   const pct=parseFloat(document.getElementById('n-pct').value)||100;
@@ -2119,33 +2119,25 @@ function exportarVales(){
 
   if(!filas.length){ alert('No hay filas para exportar en este rango (¿las órdenes tienen real aplicado y cuarteles?)'); return; }
 
-  // Columnas OFICIALES del ERP (en orden, sin la de verificación)
+  // Columnas OFICIALES del importador (A a R, orden exacto)
   const headers=['NUMERO VALE','FECHA VALE','MOVIMIENTO','TIPO VALE','SUCURSAL','GLOSAS','CODIGOS','CANTIDAD','BODEGA','COSTO','NUMERO OT','NUMERO OP','NUMERO LOTE','VENCIMIENTO','NUMERO SERIE','CTA CONTABLE','CENTRO COSTO','BODEGA TRASPASO'];
 
-  // 1) ARCHIVO PARA EL ERP: formato XLS (Excel 97-2003 / compatible con XLS 5.0)
-  const filasERP = filas.map(f=>{
-    const o={}; headers.forEach(h=>o[h]=f[h]); return o;
-  });
-  const ws=XLSX.utils.json_to_sheet(filasERP,{header:headers});
-  const wb=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb,ws,'Vales');
-  // bookType 'biff8' = .xls clásico (Excel 97-2003), el formato viejo que pide el ERP
-  try{
-    XLSX.writeFile(wb,'Vales_ERP_'+vDesde+'_a_'+vHasta+'.xls',{bookType:'biff8'});
-  }catch(err){
-    // si biff8 falla, intentar biff5 (Excel 5.0 exacto)
-    try{ XLSX.writeFile(wb,'Vales_ERP_'+vDesde+'_a_'+vHasta+'.xls',{bookType:'biff5'}); }
-    catch(e2){ XLSX.writeFile(wb,'Vales_ERP_'+vDesde+'_a_'+vHasta+'.xls'); }
-  }
-
-  // 2) CSV de verificación (con nombre del producto, para que Felipe revise)
   const esc=(v)=>{ let s=(v===null||v===undefined)?'':String(v); if(/[",;\n]/.test(s)) s='"'+s.replace(/"/g,'""')+'"'; return s; };
+
+  // 1) CSV para PEGAR en el importador oficial (NEW_Importador_de_Vales, clave 2026)
+  //    Columnas exactas A-R, separadas por TAB para pegado directo en Excel.
+  const escTab=(v)=>{ let s=(v===null||v===undefined)?'':String(v); return s.replace(/\t/g,' ').replace(/\n/g,' '); };
+  let tsv = headers.join('\t') + '\n';
+  filas.forEach(f=>{ tsv += headers.map(h=>escTab(f[h])).join('\t') + '\n'; });
+  descargarTexto(tsv, 'Vales_PEGAR_'+vDesde+'_a_'+vHasta+'.txt');
+
+  // 2) CSV de verificación (con nombre del producto, para revisar)
   const headersV = headers.concat(['PRODUCTO (verificación)']);
   let csvV = headersV.join(';') + '\n';
   filas.forEach(f=>{ csvV += headersV.map(h=>esc(f[h])).join(';') + '\n'; });
   descargarTexto(csvV, 'Vales_VERIFICACION_'+vDesde+'_a_'+vHasta+'.csv');
 
-  let aviso='Se generaron 2 archivos:\n\n1) Vales_ERP...XLS  → este SUBES al ERP\n2) Vales_VERIFICACION...csv  → para que revises (tiene el nombre del producto)\n\nFilas: '+filas.length;
+  let aviso='Se generaron 2 archivos:\n\n1) Vales_PEGAR...txt → ábrelo, copia TODO (sin encabezado si tu plantilla ya lo tiene) y pégalo en el importador oficial (clave 2026)\n2) Vales_VERIFICACION...csv → para revisar (tiene nombre del producto)\n\nFilas: '+filas.length;
   if(sinCodigo.size) aviso+='\n\n⚠️ Productos SIN código:\n'+[...sinCodigo].join('\n');
   if(sinCcosto.size) aviso+='\n\n⚠️ Cuarteles SIN centro de costo:\n'+[...sinCcosto].join(', ');
   alert(aviso);
