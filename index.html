@@ -2216,7 +2216,7 @@ async function doPerdida(){
 
       <div class="form-group">
         <label class="form-label">N° Orden <span style="color:var(--tx3);font-weight:400">(automático · editable para rellenar atrasadas)</span></label>
-        <input type="number" class="form-control" id="ord-num" style="font-weight:700" oninput="marcarNumEditado()">
+        <input type="text" inputmode="text" class="form-control" id="ord-num" style="font-weight:700" oninput="marcarNumEditado()" placeholder="Ej: 21 o 21B">
       </div>
 
       <div class="form-group">
