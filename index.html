@@ -3585,19 +3585,28 @@ async function completarOrdenReal(idOrden){
   limpiarBorrador(o.idOrden);
   await syncData();
 
-  // Generar el PDF completo y preparar correo a Felipe
-  if(confirm('Orden completada. ¿Generar el PDF y enviarlo por correo?')){
-    generarPDFOrden(o.idOrden);
-    setTimeout(()=>{
-      const num = o.detalle?.numeroOrden || o.idOrden;
-      const tipoTxt = o.detalle?.tipo==='herbicida' ? 'Herbicida' : 'Fitosanitario';
-      const asunto = encodeURIComponent(`Orden ${tipoTxt} N°${num} completada - ${o.detalle?.fundo||o.campo}`);
-      const cuerpo = encodeURIComponent(
-        `Estimado,\n\nSe completó la aplicación de la orden ${tipoTxt} N°${num} en ${o.detalle?.fundo||o.campo}.\n\nSe adjunta el PDF con el detalle (recuerda adjuntar el archivo que se acaba de descargar).\n\nSaludos.`
-      );
-      window.location.href = `mailto:fbustamante@agricolasanjose.cl?subject=${asunto}&body=${cuerpo}`;
-    }, 1500);
-  }
+  // CORREO AUTOMÁTICO al terminar la orden (número, producto, cuartel, real aplicado)
+  try{
+    const d = o.detalle||{};
+    const numAviso = (d.tipo==='herbicida'?'HER-':'FITO-') + (d.numeroOrden||o.idOrden);
+    const cuartsAviso = (d.cuartelesFinales||d.cuarteles||[]).filter(c=>c&&c.c);
+    const totHaAviso = cuartsAviso.reduce((s,c)=>s+(parseFloat(c.ha)||0),0) || 1;
+    const itemsAviso = [];
+    lineasDesc.forEach(ra=>{
+      cuartsAviso.forEach(c=>{
+        const val = +((parseFloat(ra.cantidad)||0)*(parseFloat(c.ha)||0)/totHaAviso).toFixed(2);
+        if(val>0) itemsAviso.push({ producto:ra.producto, cuartel:c.c, cantidad:val });
+      });
+    });
+    fetch('https://cmfvnluppvqyqwpfjrbs.supabase.co/functions/v1/aviso-orden', {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer '+SUPABASE_KEY },
+      body: JSON.stringify({ orden:numAviso, fundo:(d.fundo||o.campo||''), fecha:(d.infoAplicacion?.fechaTermino||hoy()), items:itemsAviso })
+    }).then(r=>r.json()).then(d=>console.log('aviso-orden:',d)).catch(e=>console.error('aviso-orden ERROR:',e));
+  }catch(_){ /* el correo nunca debe romper el cierre */ }
+
+  // El correo se envía automáticamente (ver arriba). El PDF se puede generar
+  // cuando se quiera desde el historial, ya no se pide aquí.
 }
 
  function abrirCompletarOrden(idOrden){
@@ -3715,6 +3724,26 @@ for (const l of lineas) {
   if(!resp){ showToast('No se pudo terminar la orden. Revisa tu conexión y reintenta.','err'); return; }
   showToast('Orden terminada correctamente');
   await syncData();
+
+  // CORREO AUTOMÁTICO al terminar (número, producto, cuartel, real aplicado)
+  try{
+    const d = o.detalle||{};
+    const numAviso = (d.tipo==='herbicida'?'HER-':'FITO-') + (d.numeroOrden||o.idOrden||idOrden);
+    const cuartsAviso = (d.cuartelesFinales||d.cuarteles||[]).filter(c=>c&&c.c);
+    const totHaAviso = cuartsAviso.reduce((s,c)=>s+(parseFloat(c.ha)||0),0) || 1;
+    const itemsAviso = [];
+    lineas.forEach(ra=>{
+      cuartsAviso.forEach(c=>{
+        const val = +((parseFloat(ra.cantidad)||0)*(parseFloat(c.ha)||0)/totHaAviso).toFixed(2);
+        if(val>0) itemsAviso.push({ producto:ra.producto, cuartel:c.c, cantidad:val });
+      });
+    });
+    fetch('https://cmfvnluppvqyqwpfjrbs.supabase.co/functions/v1/aviso-orden', {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer '+SUPABASE_KEY },
+      body: JSON.stringify({ orden:numAviso, fundo:(d.fundo||o.campo||''), fecha:(d.infoAplicacion?.fechaTermino||hoy()), items:itemsAviso })
+    }).then(r=>r.json()).then(x=>console.log('aviso-orden:',x)).catch(e=>console.error('aviso-orden ERROR:',e));
+  }catch(_){ }
 }
 
 function lineHTML(i){
