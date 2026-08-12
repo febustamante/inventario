@@ -1043,6 +1043,7 @@ function getTabs(role) {
     {k:'perdida',  icon:'ti-alert-triangle', label:'Pérdida',  roles:['maestro'],                        render:renderPerdida,     prim:false},
     {k:'orden',    icon:'ti-droplet',        label:'Aplicar',  roles:['maestro','dosificador','gerencia'], render:renderOrden,     prim:true},
     {k:'mistock',  icon:'ti-box',            label:'Mi Stock', roles:['dosificador'],                     render:renderMiStock,   prim:true},
+    {k:'pedir',    icon:'ti-shopping-cart',  label:'Pedir',    roles:['maestro','dosificador'],           render:renderPedir,     prim:false},
     {k:'historial',icon:'ti-clipboard-list', label:'Historial',roles:['maestro','bodeguero','gerencia'], render:renderHistorial,   prim:true},
     {k:'gerencia', icon:'ti-chart-bar',      label:'Gerencia', roles:['maestro','gerencia'],             render:renderGerencia,    prim:true},
     {k:'materiales',icon:'ti-tool',          label:'Materiales',roles:['maestro','bodeguero','gerencia'],render:renderMateriales,  prim:false},
@@ -1477,6 +1478,106 @@ function renderMiStock(){
         <div style="font-size:20px;font-weight:800;color:var(--vino)">${fmt(x.cant)}</div>
       </div>
     </div>`).join('') : '<div class="card" style="text-align:center;padding:30px;color:var(--tx3)">Sin productos con ese nombre</div>'}`;
+}
+
+// ══════ PEDIR PRODUCTOS AL BODEGUERO (aplicadores) ══════
+let _pedirSel = {}; // idOrden -> true si está marcada
+function togglePedir(idOrden){
+  _pedirSel[idOrden] = !_pedirSel[idOrden];
+  refresh();
+}
+function renderPedir(){
+  // Órdenes pendientes del dosificador (o todas si es maestro)
+  const esDosif = curUser.role==='dosificador';
+  const mias = ordenes.filter(o=>{
+    const est = String(o.estado||'').toUpperCase();
+    const pend = est==='EN CURSO' || est==='INICIADA';
+    if(!pend) return false;
+    if(esDosif) return String(o.dosificador).toLowerCase()===String(curUser.id).toLowerCase();
+    return true;
+  });
+
+  // Sumar el total teórico por producto de las órdenes marcadas
+  const suma = {}; // nombre -> {cant, unidad}
+  let hayMarcadas = false;
+  mias.forEach(o=>{
+    if(!_pedirSel[o.idOrden]) return;
+    hayMarcadas = true;
+    (o.detalle?.productos||[]).forEach(p=>{
+      const nec = parseFloat(p.totalTeorico)||0;
+      if(nec<=0) return;
+      if(!suma[p.nombre]) suma[p.nombre]={cant:0};
+      suma[p.nombre].cant += nec;
+    });
+  });
+
+  const listaSuma = Object.keys(suma).sort().map(n=>({nombre:n, cant:+suma[n].cant.toFixed(2)}));
+
+  return `
+  <div class="section-header">
+    <div class="section-title">Pedir productos</div>
+    <div class="section-sub">Marca las aplicaciones que vas a hacer y pide el total al bodeguero</div>
+  </div>
+
+  ${mias.length ? mias.map(o=>{
+    const d=o.detalle||{};
+    const num=(d.tipo==='herbicida'?'H':'F')+'-N°'+(d.numeroOrden||o.idOrden);
+    const marcada=!!_pedirSel[o.idOrden];
+    const prods=(d.productos||[]).map(p=>p.nombre).join(', ');
+    return `
+    <div class="card" onclick="togglePedir('${o.idOrden}')" style="padding:14px;margin-bottom:8px;cursor:pointer;border:2px solid ${marcada?'var(--vino)':'var(--bd)'};display:flex;gap:12px;align-items:flex-start">
+      <div style="width:22px;height:22px;border-radius:6px;border:2px solid ${marcada?'var(--vino)':'var(--bd2)'};background:${marcada?'var(--vino)':'#fff'};flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;margin-top:2px">${marcada?'✓':''}</div>
+      <div style="min-width:0;flex:1">
+        <div style="font-size:15px;font-weight:700">${num} · ${d.fundo||o.campo}</div>
+        <div style="font-size:12px;color:var(--tx3)">${(d.cuarteles||[]).map(c=>c.c).join(', ')}</div>
+        <div style="font-size:12.5px;color:var(--tx2);margin-top:3px">${prods}</div>
+      </div>
+    </div>`;
+  }).join('') : '<div class="card" style="text-align:center;padding:30px;color:var(--tx3)">No tienes aplicaciones pendientes.</div>'}
+
+  ${hayMarcadas ? `
+  <div class="card" style="padding:16px;margin-top:16px;background:var(--surf2);border:1px solid var(--vino)">
+    <div style="font-size:14px;font-weight:800;margin-bottom:10px;color:var(--vino)">Total a pedir</div>
+    ${listaSuma.map(x=>`
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--bd)">
+        <span style="font-size:14px">${x.nombre}</span>
+        <span style="font-size:14px;font-weight:700">${fmt(x.cant)}</span>
+      </div>`).join('')}
+    <button class="btn-primary" onclick="enviarPedidoWSP()" style="width:100%;margin-top:14px;background:#25D366;border:none">
+      <i class="ti ti-brand-whatsapp"></i> Enviar pedido por WhatsApp
+    </button>
+  </div>` : ''}`;
+}
+function enviarPedidoWSP(){
+  const esDosif = curUser.role==='dosificador';
+  const mias = ordenes.filter(o=>{
+    const est=String(o.estado||'').toUpperCase();
+    const pend=est==='EN CURSO'||est==='INICIADA';
+    if(!pend)return false;
+    if(esDosif)return String(o.dosificador).toLowerCase()===String(curUser.id).toLowerCase();
+    return true;
+  });
+  const suma={}; const fundos=new Set();
+  mias.forEach(o=>{
+    if(!_pedirSel[o.idOrden])return;
+    fundos.add(o.detalle?.fundo||o.campo||'');
+    (o.detalle?.productos||[]).forEach(p=>{
+      const nec=parseFloat(p.totalTeorico)||0;
+      if(nec<=0)return;
+      suma[p.nombre]=(suma[p.nombre]||0)+nec;
+    });
+  });
+  const lista=Object.keys(suma).sort();
+  if(!lista.length){ showToast('Marca al menos una aplicación','err'); return; }
+  const destino=[...fundos].filter(Boolean).join(', ');
+  let msg='Hola, para hoy necesito que me despachen';
+  if(destino) msg+=' a '+destino;
+  msg+=':\n';
+  lista.forEach(n=>{ msg+='\n• '+n+': '+fmt(+suma[n].toFixed(2)); });
+  msg+='\n\nGracias.';
+  // Abrir WhatsApp con el mensaje listo; el usuario elige el chat/grupo
+  const url='https://wa.me/?text='+encodeURIComponent(msg);
+  window.open(url,'_blank');
 }
 
 function renderMateriales(){
