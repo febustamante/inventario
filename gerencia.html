@@ -2119,25 +2119,17 @@ function exportarVales(){
 
   if(!filas.length){ alert('No hay filas para exportar en este rango (¿las órdenes tienen real aplicado y cuarteles?)'); return; }
 
-  // Columnas OFICIALES del importador (A a R, orden exacto)
-  const headers=['NUMERO VALE','FECHA VALE','MOVIMIENTO','TIPO VALE','SUCURSAL','GLOSAS','CODIGOS','CANTIDAD','BODEGA','COSTO','NUMERO OT','NUMERO OP','NUMERO LOTE','VENCIMIENTO','NUMERO SERIE','CTA CONTABLE','CENTRO COSTO','BODEGA TRASPASO'];
+  // Columnas OFICIALES del importador (A a R) + nombre del producto al final para verificar
+  const headers=['NUMERO VALE','FECHA VALE','MOVIMIENTO','TIPO VALE','SUCURSAL','GLOSAS','CODIGOS','CANTIDAD','BODEGA','COSTO','NUMERO OT','NUMERO OP','NUMERO LOTE','VENCIMIENTO','NUMERO SERIE','CTA CONTABLE','CENTRO COSTO','BODEGA TRASPASO','PRODUCTO (verificación)'];
 
-  const esc=(v)=>{ let s=(v===null||v===undefined)?'':String(v); if(/[",;\n]/.test(s)) s='"'+s.replace(/"/g,'""')+'"'; return s; };
+  // Un solo archivo Excel con todas las filas
+  const filasXLS = filas.map(f=>{ const o={}; headers.forEach(h=>o[h]=(f[h]===undefined?'':f[h])); return o; });
+  const ws=XLSX.utils.json_to_sheet(filasXLS,{header:headers});
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Vales');
+  XLSX.writeFile(wb,'Vales_'+vDesde+'_a_'+vHasta+'.xlsx');
 
-  // 1) CSV para PEGAR en el importador oficial (NEW_Importador_de_Vales, clave 2026)
-  //    Columnas exactas A-R, separadas por TAB para pegado directo en Excel.
-  const escTab=(v)=>{ let s=(v===null||v===undefined)?'':String(v); return s.replace(/\t/g,' ').replace(/\n/g,' '); };
-  let tsv = headers.join('\t') + '\n';
-  filas.forEach(f=>{ tsv += headers.map(h=>escTab(f[h])).join('\t') + '\n'; });
-  descargarTexto(tsv, 'Vales_PEGAR_'+vDesde+'_a_'+vHasta+'.txt');
-
-  // 2) CSV de verificación (con nombre del producto, para revisar)
-  const headersV = headers.concat(['PRODUCTO (verificación)']);
-  let csvV = headersV.join(';') + '\n';
-  filas.forEach(f=>{ csvV += headersV.map(h=>esc(f[h])).join(';') + '\n'; });
-  descargarTexto(csvV, 'Vales_VERIFICACION_'+vDesde+'_a_'+vHasta+'.csv');
-
-  let aviso='Se generaron 2 archivos:\n\n1) Vales_PEGAR...txt → ábrelo, copia TODO (sin encabezado si tu plantilla ya lo tiene) y pégalo en el importador oficial (clave 2026)\n2) Vales_VERIFICACION...csv → para revisar (tiene nombre del producto)\n\nFilas: '+filas.length;
+  let aviso='Excel generado con '+filas.length+' filas.\n\nRevisa la última columna (nombre del producto) para verificar que está todo. Luego copia las columnas A a R (sin la de verificación) y pégalas en el importador oficial (clave 2026).';
   if(sinCodigo.size) aviso+='\n\n⚠️ Productos SIN código:\n'+[...sinCodigo].join('\n');
   if(sinCcosto.size) aviso+='\n\n⚠️ Cuarteles SIN centro de costo:\n'+[...sinCcosto].join(', ');
   alert(aviso);
