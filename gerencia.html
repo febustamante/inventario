@@ -133,6 +133,7 @@
     <a data-v="realaplicado" onclick="ver('realaplicado')"><i class="ti ti-droplet-check"></i>Real aplicado</a>
     <a data-v="prodcuartel" onclick="ver('prodcuartel')"><i class="ti ti-map-search"></i>Producto x cuartel</a>
     <a data-v="vales" onclick="ver('vales')"><i class="ti ti-file-export"></i>Exportar vales</a>
+    <a data-v="traza" onclick="ver('traza')"><i class="ti ti-clipboard-list"></i>Trazabilidad</a>
     <a data-v="asistente" onclick="ver('asistente')"><i class="ti ti-message-chatbot"></i>Asistente</a>
     <a data-v="compras" onclick="ver('compras')"><i class="ti ti-shopping-cart"></i>Compras</a>
     <a data-v="calendario" onclick="ver('calendario')"><i class="ti ti-calendar"></i>Calendario</a>
@@ -197,7 +198,7 @@ async function cargar(){
       sb.from('movimientos').select('*').eq('estado','ACTIVO').order('fecha',{ascending:false}),
       sb.from('ordenes').select('*').order('creado_en',{ascending:false})
     ]);
-    products=(prods||[]).map(r=>({id:r.id,nombre:String(r.nombre||'').trim(),familia:String(r.familia||'SIN FAMILIA').trim(),codigo:String(r.codigo||'').trim(),minimo:parseFloat(r.minimo_alerta)||5,precio:parseFloat(r.precio_unitario)||0}));
+    products=(prods||[]).map(r=>({id:r.id,nombre:String(r.nombre||'').trim(),familia:String(r.familia||'SIN FAMILIA').trim(),codigo:String(r.codigo||'').trim(),ingActivo:String(r.ingrediente_activo||'').trim(),minimo:parseFloat(r.minimo_alerta)||5,precio:parseFloat(r.precio_unitario)||0}));
     stockByLoc={};
     products.forEach(p=>stockByLoc[p.id]={'Bodega Central':0,'Caseta Cerrillos':0,'Rulo':0,'Paine':0});
     (stk||[]).forEach(s=>{const l=ID_UBIC[s.ubicacion_id];if(stockByLoc[s.producto_id]&&l)stockByLoc[s.producto_id][l]=parseFloat(s.cantidad)||0;});
@@ -223,7 +224,7 @@ function movsF(){const f=fundoSel();if(!f)return movimientos;const mapa={CERRILL
 function ver(v){
   vista=v;
   document.querySelectorAll('.nav a[data-v]').forEach(a=>a.classList.toggle('on',a.dataset.v===v));
-  document.getElementById('titulo').textContent=v==='dash'?'Dashboard Gerencial':v==='calendario'?'Calendario de órdenes':v==='maquinaria'?'Control de maquinaria':v==='nueva'?'Crear nueva orden':v==='costos'?'Costos por cuartel':v==='asistente'?'Asistente de Gerencia':v==='compras'?'Compras':v==='pendiente'?'Productos por aplicar':v==='realaplicado'?'Real aplicado':v==='prodcuartel'?'Producto por cuartel':v==='vales'?'Exportar vales al ERP':'Control de órdenes';
+  document.getElementById('titulo').textContent=v==='dash'?'Dashboard Gerencial':v==='calendario'?'Calendario de órdenes':v==='maquinaria'?'Control de maquinaria':v==='nueva'?'Crear nueva orden':v==='costos'?'Costos por cuartel':v==='asistente'?'Asistente de Gerencia':v==='compras'?'Compras':v==='pendiente'?'Productos por aplicar':v==='realaplicado'?'Real aplicado':v==='prodcuartel'?'Producto por cuartel':v==='vales'?'Exportar vales al ERP':v==='traza'?'Trazabilidad (Aplic. Pesticidas)':'Control de órdenes';
   render();
 }
 
@@ -255,6 +256,7 @@ function render(){
   else if(vista==='realaplicado'){el.innerHTML=renderRealAplicado();}
   else if(vista==='prodcuartel'){el.innerHTML=renderProdCuartel();}
   else if(vista==='vales'){el.innerHTML=renderVales();}
+  else if(vista==='traza'){el.innerHTML=renderTraza();}
   else el.innerHTML=renderOrdenes();
   if(vista==='dash')setTimeout(buildCharts,60);
 }
@@ -2145,6 +2147,108 @@ function descargarTexto(contenido, nombre){
   document.body.appendChild(a); a.click();
   document.body.removeChild(a);
   setTimeout(()=>URL.revokeObjectURL(url), 1000);
+}
+
+// ══════ TRAZABILIDAD (hoja Aplic. Pesticidas) ══════
+let tDesde=null, tHasta=null;
+function renderTraza(){
+  const hoyD=new Date();
+  if(tDesde===null)tDesde='2024-01-01';
+  if(tHasta===null)tHasta=isoLocalG(hoyD);
+  const term = ordenes.filter(o=>{
+    if(String(o.estado||'').toUpperCase()!=='TERMINADA')return false;
+    const fin=(o.detalle?.infoAplicacion?.fechaTermino)||o.detalle?.fecha||(o.creado_en?isoLocalG(new Date(o.creado_en)):'');
+    if(!fin) return true;
+    return fin>=tDesde && fin<=tHasta;
+  });
+  return `
+  <div class="filters">
+    <div class="fbox"><label>Desde (término)</label><input type="date" id="t-desde" value="${tDesde}" onchange="tFechas()" style="border:none;font-size:13px"></div>
+    <div class="fbox"><label>Hasta (término)</label><input type="date" id="t-hasta" value="${tHasta}" onchange="tFechas()" style="border:none;font-size:13px"></div>
+  </div>
+  <div class="panel" style="max-width:700px">
+    <div style="font-size:14px;margin-bottom:6px"><b>${term.length}</b> órdenes terminadas en el rango</div>
+    <div style="font-size:12.5px;color:#80868b;margin-bottom:16px">
+      Genera la hoja de trazabilidad (Aplic. Pesticidas): una fila por producto, con todos los cuarteles juntos, variedad, hectáreas, fechas de inicio y término, ingrediente activo, dosis, equipo, método, tractorista, kilos totales y objetivo. Las columnas A-D quedan vacías para tus fórmulas.
+    </div>
+    <button class="btn green" onclick="exportarTraza()" ${term.length?'':'disabled'}>
+      <i class="ti ti-file-spreadsheet"></i> Generar hoja de trazabilidad
+    </button>
+  </div>`;
+}
+function tFechas(){
+  const d=document.getElementById('t-desde'),h=document.getElementById('t-hasta');
+  if(d&&d.value)tDesde=d.value; if(h&&h.value)tHasta=h.value;
+  if(tDesde>tHasta){const t=tDesde;tDesde=tHasta;tHasta=t;}
+  render();
+}
+function exportarTraza(){
+  if(typeof XLSX==='undefined'){ alert('La librería Excel no cargó'); return; }
+  const term = ordenes.filter(o=>{
+    if(String(o.estado||'').toUpperCase()!=='TERMINADA')return false;
+    // usar fechaTermino; si no hay, usar la fecha de la orden o la de creación
+    const fin=(o.detalle?.infoAplicacion?.fechaTermino)||o.detalle?.fecha||(o.creado_en?isoLocalG(new Date(o.creado_en)):'');
+    if(!fin) return true; // si no tiene ninguna fecha, incluirla igual (no perder datos)
+    return fin>=tDesde && fin<=tHasta;
+  }).sort((a,b)=>{
+    const fa=a.detalle?.infoAplicacion?.fechaInicio||a.detalle?.fecha||'', fb=b.detalle?.infoAplicacion?.fechaInicio||b.detalle?.fecha||'';
+    return fa.localeCompare(fb);
+  });
+
+  // Encabezados: A-D fórmulas (vacías), luego el resto
+  const headers=['','','','','CUARTELES','VARIEDAD','HECTAREAS','FECHA INICIO','FECHA TERMINO','PRODUCTO','ING. ACTIVO','DOSIS','UNIDAD','EQUIPO','METODO','COD. MAQUINARIA','TRACTORISTA','KILOS TOTALES','OBJETIVO'];
+  const filas=[];
+
+  term.forEach(o=>{
+    const d=o.detalle||{};
+    const ia=d.infoAplicacion||{};
+    const cuartsArr=(d.cuartelesFinales||d.cuarteles||[]).filter(c=>c&&c.c);
+    const cuartelesTxt = cuartsArr.map(c=>c.c).join(' ');
+    const totHa = +cuartsArr.reduce((s,c)=>s+(parseFloat(c.ha)||0),0).toFixed(2);
+    const variedad = d.variedad || (cuartsArr[0]&&cuartsArr[0].var) || '';
+    const fInicio = ia.fechaInicio || '';
+    const fTermino = ia.fechaTermino || d.fecha || '';
+    const equipo = d.equipo || '';
+    const metodo = d.metodo || '';
+    // Código maquinaria y tractorista: del primer equipo registrado
+    const eq0 = (ia.equipos&&ia.equipos[0]) || {};
+    const codMaq = eq0.tractor || '';
+    const tractorista = eq0.tractorista || '';
+    const objetivoOrden = d.objetivo || '';
+
+    // Una fila por PRODUCTO (real aplicado; si no hay, usa los planificados)
+    const listaProd = (ia.realAplicado && ia.realAplicado.length) ? ia.realAplicado : (d.productos||[]).map(p=>({producto:p.nombre, cantidad:p.totalTeorico}));
+    listaProd.forEach(rp=>{
+      const nombreProd = rp.producto;
+      const prodPlan = (d.productos||[]).find(p=>p.nombre===nombreProd) || {};
+      const prodObj = products.find(x=>x.nombre===nombreProd) || {};
+      const ingAct = prodObj.ingActivo || '';
+      const dosis = prodPlan.dosis100 || prodPlan.dosisHa || '';
+      const unidad = prodPlan.unidad || rp.unidad || '';
+      const kilosTot = (rp.cantidad!=null? rp.cantidad : prodPlan.totalTeorico) || '';
+      const objetivo = prodPlan.objetivo || objetivoOrden || '';
+      filas.push({
+        '':'', 'CUARTELES':cuartelesTxt, 'VARIEDAD':variedad, 'HECTAREAS':totHa,
+        'FECHA INICIO':fInicio, 'FECHA TERMINO':fTermino, 'PRODUCTO':nombreProd,
+        'ING. ACTIVO':ingAct, 'DOSIS':dosis, 'UNIDAD':unidad, 'EQUIPO':equipo,
+        'METODO':metodo, 'COD. MAQUINARIA':codMaq, 'TRACTORISTA':tractorista,
+        'KILOS TOTALES':kilosTot, 'OBJETIVO':objetivo
+      });
+    });
+  });
+
+  if(!filas.length){ alert('No hay datos para exportar en este rango.'); return; }
+
+  // Construir matriz respetando las 4 columnas vacías A-D al inicio
+  const aoa=[headers];
+  filas.forEach(f=>{
+    aoa.push(['','','','', f['CUARTELES'],f['VARIEDAD'],f['HECTAREAS'],f['FECHA INICIO'],f['FECHA TERMINO'],f['PRODUCTO'],f['ING. ACTIVO'],f['DOSIS'],f['UNIDAD'],f['EQUIPO'],f['METODO'],f['COD. MAQUINARIA'],f['TRACTORISTA'],f['KILOS TOTALES'],f['OBJETIVO']]);
+  });
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Aplic. Pesticidas');
+  XLSX.writeFile(wb,'Trazabilidad_'+tDesde+'_a_'+tHasta+'.xlsx');
+  alert('Hoja de trazabilidad generada con '+filas.length+' filas.\nLas columnas A-D quedaron vacías para tus fórmulas.');
 }
 </script>
 </body>
