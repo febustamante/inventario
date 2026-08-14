@@ -2526,7 +2526,7 @@ ${misOrdenes.length ? misOrdenes.map(o => {
       <div style="font-size:11px;color:var(--tx3);font-weight:600;margin-bottom:6px">FECHA Y HORA</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
         <div><label style="font-size:11px;color:var(--tx3)">Inicio</label><input type="date" id="ap-fi-${o.idOrden}" value="${d.inicioReal?.fecha||''}" style="font-size:12px;padding:6px;width:100%"><input type="time" id="ap-hi-${o.idOrden}" value="${d.inicioReal?.hora||''}" style="font-size:12px;padding:6px;width:100%;margin-top:4px"></div>
-        <div><label style="font-size:11px;color:var(--tx3)">Término</label><input type="date" id="ap-ft-${o.idOrden}" style="font-size:12px;padding:6px;width:100%"><input type="time" id="ap-ht-${o.idOrden}" style="font-size:12px;padding:6px;width:100%;margin-top:4px"></div>
+        <div><label style="font-size:11px;color:var(--tx3)">Término</label><div style="font-size:12px;padding:6px;background:var(--surf2);border-radius:6px;color:var(--tx3);margin-top:2px"><i class="ti ti-clock"></i> Se registra automáticamente al cerrar la orden</div></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
         <div><label style="font-size:11px;color:var(--tx3)">Lavado máquina</label><select id="ap-lav-${o.idOrden}" style="font-size:12px;padding:6px;width:100%"><option value="">—</option><option>SÍ</option><option>NO</option></select></div>
@@ -3603,8 +3603,6 @@ async function completarOrdenReal(idOrden){
   if(!lineas.some(l=>l.cantidad>0)) faltantes.push('Al menos un producto con cantidad');
   if(!g('ap-fi')) faltantes.push('Fecha inicio');
   if(!g('ap-hi')) faltantes.push('Hora inicio');
-  if(!g('ap-ft')) faltantes.push('Fecha término');
-  if(!g('ap-ht')) faltantes.push('Hora término');
   if(!g('ap-lav')) faltantes.push('Lavado de máquina');
   if(!g('ap-exc')) faltantes.push('Eliminación de excedente');
   if(!g('ap-tra1')) faltantes.push('Tractorista (Equipo 1)');
@@ -3651,9 +3649,14 @@ async function completarOrdenReal(idOrden){
   msg += `\n\n¿Confirmar?`;
   if(!confirm(msg)) return;
 
+  // Fecha y hora de término: automáticas (momento del cierre), NO editables
+  const _ahora = new Date();
+  const _fechaTerm = _ahora.getFullYear()+'-'+String(_ahora.getMonth()+1).padStart(2,'0')+'-'+String(_ahora.getDate()).padStart(2,'0');
+  const _horaTerm = String(_ahora.getHours()).padStart(2,'0')+':'+String(_ahora.getMinutes()).padStart(2,'0');
+
   // Info de la aplicacion (ya validada completa)
   const infoAplicacion = {
-    fechaInicio:g('ap-fi'), horaInicio:g('ap-hi'), fechaTermino:g('ap-ft'), horaTermino:g('ap-ht'),
+    fechaInicio:g('ap-fi'), horaInicio:g('ap-hi'), fechaTermino:_fechaTerm, horaTermino:_horaTerm,
     lavado:g('ap-lav'), excedente:g('ap-exc'),
     equipos:(()=>{
       const eqs=[];
