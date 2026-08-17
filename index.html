@@ -4302,18 +4302,34 @@ function renderGerencia(){
   })()}
 
   <div class="section-label">Órdenes por campo</div>
+  <div class="filters" style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+    <div><label style="font-size:10px;color:var(--tx3);display:block">Desde</label><input type="date" id="oc-desde" value="${window._ocDesde||''}" onchange="window._ocDesde=this.value;refresh()" style="font-size:12px;padding:5px;border:1px solid var(--bd2);border-radius:6px"></div>
+    <div><label style="font-size:10px;color:var(--tx3);display:block">Hasta</label><input type="date" id="oc-hasta" value="${window._ocHasta||''}" onchange="window._ocHasta=this.value;refresh()" style="font-size:12px;padding:5px;border:1px solid var(--bd2);border-radius:6px"></div>
+    ${(window._ocDesde||window._ocHasta)?`<button onclick="window._ocDesde='';window._ocHasta='';refresh()" style="font-size:11px;padding:5px 10px;border:1px solid var(--bd2);border-radius:6px;background:var(--surf);align-self:flex-end">✕ Limpiar</button>`:''}
+  </div>
   ${(()=>{
     if(!ordenes.length) return '<div class="card"><div class="empty-state"><div class="empty-text">Sin órdenes registradas</div></div></div>';
-    // Agrupar ordenes por campo
+    const fD=window._ocDesde||'', fH=window._ocHasta||'';
+    const hayFecha = fD||fH;
+    const fechaDe=o=>(o.detalle&&o.detalle.fecha)||o.fecha||'';
+    // Agrupar ordenes por campo (excluir consumos de esta vista)
     const porCampo={};
-    ordenes.forEach(o=>{
+    ordenes.filter(o=>(o.detalle?.tipo)!=='consumo').forEach(o=>{
       const campo = (o.detalle&&o.detalle.fundo) ? o.detalle.fundo : (o.campo||'Sin campo');
       (porCampo[campo]=porCampo[campo]||[]).push(o);
     });
     return Object.keys(porCampo).sort().map(campo=>{
-      const lista = porCampo[campo].sort((a,b)=>(b.idOrden||0)-(a.idOrden||0));
+      let lista = porCampo[campo].sort((a,b)=>(b.idOrden||0)-(a.idOrden||0));
+      const totalCampo = lista.length;
+      // Filtro de fechas
+      if(fD) lista=lista.filter(o=>{const f=fechaDe(o);return f&&f>=fD;});
+      if(fH) lista=lista.filter(o=>{const f=fechaDe(o);return f&&f<=fH;});
+      // Sin filtro de fecha: solo las últimas 5
+      let limitada=false;
+      if(!hayFecha && lista.length>5){ limitada=true; lista=lista.slice(0,5); }
       return `<div class="card" style="margin-bottom:10px">
-        <div style="font-size:13px;font-weight:700;color:var(--vino);margin-bottom:8px">📍 ${campo} <span style="color:var(--tx3);font-weight:400">(${lista.length})</span></div>
+        <div style="font-size:13px;font-weight:700;color:var(--vino);margin-bottom:8px">📍 ${campo} <span style="color:var(--tx3);font-weight:400">(${hayFecha?lista.length+' de '+totalCampo:totalCampo})</span></div>
+        ${limitada?`<div style="font-size:11px;color:var(--tx3);background:var(--surf2);border-radius:6px;padding:6px 10px;margin-bottom:8px">Mostrando las últimas 5. Usa el filtro de fechas de arriba para ver más antiguas.</div>`:''}
         ${lista.map(o=>{
           const d=o.detalle;
           const num = d&&d.numeroOrden ? d.numeroOrden : o.idOrden;
@@ -4343,7 +4359,7 @@ function renderGerencia(){
             <div style="font-size:11px;color:var(--tx2)"><strong>Productos:</strong> ${prods}</div>
             ${botones}
           </div>`;
-        }).join('')}
+        }).join('')||'<div style="font-size:12px;color:var(--tx3);padding:8px 0">Sin órdenes en ese rango de fechas</div>'}
       </div>`;
     }).join('');
   })()}
