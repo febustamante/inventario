@@ -777,7 +777,7 @@ async function postSheets(body) {
         campo_id: UBIC_ID[body.campo] || null,
         dosificador: body.dosificador || '',
         productos_txt: Array.isArray(body.productos) ? body.productos.join(', ') : (body.productos||''),
-        estado: 'EN CURSO',
+        estado: body.estado || 'EN CURSO',
         usuario_crea: body.usuario || '',
         observaciones: body.obs || '',
         detalle: body.detalle || null
@@ -1041,6 +1041,7 @@ function getTabs(role) {
     {k:'transfer', icon:'ti-arrows-exchange',label:'Despacho',    roles:['maestro','bodeguero'],            render:renderTransferir,  prim:false},
     {k:'devol',    icon:'ti-arrow-back-up',  label:'Devolución', roles:['maestro','bodeguero'],            render:renderDevolucion,  prim:false},
     {k:'perdida',  icon:'ti-alert-triangle', label:'Pérdida',  roles:['maestro'],                        render:renderPerdida,     prim:false},
+    {k:'consumo',  icon:'ti-clipboard-check',label:'Consumo',  roles:['maestro'],                        render:renderConsumo,     prim:false},
     {k:'orden',    icon:'ti-droplet',        label:'Aplicar',  roles:['maestro','dosificador','gerencia'], render:renderOrden,     prim:true},
     {k:'mistock',  icon:'ti-box',            label:'Mi Stock', roles:['dosificador'],                     render:renderMiStock,   prim:true},
     {k:'pedir',    icon:'ti-shopping-cart',  label:'Pedir',    roles:['maestro','dosificador'],           render:renderPedir,     prim:false},
@@ -2293,6 +2294,108 @@ async function doPerdida(){
   refresh();
 }
 
+// ══ CONSUMO DIRECTO (sin orden, sale en vales) ══
+const GENERAL_CCOSTO = {
+  'CERRILLOS':'10020-1', 'PAINE':'10019-1', 'RULO':'10017-1', 'LO VALDES':'10018-1'
+};
+const GENERAL_BODEGA = { 'CERRILLOS':'B1', 'PAINE':'B2', 'RULO':'B3', 'LO VALDES':'B4' };
+let _consProds = []; // [{nombre, cantidad, bodega}]
+function renderConsumo(){
+  const consumos = ordenes.filter(o=> (o.detalle?.tipo)==='consumo')
+    .sort((a,b)=> (b.idOrden||0)-(a.idOrden||0)).slice(0,8);
+  return `
+  <div class="section-header"><div class="section-title">Consumo directo</div><div class="section-sub">Descuento de producto sin orden de aplicación · sale en vales</div></div>
+  <div class="form-box">
+    <div class="form-title"><div class="form-title-icon">📋</div>Registrar consumo</div>
+    <div class="form-group"><label class="form-label">General (fundo) <span class="required">*</span></label>
+      <select class="form-control" id="cons-general">
+        <option value="">— Elegir —</option>
+        <option value="CERRILLOS">Generales Cerrillos</option>
+        <option value="PAINE">Generales Paine</option>
+        <option value="RULO">Generales Rulo</option>
+        <option value="LO VALDES">Generales Lo Valdés</option>
+      </select>
+    </div>
+    <div class="form-group"><label class="form-label">Producto <span class="required">*</span></label><select class="form-control" id="cons-prod">${prodOpts()}</select></div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Cantidad <span class="required">*</span></label><input type="number" class="form-control" id="cons-cant" min="0.01" step="0.01" placeholder="0" inputmode="decimal"/></div>
+      <div class="form-group"><label class="form-label">Bodega (descuento) <span class="required">*</span></label><select class="form-control" id="cons-bodega">${LOCS.map(l=>`<option value="${l}">${l}</option>`).join('')}</select></div>
+    </div>
+    <div class="form-group"><label class="form-label">Fecha</label><input type="date" class="form-control" id="cons-fecha" value="${hoy()}"></div>
+    <button class="btn-primary" onclick="doConsumo()">Agregar a la lista</button>
+    <div id="cons-lista" style="margin-top:12px"></div>
+    <button class="btn-primary" onclick="guardarConsumo()" id="cons-guardar" style="margin-top:12px;display:none">Registrar consumo y descontar</button>
+  </div>
+  <div class="section-label">Últimos consumos</div>
+  <div class="card">${consumos.length?consumos.map(o=>{
+    const d=o.detalle||{}; const ps=(d.productos||[]).map(x=>x.nombre).join(', ');
+    return `<div class="move-item"><div class="move-dot" style="background:var(--acc)"></div><div class="move-body"><div class="move-prod">${ps}</div><div class="move-detail">General ${d.fundo||''} · ${d.fecha||''}</div></div></div>`;
+  }).join(''):`<div class="empty-state"><div class="empty-text">Sin consumos registrados</div></div>`}</div>`;
+}
+function doConsumo(){
+  const gEl=document.getElementById('cons-general');
+  const general=gEl.value;
+  if(!general) return showToast('Elige el general (fundo)','err');
+  const pid=parseInt(document.getElementById('cons-prod').value);
+  const cant=parseFloat(document.getElementById('cons-cant').value)||0;
+  const bodega=document.getElementById('cons-bodega').value;
+  if(cant<=0) return showToast('Ingresa una cantidad válida','err');
+  const p=products.find(x=>x.id===pid);
+  const disp=stockAt(pid,bodega);
+  if(cant>disp) return showToast('Insuficiente en '+bodega+': '+fmt(disp)+' disp.','err');
+  _consProds.push({nombre:p.nombre, cantidad:cant, bodega:bodega});
+  document.getElementById('cons-cant').value='';
+  pintarConsumoLista();
+}
+function pintarConsumoLista(){
+  const cont=document.getElementById('cons-lista');
+  const btn=document.getElementById('cons-guardar');
+  if(!_consProds.length){ cont.innerHTML=''; if(btn) btn.style.display='none'; return; }
+  cont.innerHTML = _consProds.map((x,i)=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;background:var(--surf2);border-radius:6px;margin-bottom:4px"><span style="font-size:13px">${x.nombre} · ${fmt(x.cantidad)} · ${x.bodega}</span><span onclick="quitarConsumo(${i})" style="color:var(--red);cursor:pointer;font-weight:700">✕</span></div>`).join('');
+  if(btn) btn.style.display='block';
+}
+function quitarConsumo(i){ _consProds.splice(i,1); pintarConsumoLista(); }
+async function guardarConsumo(){
+  if(!bloquearAccion('consumo')){ return; }
+  const general=document.getElementById('cons-general').value;
+  const fecha=document.getElementById('cons-fecha').value||hoy();
+  if(!general || !_consProds.length){ liberarAccion('consumo'); return showToast('Faltan datos','err'); }
+
+  // 1) Descontar stock de cada producto en su bodega
+  showToast('Descontando...','info');
+  for(const it of _consProds){
+    const ok=await postSheets({action:'perdida', fecha, producto:it.nombre, cantidad:it.cantidad, origen:it.bodega, usuario:curUser.id, motivo:'Consumo directo · '+general});
+    if(!ok){ liberarAccion('consumo'); showToast('No se pudo descontar '+it.nombre+'. Revisa tu conexión.','err'); return; }
+    const pid=pidPorNombre(it.nombre); if(pid) addStock(pid,it.bodega,-it.cantidad);
+  }
+
+  // 2) Guardar como "orden" tipo consumo (para que salga en vales, NO como orden de aplicación)
+  const detalle = {
+    fundo: general, fecha, tipo:'consumo',
+    cuarteles: [{c:'GENERAL '+general, ha:1}],
+    cuartelesFinales: [{c:'GENERAL '+general, ha:1}],
+    ccostoGeneral: GENERAL_CCOSTO[general]||'',
+    bodegaVale: GENERAL_BODEGA[general]||'',
+    productos: _consProds.map(x=>({nombre:x.nombre, dosis100:0, objetivo:'Consumo directo', porCuartel:[{c:'GENERAL '+general, val:x.cantidad}], totalTeorico:x.cantidad})),
+    infoAplicacion: {
+      fechaTermino: fecha, horaTermino:'',
+      realAplicado: _consProds.map(x=>({producto:x.nombre, cantidad:x.cantidad}))
+    }
+  };
+  const okCrear=await postSheets({
+    action:'crearOrden', fecha, numeroOrden:'CONS', campo:FUNDO_UBIC[general]||general,
+    dosificador:(general||'').toLowerCase(), productos:_consProds.map(x=>x.nombre),
+    detalle, usuario:curUser.id, obs:'Consumo directo', estado:'TERMINADA'
+  });
+  if(!okCrear){ liberarAccion('consumo'); showToast('Stock descontado, pero no se registró el consumo para vales. Avisa a Felipe.','err'); return; }
+
+  // Marcar esa orden como TERMINADA para que entre en vales
+  liberarAccion('consumo');
+  showToast('Consumo registrado y descontado');
+  _consProds=[];
+  await syncData();
+}
+
 // ══ ORDENES ══
   function renderOrden(){
 
@@ -2442,6 +2545,7 @@ async function doPerdida(){
 
   const misOrdenes = ordenes.filter(o =>
   String(o.dosificador).toLowerCase() === String(curUser.id).toLowerCase() &&
+  (o.detalle?.tipo)!=='consumo' &&
   ['EN CURSO','INICIADA'].includes(String(o.estado).toUpperCase())
 );
 
@@ -2719,6 +2823,14 @@ function onProdOrdenChange(id){
     const ia = (prodObj && prodObj.ingActivo) ? prodObj.ingActivo : (typeof INGREDIENTE_ACTIVO!=='undefined' ? INGREDIENTE_ACTIVO[nombre] : '') || '';
     iaEl.textContent = ia || '—';
   }
+  // Autocompletar OBJETIVO y CARENCIA según el historial de este producto
+  if(nombre){
+    const hist = objetivoHistorial(nombre);
+    const objEl = document.getElementById('opa-obj-'+id);
+    if(objEl && !objEl.value && hist.objetivo){ objEl.value = hist.objetivo; }
+    const carEl = document.getElementById('opa-car-'+id);
+    if(carEl && !carEl.value && hist.carencia){ carEl.value = hist.carencia; }
+  }
   // Aviso tóxico
   const toxEl = document.getElementById('opa-tox-'+id);
   if(toxEl){
@@ -2726,6 +2838,25 @@ function onProdOrdenChange(id){
     else { toxEl.textContent=''; }
   }
   recalcOrden();
+}
+
+// Busca en órdenes anteriores el objetivo y carencia más usados para un producto
+function objetivoHistorial(nombreProd){
+  const objCount={}, carCount={};
+  (ordenes||[]).forEach(o=>{
+    const prods = o.detalle?.productos || [];
+    prods.forEach(p=>{
+      if(p.nombre!==nombreProd) return;
+      if(p.objetivo){ const k=String(p.objetivo).trim(); if(k) objCount[k]=(objCount[k]||0)+1; }
+      if(p.carencia){ const k=String(p.carencia).trim(); if(k) carCount[k]=(carCount[k]||0)+1; }
+    });
+  });
+  const masFrecuente = (obj)=>{
+    let best='', n=0;
+    for(const k in obj){ if(obj[k]>n){ n=obj[k]; best=k; } }
+    return best;
+  };
+  return { objetivo: masFrecuente(objCount), carencia: masFrecuente(carCount) };
 }
 
 function removeProdOrden(id){
