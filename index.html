@@ -764,9 +764,10 @@ async function postSheets(body) {
       const { error } = await sb.rpc('registrar_movimiento', {
         p_tipo:'consumo', p_producto_id:pid, p_cantidad:Number(body.cantidad)||0,
         p_origen_id:UBIC_ID[body.origen], p_destino_id:null,
-        p_usuario:body.usuario||'', p_orden_id:null, p_obs:body.motivo||''
+        p_usuario:body.usuario||'', p_orden_id:body.ordenId||null, p_obs:body.motivo||''
       });
       if (error) throw error;
+
 
     } else if (accion === 'aplicacion') {
       // body.lineas = [{producto, cantidad}]
@@ -783,7 +784,7 @@ async function postSheets(body) {
       }
 
     } else if (accion === 'crearOrden') {
-      const { error } = await sb.from('ordenes').insert({
+      const { data: insertada, error } = await sb.from('ordenes').insert({
         campo_id: UBIC_ID[body.campo] || null,
         dosificador: body.dosificador || '',
         productos_txt: Array.isArray(body.productos) ? body.productos.join(', ') : (body.productos||''),
@@ -791,8 +792,9 @@ async function postSheets(body) {
         usuario_crea: body.usuario || '',
         observaciones: body.obs || '',
         detalle: body.detalle || null
-      });
+      }).select('id').single();
       if (error) throw error;
+      if (body._devolverId) return insertada?.id || true;
 
     } else if (accion === 'cerrarOrden') {
       // Registrar cada linea como aplicacion
@@ -2348,7 +2350,15 @@ function renderConsumo(){
   <div class="section-label">Últimos consumos</div>
   <div class="card">${consumos.length?consumos.map(o=>{
     const d=o.detalle||{}; const ps=(d.productos||[]).map(x=>x.nombre).join(', ');
-    return `<div class="move-item"><div class="move-dot" style="background:var(--acc)"></div><div class="move-body"><div class="move-prod">${ps}</div><div class="move-detail">General ${d.fundo||''} · ${d.fecha||''}</div></div></div>`;
+    const anulado = String(o.estado||'').toUpperCase()==='ANULADA';
+    const destino = (d.consumoDestino==='cuartel' && d.consumoCuartel) ? d.consumoCuartel : ('General '+(d.fundo||''));
+    return `<div class="move-item" style="${anulado?'opacity:.5':''}">
+      <div class="move-dot" style="background:${anulado?'#999':'var(--acc)'}"></div>
+      <div class="move-body" style="flex:1">
+        <div class="move-prod">${ps} ${anulado?'<span style="color:var(--red);font-size:10px">(ANULADO)</span>':''}</div>
+        <div class="move-detail">${destino} · ${d.fecha||''}</div>
+        ${!anulado?`<button onclick="anularOrden('${o.idOrden}',true)" style="font-size:10px;padding:4px 10px;margin-top:4px;border:1px solid var(--red);border-radius:6px;background:var(--surf);color:var(--red)">✕ Anular (devuelve stock)</button>`:''}
+      </div></div>`;
   }).join(''):`<div class="empty-state"><div class="empty-text">Sin consumos registrados</div></div>`}</div>`;
 }
 function onConsDestinoChange(){
@@ -2402,15 +2412,7 @@ async function guardarConsumo(){
   const esCuartel = (destino==='cuartel' && cuartelSel);
   const etiqueta = esCuartel ? cuartelSel : ('GENERAL '+general);
 
-  // 1) Descontar stock de cada producto en su bodega
-  showToast('Descontando...','info');
-  for(const it of _consProds){
-    const ok=await postSheets({action:'consumo', fecha, producto:it.nombre, cantidad:it.cantidad, origen:it.bodega, usuario:curUser.id, motivo:'Consumo directo · '+etiqueta});
-    if(!ok){ liberarAccion('consumo'); showToast('No se pudo descontar '+it.nombre+'. Revisa tu conexión.','err'); return; }
-    const pid=pidPorNombre(it.nombre); if(pid) addStock(pid,it.bodega,-it.cantidad);
-  }
-
-  // 2) Guardar como "orden" tipo consumo (para que salga en vales, NO como orden de aplicación)
+  // 1) Crear PRIMERO la orden tipo consumo (para tener su id y asociar los movimientos)
   const detalle = {
     fundo: general, fecha, tipo:'consumo',
     consumoDestino: esCuartel ? 'cuartel' : 'general',
@@ -2425,14 +2427,22 @@ async function guardarConsumo(){
       realAplicado: _consProds.map(x=>({producto:x.nombre, cantidad:x.cantidad}))
     }
   };
-  const okCrear=await postSheets({
+  showToast('Registrando...','info');
+  const nuevaId = await postSheets({
     action:'crearOrden', fecha, numeroOrden:'CONS', campo:FUNDO_UBIC[general]||general,
     dosificador:(general||'').toLowerCase(), productos:_consProds.map(x=>x.nombre),
-    detalle, usuario:curUser.id, obs:'Consumo directo', estado:'TERMINADA'
+    detalle, usuario:curUser.id, obs:'Consumo directo', estado:'TERMINADA', _devolverId:true
   });
-  if(!okCrear){ liberarAccion('consumo'); showToast('Stock descontado, pero no se registró el consumo para vales. Avisa a Felipe.','err'); return; }
+  if(!nuevaId){ liberarAccion('consumo'); showToast('No se pudo registrar el consumo. Revisa tu conexión.','err'); return; }
+  const ordenId = (typeof nuevaId==='number') ? nuevaId : null;
 
-  // Marcar esa orden como TERMINADA para que entre en vales
+  // 2) Descontar stock de cada producto, asociado a la orden del consumo (para poder revertir al anular)
+  for(const it of _consProds){
+    const ok=await postSheets({action:'consumo', fecha, producto:it.nombre, cantidad:it.cantidad, origen:it.bodega, usuario:curUser.id, motivo:'Consumo directo · '+etiqueta, ordenId});
+    if(!ok){ liberarAccion('consumo'); showToast('Consumo creado pero no se pudo descontar '+it.nombre+'. Anula el consumo y reinténtalo.','err'); await syncData(); return; }
+    const pid=pidPorNombre(it.nombre); if(pid) addStock(pid,it.bodega,-it.cantidad);
+  }
+
   liberarAccion('consumo');
   showToast('Consumo registrado y descontado');
   _consProds=[];
