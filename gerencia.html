@@ -2099,7 +2099,15 @@ function exportarVales(){
       cuartsF.forEach(c=>{
         const val = +((ra.cantidad||0)*(c.ha||0)/totHa).toFixed(2);
         if(val<=0) return;
-        const ccosto = esConsumo ? (d.ccostoGeneral||'') : (CCOSTO_CUARTEL[c.c] || '');
+        // Centro de costo del consumo: si es de cuartel específico usa el del cuartel; si es general usa el general
+        let ccosto;
+        if(esConsumo){
+          ccosto = (d.consumoDestino==='cuartel' && d.consumoCuartel)
+            ? (CCOSTO_CUARTEL[d.consumoCuartel] || d.ccostoGeneral || '')
+            : (d.ccostoGeneral||'');
+        } else {
+          ccosto = CCOSTO_CUARTEL[c.c] || '';
+        }
         if(!ccosto && !esConsumo) sinCcosto.add(c.c);
         filas.push({
           'NUMERO VALE':valeDeEstaOrden,
