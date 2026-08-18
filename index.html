@@ -2307,14 +2307,23 @@ function renderConsumo(){
   <div class="section-header"><div class="section-title">Consumo directo</div><div class="section-sub">Descuento de producto sin orden de aplicación · sale en vales</div></div>
   <div class="form-box">
     <div class="form-title"><div class="form-title-icon">📋</div>Registrar consumo</div>
-    <div class="form-group"><label class="form-label">General (fundo) <span class="required">*</span></label>
-      <select class="form-control" id="cons-general">
+    <div class="form-group"><label class="form-label">Fundo <span class="required">*</span></label>
+      <select class="form-control" id="cons-general" onchange="onConsFundoChange()">
         <option value="">— Elegir —</option>
-        <option value="CERRILLOS">Generales Cerrillos</option>
-        <option value="PAINE">Generales Paine</option>
-        <option value="RULO">Generales Rulo</option>
-        <option value="LO VALDES">Generales Lo Valdés</option>
+        <option value="CERRILLOS">Cerrillos</option>
+        <option value="PAINE">Paine</option>
+        <option value="RULO">Rulo</option>
+        <option value="LO VALDES">Lo Valdés</option>
       </select>
+    </div>
+    <div class="form-group"><label class="form-label">Destino <span class="required">*</span></label>
+      <select class="form-control" id="cons-destino" onchange="onConsDestinoChange()">
+        <option value="general">General del fundo</option>
+        <option value="cuartel">Cuartel específico</option>
+      </select>
+    </div>
+    <div class="form-group" id="cons-cuartel-wrap" style="display:none"><label class="form-label">Cuartel <span class="required">*</span></label>
+      <select class="form-control" id="cons-cuartel"><option value="">— Elegir fundo primero —</option></select>
     </div>
     <div class="form-group"><label class="form-label">Producto <span class="required">*</span></label><select class="form-control" id="cons-prod">${prodOpts()}</select></div>
     <div class="form-row">
@@ -2331,6 +2340,22 @@ function renderConsumo(){
     const d=o.detalle||{}; const ps=(d.productos||[]).map(x=>x.nombre).join(', ');
     return `<div class="move-item"><div class="move-dot" style="background:var(--acc)"></div><div class="move-body"><div class="move-prod">${ps}</div><div class="move-detail">General ${d.fundo||''} · ${d.fecha||''}</div></div></div>`;
   }).join(''):`<div class="empty-state"><div class="empty-text">Sin consumos registrados</div></div>`}</div>`;
+}
+function onConsDestinoChange(){
+  const dest=document.getElementById('cons-destino').value;
+  document.getElementById('cons-cuartel-wrap').style.display = (dest==='cuartel')?'block':'none';
+  onConsFundoChange();
+}
+function onConsFundoChange(){
+  const fundo=document.getElementById('cons-general').value;
+  const dest=document.getElementById('cons-destino')?.value;
+  const sel=document.getElementById('cons-cuartel');
+  if(!sel) return;
+  if(dest==='cuartel' && fundo && CUARTELES[fundo]){
+    sel.innerHTML='<option value="">— Elegir cuartel —</option>'+CUARTELES[fundo].map(q=>`<option value="${q.c}">${q.c} · ${q.var||''} (${q.ha} ha)</option>`).join('');
+  } else {
+    sel.innerHTML='<option value="">— Elegir fundo primero —</option>';
+  }
 }
 function doConsumo(){
   const gEl=document.getElementById('cons-general');
@@ -2358,13 +2383,19 @@ function quitarConsumo(i){ _consProds.splice(i,1); pintarConsumoLista(); }
 async function guardarConsumo(){
   if(!bloquearAccion('consumo')){ return; }
   const general=document.getElementById('cons-general').value;
+  const destino=document.getElementById('cons-destino').value;
+  const cuartelSel=document.getElementById('cons-cuartel')?.value||'';
   const fecha=document.getElementById('cons-fecha').value||isoLocal(new Date());
   if(!general || !_consProds.length){ liberarAccion('consumo'); return showToast('Faltan datos','err'); }
+  if(destino==='cuartel' && !cuartelSel){ liberarAccion('consumo'); return showToast('Elige el cuartel','err'); }
+
+  const esCuartel = (destino==='cuartel' && cuartelSel);
+  const etiqueta = esCuartel ? cuartelSel : ('GENERAL '+general);
 
   // 1) Descontar stock de cada producto en su bodega
   showToast('Descontando...','info');
   for(const it of _consProds){
-    const ok=await postSheets({action:'perdida', fecha, producto:it.nombre, cantidad:it.cantidad, origen:it.bodega, usuario:curUser.id, motivo:'Consumo directo · '+general});
+    const ok=await postSheets({action:'perdida', fecha, producto:it.nombre, cantidad:it.cantidad, origen:it.bodega, usuario:curUser.id, motivo:'Consumo directo · '+etiqueta});
     if(!ok){ liberarAccion('consumo'); showToast('No se pudo descontar '+it.nombre+'. Revisa tu conexión.','err'); return; }
     const pid=pidPorNombre(it.nombre); if(pid) addStock(pid,it.bodega,-it.cantidad);
   }
@@ -2372,11 +2403,13 @@ async function guardarConsumo(){
   // 2) Guardar como "orden" tipo consumo (para que salga en vales, NO como orden de aplicación)
   const detalle = {
     fundo: general, fecha, tipo:'consumo',
-    cuarteles: [{c:'GENERAL '+general, ha:1}],
-    cuartelesFinales: [{c:'GENERAL '+general, ha:1}],
+    consumoDestino: esCuartel ? 'cuartel' : 'general',
+    consumoCuartel: esCuartel ? cuartelSel : '',
+    cuarteles: [{c:etiqueta, ha:1}],
+    cuartelesFinales: [{c:etiqueta, ha:1}],
     ccostoGeneral: GENERAL_CCOSTO[general]||'',
     bodegaVale: GENERAL_BODEGA[general]||'',
-    productos: _consProds.map(x=>({nombre:x.nombre, dosis100:0, objetivo:'Consumo directo', porCuartel:[{c:'GENERAL '+general, val:x.cantidad}], totalTeorico:x.cantidad})),
+    productos: _consProds.map(x=>({nombre:x.nombre, dosis100:0, objetivo:'Consumo directo', porCuartel:[{c:etiqueta, val:x.cantidad}], totalTeorico:x.cantidad})),
     infoAplicacion: {
       fechaTermino: fecha, horaTermino:'',
       realAplicado: _consProds.map(x=>({producto:x.nombre, cantidad:x.cantidad}))
@@ -3263,9 +3296,9 @@ function exportarRespaldo(){
     });
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aplRows), 'APLICACIONES');
 
-    // Hoja PERDIDAS (mermas con valor en dinero)
+    // Hoja PERDIDAS (mermas reales con valor en dinero, excluye consumos directos)
     const perRows = [['FECHA','PRODUCTO','CANTIDAD','PRECIO_UNIT','TOTAL_$','UBICACION','MOTIVO','USUARIO']];
-    (movimientos||[]).filter(m=>m.tipo==='perdida').forEach(m=>{
+    (movimientos||[]).filter(m=>m.tipo==='perdida' && !String(m.obs||'').startsWith('Consumo directo')).forEach(m=>{
       const p = products.find(x=>x.nombre===m.producto);
       const precio = p ? (p.precio||0) : 0;
       perRows.push([m.fecha||'', m.producto||'', m.cantidad||0,
@@ -3273,9 +3306,9 @@ function exportarRespaldo(){
     });
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(perRows), 'PERDIDAS');
 
-    // Hoja ORDENES
+    // Hoja ORDENES (excluye consumos directos)
     const ordRows = [['N°','FECHA','CAMPO','CUARTELES','PRODUCTOS','ESTADO','HECTAREAS']];
-    (ordenes||[]).forEach(o=>{
+    (ordenes||[]).filter(o=>(o.detalle?.tipo)!=='consumo').forEach(o=>{
       const d=o.detalle||{};
       ordRows.push([d.numeroOrden||o.idOrden, d.fecha||'', d.fundo||o.campo||'',
         (d.cuarteles||[]).map(c=>c.c).join(', '),
@@ -3283,6 +3316,18 @@ function exportarRespaldo(){
         o.estado||'', d.hectareas||0]);
     });
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(ordRows), 'ORDENES');
+
+    // Hoja CONSUMOS (consumos directos sin orden, a general o cuartel)
+    const consRows = [['FECHA','FUNDO','DESTINO','PRODUCTO','CANTIDAD','CENTRO_COSTO','BODEGA_VALE']];
+    (ordenes||[]).filter(o=>(o.detalle?.tipo)==='consumo').forEach(o=>{
+      const d=o.detalle||{};
+      const destino = (d.consumoDestino==='cuartel' && d.consumoCuartel) ? d.consumoCuartel : ('GENERAL '+(d.fundo||''));
+      (d.productos||[]).forEach(p=>{
+        consRows.push([d.fecha||'', d.fundo||'', destino, p.nombre||'', p.totalTeorico||0,
+          d.ccostoGeneral||'', d.bodegaVale||'']);
+      });
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(consRows), 'CONSUMOS');
 
     const hoy = new Date().toISOString().slice(0,10);
     XLSX.writeFile(wb, 'Respaldo_SanJose_'+hoy+'.xlsx');
