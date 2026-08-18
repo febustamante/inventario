@@ -270,7 +270,7 @@ function fmtFecha(f){if(!f)return '—';const[a,m,d]=f.split('-');return d+'/'+m
 function analitica(){
   const ordenes=ordenesF(), movimientos=movsF();
   const term=ordenes.filter(o=>o.estado==='TERMINADA');
-  const apls=movimientos.filter(m=>m.tipo==='aplicacion');
+  const apls=movimientos.filter(m=>m.tipo==='aplicacion'||m.tipo==='consumo');
   const precio=n=>{const p=products.find(x=>x.nombre===n);return p?p.precio:0;};
 
   // Costo aplicado por campo y hectáreas por campo → $/ha
@@ -490,7 +490,7 @@ function buildCharts(){
   if(ley)ley.innerHTML='<div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8B867D;margin-bottom:6px">Valor por familia</div>'+top4.map((f,i)=>`<div style="display:flex;justify-content:space-between;padding:3px 0"><span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${colores[i]};margin-right:6px"></span>${f[0]}</span><b class="num">${plata(f[1])}</b></div>`).join('');
 
   const meses={};
-  movimientos.filter(m=>m.tipo==='aplicacion').forEach(m=>{
+  movimientos.filter(m=>m.tipo==='aplicacion'||m.tipo==='consumo').forEach(m=>{
     if(!m.fechaRaw)return;
     const d=new Date(m.fechaRaw);const k=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
     const p=products.find(x=>x.nombre===m.producto);
