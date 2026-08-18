@@ -758,6 +758,16 @@ async function postSheets(body) {
       });
       if (error) throw error;
 
+    } else if (accion === 'consumo') {
+      const pid = pidPorNombre(body.producto);
+      if (!pid) throw new Error('Producto no encontrado: ' + body.producto);
+      const { error } = await sb.rpc('registrar_movimiento', {
+        p_tipo:'consumo', p_producto_id:pid, p_cantidad:Number(body.cantidad)||0,
+        p_origen_id:UBIC_ID[body.origen], p_destino_id:null,
+        p_usuario:body.usuario||'', p_orden_id:null, p_obs:body.motivo||''
+      });
+      if (error) throw error;
+
     } else if (accion === 'aplicacion') {
       // body.lineas = [{producto, cantidad}]
       const lineas = body.lineas || [];
@@ -2395,7 +2405,7 @@ async function guardarConsumo(){
   // 1) Descontar stock de cada producto en su bodega
   showToast('Descontando...','info');
   for(const it of _consProds){
-    const ok=await postSheets({action:'perdida', fecha, producto:it.nombre, cantidad:it.cantidad, origen:it.bodega, usuario:curUser.id, motivo:'Consumo directo · '+etiqueta});
+    const ok=await postSheets({action:'consumo', fecha, producto:it.nombre, cantidad:it.cantidad, origen:it.bodega, usuario:curUser.id, motivo:'Consumo directo · '+etiqueta});
     if(!ok){ liberarAccion('consumo'); showToast('No se pudo descontar '+it.nombre+'. Revisa tu conexión.','err'); return; }
     const pid=pidPorNombre(it.nombre); if(pid) addStock(pid,it.bodega,-it.cantidad);
   }
@@ -4488,6 +4498,7 @@ function hojaPorTipo(tipo){
   if(tipo === 'entrada') return 'ENTRADAS';
   if(tipo === 'transferencia') return 'SALIDAS';
   if(tipo === 'aplicacion') return 'APLICACIONES';
+  if(tipo === 'consumo') return 'APLICACIONES';
   if(tipo === 'devolucion') return 'DEVOLUCIONES';
 
   return '';
