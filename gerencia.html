@@ -219,6 +219,8 @@ function totalStock(pid){const s=stockByLoc[pid]||{};return Object.values(s).red
 
 function fundoSel(){return document.getElementById('fundo-global')?.value||'';}
 function ordenesF(){const f=fundoSel();const base=ordenes.filter(o=>(o.detalle?.tipo)!=='consumo');return f?base.filter(o=>String(o.detalle?.fundo||'').toUpperCase().includes(f)):base;}
+// Igual que ordenesF pero INCLUYE los consumos (para vistas de aplicación real: producto x cuartel, real aplicado)
+function ordenesConConsumo(){const f=fundoSel();return f?ordenes.filter(o=>String(o.detalle?.fundo||'').toUpperCase().includes(f)):ordenes;}
 function movsF(){const f=fundoSel();if(!f)return movimientos;const mapa={CERRILLOS:'Caseta Cerrillos',RULO:'Rulo',PAINE:'Paine'};const c=mapa[f];return movimientos.filter(m=>m.origen===c||m.destino===c);}
 
 function ver(v){
@@ -1548,7 +1550,7 @@ function asisResponder(key){
 function asisCostoCuartel(){
   const precio=n=>{const p=products.find(x=>x.nombre===n);return p?p.precio:0;};
   const cc={};
-  ordenesF().filter(o=>o.estado==='TERMINADA').forEach(o=>{
+  ordenesConConsumo().filter(o=>o.estado==='TERMINADA').forEach(o=>{
     const d=o.detalle||{},ia=d.infoAplicacion;
     if(!ia||!ia.realAplicado)return;
     const cuarts=(d.cuartelesFinales||d.cuarteles||[]);
@@ -1840,7 +1842,7 @@ function renderRealAplicado(){
   if(raDesde===null)raDesde=isoLocalG(hace30);
   if(raHasta===null)raHasta=isoLocalG(hoyD);
 
-  const terminadas = ordenesF().filter(o=>{
+  const terminadas = ordenesConConsumo().filter(o=>{
     if(String(o.estado||'').toUpperCase()!=='TERMINADA')return false;
     const d=o.detalle||{}, ia=d.infoAplicacion;
     const fin=(ia&&ia.fechaTermino)||'';
@@ -1930,7 +1932,7 @@ let pcProducto='';
 function renderProdCuartel(){
   // Lista de productos que tienen alguna aplicación real registrada
   const conAplicacion = new Set();
-  ordenesF().forEach(o=>{
+  ordenesConConsumo().forEach(o=>{
     try{
       if(String(o.estado||'').toUpperCase()!=='TERMINADA')return;
       const ia=(o.detalle||{}).infoAplicacion;
@@ -1942,7 +1944,7 @@ function renderProdCuartel(){
   // Recolectar aplicaciones del producto elegido, por cuartel
   let filas=[];
   if(pcProducto){
-    ordenesF().forEach(o=>{
+    ordenesConConsumo().forEach(o=>{
       try{
       if(String(o.estado||'').toUpperCase()!=='TERMINADA')return;
       const d=o.detalle||{}, ia=d.infoAplicacion;
