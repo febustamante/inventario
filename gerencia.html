@@ -220,6 +220,14 @@ function totalStock(pid){const s=stockByLoc[pid]||{};return Object.values(s).red
 function fundoSel(){return document.getElementById('fundo-global')?.value||'';}
 function ordenesF(){const f=fundoSel();const base=ordenes.filter(o=>(o.detalle?.tipo)!=='consumo');return f?base.filter(o=>String(o.detalle?.fundo||'').toUpperCase().includes(f)):base;}
 // Igual que ordenesF pero INCLUYE los consumos (para vistas de aplicación real: producto x cuartel, real aplicado)
+// Texto corto de cuarteles para pantalla. Una orden general del fundo se resume
+// (no se listan los 47 códigos). Los exports y la trazabilidad sí llevan la lista completa.
+function textoCuartelesG(d){
+  if(!d) return '—';
+  const lista=(d.cuartelesFinales||d.cuarteles||[]).filter(c=>c&&c.c);
+  if(d.destino==='general') return 'GENERAL '+(d.fundo||'')+' · '+lista.length+' cuarteles';
+  return lista.length ? lista.map(c=>c.c).join(', ') : '—';
+}
 function ordenesConConsumo(){const f=fundoSel();return f?ordenes.filter(o=>String(o.detalle?.fundo||'').toUpperCase().includes(f)):ordenes;}
 function movsF(){const f=fundoSel();if(!f)return movimientos;const mapa={CERRILLOS:'Caseta Cerrillos',RULO:'Rulo',PAINE:'Paine'};const c=mapa[f];return movimientos.filter(m=>m.origen===c||m.destino===c);}
 
@@ -307,7 +315,7 @@ function analitica(){
     if(!maxCar)return;
     const hasta=sumaDias(fin,maxCar);
     const rest=diasEntre(hoyISO(),hasta);
-    if(rest>=0)carencias.push({orden:numOrden(o),cuarteles:(d.cuartelesFinales||d.cuarteles||[]).map(c=>c.c).join(', '),fundo:d.fundo||o.campo,hasta,rest,dias:maxCar});
+    if(rest>=0)carencias.push({orden:numOrden(o),cuarteles:textoCuartelesG(d),fundo:d.fundo||o.campo,hasta,rest,dias:maxCar});
   });
   carencias.sort((a,b)=>a.rest-b.rest);
 
@@ -556,7 +564,7 @@ function renderOrdenes(){
     <div class="ord-num"><span class="dot" style="background:${dotCol[o.estado]||'#999'}"></span><b class="num">${numOrden(o)}</b></div>
     <div class="ord-mid">
       <div class="t">${d.tipo==='herbicida'?'Herbicida':'Fitosanitario'} · ${d.fundo||o.campo}</div>
-      <div class="s">${(d.productos||[]).map(p=>p.nombre).join(', ')||'—'} &nbsp;·&nbsp; ${(d.cuarteles||[]).map(c=>c.c).join(', ')} · ${d.hectareas||'?'} ha · ${o.dosificador||''}</div>
+      <div class="s">${(d.productos||[]).map(p=>p.nombre).join(', ')||'—'} &nbsp;·&nbsp; ${textoCuartelesG(d)} · ${d.hectareas||'?'} ha · ${o.dosificador||''}</div>
     </div>
     <div class="ord-right">
       ${pasos(o)}
@@ -712,7 +720,7 @@ function renderCalSemana(){
           ${ords.map(o=>{const dt=o.detalle||{};const col=colEst[o.estado]||'#999';
             return `<div onclick="verOrdenDesde('${o.idOrden}')" style="border:1px solid #e6e6e6;border-left:3px solid ${col};border-radius:6px;padding:6px 7px;cursor:pointer;font-size:10.5px;line-height:1.35">
               <div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:11px">${numOrden(o)}</b><span style="width:8px;height:8px;border-radius:50%;background:${col}"></span></div>
-              <div style="color:#3c4043;font-weight:600">${(dt.cuarteles||[]).map(c=>c.c).join(', ')||'—'}</div>
+              <div style="color:#3c4043;font-weight:600">${textoCuartelesG(dt)}</div>
               <div style="color:#80868b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${(dt.productos||[]).map(p=>p.nombre).join(', ')||''}</div>
               <div style="color:#80868b;font-size:9.5px">${dt.hectareas||'?'} ha${dt.totalLitros?' · '+dt.totalLitros+' L':''}</div>
             </div>`;
@@ -832,7 +840,7 @@ function generarPDFOrden(idOrden){
   kv('Fundo',d.fundo,L,y); kv('% Superficie',(d.pct||100)+'%',R,y); y+=6;
   kv('Especie',d.especie||'Uva de Mesa',L,y); kv('Mojamiento (lts/há)',d.mojamiento,R,y); y+=6;
   kv('Variedad',d.variedad,L,y); kv('Lts o Kg / máquina',d.ltsMaq,R,y); y+=6;
-  kv('Cuartel(es)',(d.cuarteles||[]).map(c=>c.c).join(', '),L,y); kv('Total litros a aplic.', (d.totalLitros!=null?d.totalLitros:((d.hectareas||0)*(d.mojamiento||0)).toFixed(2)), R, y); y+=6;
+  kv('Cuartel(es)', (d.destino==='general') ? ('GENERAL '+(d.fundo||'')+' ('+(d.cuarteles||[]).length+' cuarteles)') : (d.cuarteles||[]).map(c=>c.c).join(', '),L,y); kv('Total litros a aplic.', (d.totalLitros!=null?d.totalLitros:((d.hectareas||0)*(d.mojamiento||0)).toFixed(2)), R, y); y+=6;
   kv('Fecha',d.fecha,L,y); kv('Equipo a usar',d.equipo,R,y); y+=6;
   kv('Método',d.metodo,R,y); y+=9;
 
@@ -869,7 +877,7 @@ function generarPDFOrden(idOrden){
 
   // ── PARA BODEGA ──
   seccion('Para bodega — Real aplicado por cuartel');
-  const cuarts=(d.cuarteles||[]).slice(0,5);
+  const cuarts=(d.destino==='general') ? [{c:'GENERAL '+(d.fundo||''), ha:(d.hectareas||0)}] : (d.cuarteles||[]).slice(0,5);
   const bh=['Producto','Real Aplic.',...cuarts.map(c=>c.c),'Total'];
   const bw=(W-20)/bh.length;
   doc.setFillColor(...VINO); doc.setTextColor(255,255,255); doc.rect(10,y,W-20,5,'F'); doc.setFontSize(6.5); doc.setFont('helvetica','bold');
@@ -881,7 +889,11 @@ function generarPDFOrden(idOrden){
     if(ia&&ia.realAplicado){ const f=ia.realAplicado.find(x=>x.producto===p.nombre); if(f) ra=f.cantidad; }
     doc.text(String(p.nombre).substring(0,16),11,y+3.4);
     doc.setFont('helvetica','bold'); doc.text(String(ra||'—'),10+bw+1,y+3.4); doc.setFont('helvetica','normal');
-    (p.porCuartel||[]).slice(0,5).forEach((pc,j)=>doc.text(pc.val.toFixed(2),10+bw*(j+2)+1,y+3.4));
+    if(d.destino==='general'){
+      doc.text((p.totalTeorico||0).toFixed(2),10+bw*2+1,y+3.4);
+    } else {
+      (p.porCuartel||[]).slice(0,5).forEach((pc,j)=>doc.text(pc.val.toFixed(2),10+bw*(j+2)+1,y+3.4));
+    }
     doc.setFont('helvetica','bold'); doc.text(String((p.totalTeorico||0).toFixed(2)),10+bw*(bh.length-1)+1,y+3.4); doc.setFont('helvetica','normal');
     doc.setDrawColor(220,220,220); doc.rect(10,y,W-20,5); y+=5;
   });
@@ -949,12 +961,17 @@ function generarPDFOrden(idOrden){
     let y2 = 14;
     doc.setFillColor(...VINO); doc.rect(0,0,W,16,'F');
     doc.setTextColor(255,255,255); doc.setFontSize(11); doc.setFont('helvetica','bold');
-    doc.text('CONSUMO REAL POR CUARTEL — Orden N°'+(d.numeroOrden||o.idOrden), W/2, 10, {align:'center'});
+    const esGenPdf = (d.destino==='general');
+    doc.text((esGenPdf?'CONSUMO REAL — GENERAL DEL FUNDO':'CONSUMO REAL POR CUARTEL')+' — Orden N°'+(d.numeroOrden||o.idOrden), W/2, 10, {align:'center'});
     y2 = 24;
     doc.setTextColor(...TX); doc.setFontSize(8); doc.setFont('helvetica','normal');
-    doc.text('Reparto del consumo real de cada producto entre los cuarteles, proporcional a sus hectáreas.', 10, y2); y2+=7;
+    doc.text(esGenPdf
+      ? 'Aplicación general del fundo: el consumo real se carga al general, no se reparte por cuartel.'
+      : 'Reparto del consumo real de cada producto entre los cuarteles, proporcional a sus hectáreas.', 10, y2); y2+=7;
 
-    const cuartsF = (d.cuartelesFinales||d.cuarteles||[]);
+    const cuartsF = esGenPdf
+      ? [{c:'GENERAL '+(d.fundo||''), ha:(d.hectareas||0)}]
+      : (d.cuartelesFinales||d.cuarteles||[]);
     const totHa = cuartsF.reduce((s,c)=>s+(c.ha||0),0) || 1;
     const bh2=['Producto','Real Total',...cuartsF.map(c=>c.c)];
     const bw2=(W-20)/bh2.length;
@@ -1332,6 +1349,14 @@ function renderCostos(){
     const totHa=cuarts.reduce((s,c)=>s+(c.ha||0),0)||1;
     ia.realAplicado.forEach(ra=>{
       const valorTotal=ra.cantidad*precio(ra.producto);
+      // Orden general del fundo: se carga al general, no se reparte entre los cuarteles
+      if(d.destino==='general'){
+        const clave='GENERAL '+(d.fundo||o.campo||'');
+        if(!costoCuartel[clave])costoCuartel[clave]={costo:0,ha:(d.hectareas||totHa||0),campo:(d.fundo||o.campo||''),variedad:'GENERAL',estado:'—',ordenes:new Set()};
+        costoCuartel[clave].costo+=valorTotal;
+        costoCuartel[clave].ordenes.add(o.idOrden);
+        return;
+      }
       cuarts.forEach(c=>{
         const info=CUARTEL_INFO[c.c]||{campo:(d.fundo||o.campo),variedad:'—',ha:c.ha,estado:'—'};
         const parte=valorTotal*(c.ha||0)/totHa;
@@ -1910,7 +1935,7 @@ function renderRealAplicado(){
         <b>${numOrden(o)}</b>
         <span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:11px;background:${d.tipo==='herbicida'?'#e8f0fb':'#f0e8f5'};color:${d.tipo==='herbicida'?'#1a4a8a':'#6E2430'}">${d.tipo==='herbicida'?'Herbicida':'Fito'}</span>
       </div>
-      <div style="font-size:12px;color:#80868b;margin-bottom:6px">${d.fundo||o.campo} · ${(d.cuarteles||[]).map(c=>c.c).join(', ')} · Terminada ${(ia.fechaTermino||'').split('-').reverse().join('/')} ${ia.horaTermino||''}</div>
+      <div style="font-size:12px;color:#80868b;margin-bottom:6px">${d.fundo||o.campo} · ${textoCuartelesG(d)} · Terminada ${(ia.fechaTermino||'').split('-').reverse().join('/')} ${ia.horaTermino||''}</div>
       <div style="font-size:12.5px;color:#3c4043">${reales||'<i style="color:#80868b">Sin detalle de real</i>'}</div>
     </div>`;
   }).join(''):'<div class="panel" style="text-align:center;color:#80868b;max-width:900px">Sin órdenes terminadas en este rango</div>'}`;
@@ -1955,6 +1980,12 @@ function renderProdCuartel(){
       const cuarts=(d.cuartelesFinales||d.cuarteles||[]).filter(c=>c&&c.c);
       const prodPlan=(d.productos||[]).find(p=>p&&p.nombre===pcProducto);
       const totalHa=cuarts.reduce((s,c)=>s+(parseFloat(c.ha)||0),0)||1;
+      // Orden general del fundo: una sola línea al general, no una por cuartel
+      if(d.destino==='general'){
+        filas.push({cuartel:'GENERAL '+(d.fundo||o.campo||''), fundo:d.fundo||o.campo||'', fecha,
+          cant:+(parseFloat(ra.cantidad)||0).toFixed(2), unidad:ra.unidad||'', orden:numOrden(o)});
+        return;
+      }
       cuarts.forEach(c=>{
         let cant=null;
         if(prodPlan&&Array.isArray(prodPlan.porCuartel)){
@@ -2052,6 +2083,8 @@ function exportarVales(){
   if(typeof XLSX==='undefined'){ alert('La librería Excel no cargó'); return; }
   let numVale = parseInt(document.getElementById('v-vale').value)||1026;
   const BOD_FUNDO = { 'CERRILLOS':'B1', 'PAINE':'B2', 'RULO':'B3' };
+  // Centro de costo general de cada fundo (respaldo si la orden no lo trae guardado)
+  const CCOSTO_GENERAL = { 'CERRILLOS':'10020-1', 'PAINE':'10019-1', 'RULO':'10017-1', 'LO VALDES':'10018-1' };
   // Centro de costo por cuartel (código del ERP)
   const CCOSTO_CUARTEL = {'A03':'10017-10','A04':'10017-11','A05':'10017-12','A06':'10017-13','A07':'10017-14','A08':'10017-15','A09':'10017-16','A10':'10017-17','A11':'10017-18','R01':'10017-2','R02':'10017-3','R03':'10017-4','R04':'10017-5','R05':'10017-6','R06':'10017-7','A01':'10017-8','A02':'10017-9','V01':'10018-2','V02':'10018-3','V03':'10018-4','V04':'10018-5','V05':'10018-6','V06':'10018-7','V07':'10018-8','V08':'10018-9','P12':'10019-10','P13':'10019-11','P14':'10019-12','P15':'10019-13','P16':'10019-14','P17':'10019-15','P18':'10019-16','P01':'10019-2','P02':'10019-3','P03':'10019-4','P04':'10019-5','P05':'10019-6','P06':'10019-7','P07':'10019-8','P11':'10019-9','C09':'10020-10','C10':'10020-11','C11':'10020-12','C12':'10020-13','C13':'10020-14','C14':'10020-15','C15':'10020-16','C16':'10020-17','C17':'10020-18','C18':'10020-19','C01':'10020-2','C19':'10020-20','C20':'10020-21','C21':'10020-22','C22':'10020-23','C23':'10020-24','C24':'10020-25','C25':'10020-26','C26':'10020-27','C27':'10020-28','C28':'10020-29','C02':'10020-3','C29':'10020-30','C30':'10020-31','C37':'10020-32','C38':'10020-33','C39':'10020-34','C40':'10020-35','C41':'10020-36','C42':'10020-37','C43':'10020-38','C44':'10020-39','C03':'10020-4','C45':'10020-40','C46':'10020-41','C50':'10020-42','C51':'10020-43','C52':'10020-44','C53':'10020-45','C54':'10020-46','C55':'10020-47','C56':'10020-48','C04':'10020-5','C05':'10020-6','C06':'10020-7','C07':'10020-8','C08':'10020-9'};
 
@@ -2080,8 +2113,11 @@ function exportarVales(){
       fechaTermino=p[2]+'-'+p[1]+'-'+p[0]; // 13-08-2026
     }
     const esConsumo = (d.tipo==='consumo');
+    // Orden de aplicación con destino GENERAL del fundo: no se reparte por cuartel,
+    // va una sola fila por producto al centro de costo general.
+    const esGeneral = (!esConsumo && d.destino==='general');
     const fundo=(d.fundo||o.campo||'').toUpperCase();
-    const bodega= esConsumo ? (d.bodegaVale||'') : (BOD_FUNDO[fundo]||'');
+    const bodega= esConsumo ? (d.bodegaVale||'') : (d.bodegaVale || BOD_FUNDO[fundo] || '');
     const numO = d.numeroOrden||o.idOrden;
     const glosa = esConsumo ? '' : ((d.tipo==='herbicida' ? 'HER-' : 'FITO-') + numO);
     const valeDeEstaOrden = numVale;
@@ -2098,6 +2134,39 @@ function exportarVales(){
       if(!codigo) sinCodigo.add(ra.producto);
       // Glosa del consumo = nombre del producto
       const glosaFila = esConsumo ? ra.producto : glosa;
+
+      // ── GENERAL DEL FUNDO: una fila por producto, cantidad completa, centro de costo general ──
+      if(esGeneral){
+        const cant = +(Number(ra.cantidad)||0).toFixed(2);
+        if(cant>0){
+          const ccostoGen = d.ccostoGeneral || CCOSTO_GENERAL[fundo] || '';
+          if(!ccostoGen) sinCcosto.add('GENERAL '+fundo);
+          filas.push({
+            'NUMERO VALE':valeDeEstaOrden,
+            'FECHA VALE':fechaTermino,
+            'MOVIMIENTO':'SALIDA',
+            'TIPO VALE':'',
+            'SUCURSAL':1,
+            'GLOSAS':glosaFila,
+            'CODIGOS':codigo,
+            'CANTIDAD':cant,
+            'BODEGA':bodega,
+            'COSTO':'',
+            'NUMERO OT':'',
+            'NUMERO OP':'',
+            'NUMERO LOTE':'',
+            'VENCIMIENTO':'',
+            'NUMERO SERIE':'',
+            'CTA CONTABLE':ctaContable,
+            'CENTRO COSTO':ccostoGen,
+            'BODEGA TRASPASO':'',
+            'PRODUCTO (verificación)':ra.producto
+          });
+          huboFila=true;
+        }
+        return; // no se reparte entre los cuarteles
+      }
+
       cuartsF.forEach(c=>{
         const val = +((ra.cantidad||0)*(c.ha||0)/totHa).toFixed(2);
         if(val<=0) return;
@@ -2177,6 +2246,7 @@ function renderTraza(){
   const term = ordenes.filter(o=>{
     if(String(o.estado||'').toUpperCase()!=='TERMINADA')return false;
     if((o.detalle?.tipo)==='consumo') return false;
+    if((o.detalle?.destino)==='general') return false;
     const fin=(o.detalle?.infoAplicacion?.fechaTermino)||o.detalle?.fecha||(o.creado_en?isoLocalG(new Date(o.creado_en)):'');
     if(!fin) return true;
     return fin>=tDesde && fin<=tHasta;
@@ -2207,6 +2277,7 @@ function exportarTraza(){
   const term = ordenes.filter(o=>{
     if(String(o.estado||'').toUpperCase()!=='TERMINADA')return false;
     if((o.detalle?.tipo)==='consumo') return false; // los consumos no van en trazabilidad de aplicaciones
+    if((o.detalle?.destino)==='general') return false; // las aplicaciones generales del fundo tampoco
     // usar fechaTermino; si no hay, usar la fecha de la orden o la de creación
     const fin=(o.detalle?.infoAplicacion?.fechaTermino)||o.detalle?.fecha||(o.creado_en?isoLocalG(new Date(o.creado_en)):'');
     if(!fin) return true; // si no tiene ninguna fecha, incluirla igual (no perder datos)
