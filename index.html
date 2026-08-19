@@ -408,6 +408,9 @@ const tractorOpts = () => '<option value="">— Tractor —</option>' + TRACTORE
 // Operadores autorizados para conducir (tractoristas)
 const OPERADORES = ['Jose Piñaleo','Osvaldo Serrano','Dagoberto Machuca','Carlos Nuñez','Hector Caballero','Eduardo Quilodran','Jose Rojas','Cristian Urra','Ruben Galvez','Oscar Marin','Jose Navarre','Jorge Contreras','Haroldo Zuñiga'];
 const operadorOpts = () => '<option value="">— Tractorista —</option>' + OPERADORES.map(t=>`<option>${t}</option>`).join('');
+// Implementos disponibles (los elige el dosificador al cerrar la orden)
+const IMPLEMENTOS = ['LEVERA N1','LEVERA N2','ATASA N3','ATASA N4','ATASA N5','ATASA N6','CAFINI N7','CAFINI N8','VENTIS N9','LERPAIN N10','ELECTROSTATIC ESS1','ELECTROSTATIC ESS2'];
+const implementoOpts = () => '<option value="">— Implemento —</option>' + IMPLEMENTOS.map(t=>`<option>${t}</option>`).join('');
 
 // Acordeón de "Mis Órdenes" del dosificador: solo una abierta a la vez
 let ordenExpandida = null;
@@ -1713,8 +1716,13 @@ function exportarMaterialesExcel(){
   orden.forEach(cat=>{
     const delaCat = materiales.filter(m=>(m.categoria||'Otros')===cat);
     if(!delaCat.length) return;
+    // Cruzar por ID, no por nombre: si un material se renombró, sus movimientos
+    // viejos conservan el nombre antiguo y se perderían al cruzar por texto.
+    const ids = new Set(delaCat.map(m=>String(m.id)));
     const nombres = new Set(delaCat.map(m=>m.nombre));
-    const movsCat = materialesMov.filter(mv=>nombres.has(mv.material_nom));
+    const movsCat = materialesMov.filter(mv=>
+      ids.has(String(mv.material_id)) || (mv.material_id==null && nombres.has(mv.material_nom))
+    );
 
     // En la hoja de cada división: primero su catálogo, más abajo sus movimientos
     const aoa = [];
@@ -2905,14 +2913,14 @@ ${misOrdenes.length ? misOrdenes.map(o => {
         <select id="ap-trc1-${o.idOrden}" style="font-size:12px;padding:6px;width:100%">${tractorOpts()}</select>
         <input type="text" id="ap-pis1-${o.idOrden}" placeholder="Pistonero" style="font-size:12px;padding:6px;width:100%">
       </div>
-      <input type="text" id="ap-imp1-${o.idOrden}" placeholder="Implemento (N°)" style="font-size:12px;padding:6px;width:100%">
+      <select id="ap-imp1-${o.idOrden}" style="font-size:12px;padding:6px;width:100%">${implementoOpts()}</select>
       <div style="font-size:11px;color:var(--tx3);font-weight:600;margin:10px 0 6px">EQUIPO 2 (opcional)</div>
       <select id="ap-tra2-${o.idOrden}" style="font-size:12px;padding:6px;width:100%;margin-bottom:6px">${operadorOpts()}</select>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px">
         <select id="ap-trc2-${o.idOrden}" style="font-size:12px;padding:6px;width:100%">${tractorOpts()}</select>
         <input type="text" id="ap-pis2-${o.idOrden}" placeholder="Pistonero" style="font-size:12px;padding:6px;width:100%">
       </div>
-      <input type="text" id="ap-imp2-${o.idOrden}" placeholder="Implemento (N°)" style="font-size:12px;padding:6px;width:100%">
+      <select id="ap-imp2-${o.idOrden}" style="font-size:12px;padding:6px;width:100%">${implementoOpts()}</select>
       <div id="equipos-extra-${o.idOrden}"></div>
       <button class="btn-sec" onclick="addEquipoAplicador('${o.idOrden}')" style="width:100%;font-size:12px;padding:8px;margin-top:10px">+ Agregar más equipos</button>
     </div>
@@ -3972,7 +3980,7 @@ function addEquipoAplicador(idOrden){
       <select id="ap-trc${n}-${idOrden}" style="font-size:12px;padding:6px;width:100%">${tractorOpts()}</select>
       <input type="text" id="ap-pis${n}-${idOrden}" placeholder="Pistonero" style="font-size:12px;padding:6px;width:100%">
     </div>
-    <input type="text" id="ap-imp${n}-${idOrden}" placeholder="Implemento (N°)" style="font-size:12px;padding:6px;width:100%">
+    <select id="ap-imp${n}-${idOrden}" style="font-size:12px;padding:6px;width:100%">${implementoOpts()}</select>
   `;
   cont.appendChild(div);
 }
