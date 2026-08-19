@@ -2592,7 +2592,7 @@ async function guardarConsumo(){
       </div>
       <button class="btn-sec" onclick="addProdOrden()" style="width:100%;margin-bottom:.75rem">+ Agregar producto</button>
 
-      <div class="section-label">Para Bodega — Total teórico a aplicar por cuartel</div>
+      <div class="section-label" id="ord-bodega-label">Para Bodega — Total teórico a aplicar por cuartel</div>
       <div style="overflow-x:auto;border:1px solid var(--bd);border-radius:8px;margin-bottom:14px">
         <table class="ord-tabla" id="ord-bodega">
           <tbody>
@@ -3079,6 +3079,11 @@ function buildBodegaTabla(){
   const pctRaw = document.getElementById('ord-pct')?.value;
   const pct = pctRaw==='' ? 100 : (parseFloat(pctRaw)||0);
 
+  const lbl = document.getElementById('ord-bodega-label');
+  if(lbl) lbl.textContent = ordenEsGeneral()
+    ? 'Para Bodega — Total teórico a aplicar (general del fundo)'
+    : 'Para Bodega — Total teórico a aplicar por cuartel';
+
   // Productos con nombre elegido
   const prods = ordProds.map(id=>{
     const sel=document.getElementById('opa-prod-'+id);
@@ -3091,9 +3096,18 @@ function buildBodegaTabla(){
     return;
   }
 
-  // Encabezado: Producto | Real Aplic. | un col por cuartel | Total
+  // En GENERAL del fundo no se muestra el detalle por cuartel: una sola columna
+  const general = ordenEsGeneral();
+  const fundoAct = document.getElementById('ord-fundo')?.value || '';
+  const haTotal = cuarts.reduce((s,q)=>s+(q.ha||0),0);
+
+  // Encabezado: Producto | Real Aplic. | (una col por cuartel, o GENERAL) | Total
   let head = '<thead><tr><th style="min-width:110px">Productos</th><th>Real<br>Aplic.</th>';
-  cuarts.forEach(q=>head+=`<th>${q.c}<br><span style="font-weight:400;font-size:9px">${q.ha}ha</span></th>`);
+  if(general){
+    head += `<th>GENERAL ${fundoAct}<br><span style="font-weight:400;font-size:9px">${cuarts.length} cuarteles · ${haTotal.toFixed(2)}ha</span></th>`;
+  } else {
+    cuarts.forEach(q=>head+=`<th>${q.c}<br><span style="font-weight:400;font-size:9px">${q.ha}ha</span></th>`);
+  }
   head += '<th>Total</th></tr></thead>';
 
   let body='<tbody>';
@@ -3101,11 +3115,16 @@ function buildBodegaTabla(){
     body+=`<tr><td style="text-align:left;font-size:11px">${p.nombre}</td>`;
     body+=`<td><input type="number" placeholder="0" style="min-width:50px" disabled title="Lo llena el aplicador"></td>`;
     let total=0;
-    cuarts.forEach(q=>{
-      const val = q.ha * p.dha * pct/100;
-      total += val;
-      body+=`<td class="calc-cell">${val?val.toFixed(2):'0'}</td>`;
-    });
+    if(general){
+      total = haTotal * p.dha * pct/100;
+      body+=`<td class="calc-cell">${total?total.toFixed(2):'0'}</td>`;
+    } else {
+      cuarts.forEach(q=>{
+        const val = q.ha * p.dha * pct/100;
+        total += val;
+        body+=`<td class="calc-cell">${val?val.toFixed(2):'0'}</td>`;
+      });
+    }
     body+=`<td class="calc-cell" style="background:var(--vino-glow)">${total.toFixed(2)}</td></tr>`;
   });
   body+='</tbody>';
