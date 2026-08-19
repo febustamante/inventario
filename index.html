@@ -1459,7 +1459,7 @@ async function recibirOC(ocId){
 let subRecibir='compras'; // 'compras' | 'manual'
 function setSubRecibir(v){subRecibir=v;refresh();}
 // ══════ MATERIALES DE CAMPO (alambres, protectores, clavos, herramientas) ══════
-const CAT_MATERIALES = ['Alambres','Herramientas','Protectores','Clavos','Otros'];
+const CAT_MATERIALES = ['Alambres','Herramientas','Protectores','Clavos','Útiles de aseo','Otros'];
 let matCatFiltro = '';
 
 // ══════ MI STOCK (dosificador ve solo su bodega, solo lo que tiene) ══════
@@ -1600,7 +1600,9 @@ function renderMateriales(){
 
   const chip = (c,txt)=>`<button onclick="setMatCat('${c}')" class="filter-chip${matCatFiltro===c?' active':''}">${txt}</button>`;
 
-  const movs = materialesMov.slice(0,10);
+  // Últimos 10, del más nuevo al más viejo (ordenado aquí por si la base los trae desordenados)
+  const movsOrden = [...materialesMov].sort((a,b)=> new Date(b.fecha||0) - new Date(a.fecha||0));
+  const movs = movsOrden.slice(0,10);
 
   return `
   <div class="section-header">
@@ -1641,42 +1643,106 @@ function renderMateriales(){
     </div>`;
   }).join('') : '<div class="card" style="text-align:center;color:var(--tx3);padding:30px">Aún no hay materiales. Agrega el primero con el botón de arriba.</div>'}
 
-  <div class="section-label">Últimos movimientos</div>
+  <div class="section-label">Últimos movimientos${materialesMov.length>10?` <span style="font-weight:400;text-transform:none;color:var(--tx3)">· 10 más recientes de ${materialesMov.length}</span>`:''}</div>
   <div class="card">${movs.length?movs.map(mv=>{
     const esEnt = mv.tipo==='entrada';
+    const f = mv.fecha ? new Date(mv.fecha) : null;
+    const p2 = n => String(n).padStart(2,'0');
+    const fFecha = f ? (p2(f.getDate())+'/'+p2(f.getMonth()+1)+'/'+f.getFullYear()) : '';
+    const fHora  = f ? (p2(f.getHours())+':'+p2(f.getMinutes())) : '';
+    // Solicitante y destino: de las columnas nuevas si existen, si no del motivo
+    const extra = [
+      mv.solicitante ? ('Solicita: '+mv.solicitante) : '',
+      mv.destino ? ('Destino: '+mv.destino) : ''
+    ].filter(Boolean).join(' · ') || (mv.motivo||'');
     return `<div class="move-item">
       <div class="move-dot" style="background:${esEnt?'#2d6b2d':'#a32d2d'}"></div>
-      <div class="move-body"><div class="move-prod">${mv.material_nom||''}</div><div class="move-detail">${esEnt?'Entrada':'Salida'}${mv.motivo?' · '+mv.motivo:''}${mv.usuario?' · '+mv.usuario:''}</div></div>
-      <div class="move-right"><div class="move-qty" style="color:${esEnt?'var(--green)':'var(--red)'}">${esEnt?'+':'-'}${fmt(mv.cantidad)}</div><div class="move-date">${mv.fecha?fechaCorta(isoLocal(new Date(mv.fecha))):''}</div></div>
+      <div class="move-body" style="flex:1;min-width:0">
+        <div class="move-prod">${mv.material_nom||''}</div>
+        <div class="move-detail">${esEnt?'Entrada':'Salida'}${extra?' · '+extra:''}${mv.usuario?' · '+mv.usuario:''}</div>
+        ${puedeEditar?`<div style="display:flex;gap:6px;margin-top:5px">
+          <button onclick="editarMovMaterial('${mv.id}')" style="font-size:11px;padding:4px 10px;border:1px solid var(--bd2);border-radius:6px;background:var(--surf);color:var(--blue)">Editar</button>
+          <button onclick="anularMovMaterial('${mv.id}')" style="font-size:11px;padding:4px 10px;border:1px solid var(--bd2);border-radius:6px;background:var(--surf);color:var(--red)">Anular</button>
+        </div>`:''}
+      </div>
+      <div class="move-right" style="flex-shrink:0">
+        <div class="move-qty" style="color:${esEnt?'var(--green)':'var(--red)'}">${esEnt?'+':'-'}${fmt(mv.cantidad)}</div>
+        <div class="move-date">${fFecha}</div>
+        ${fHora?`<div class="move-date" style="font-size:10px;opacity:.75">${fHora}</div>`:''}
+      </div>
     </div>`;
   }).join(''):'<div class="empty-state"><div class="empty-icon">📦</div><div class="empty-text">Sin movimientos de materiales</div></div>'}</div>`;
 }
 
 function setMatCat(c){ matCatFiltro=c; refresh(); }
 
+// Nombre de hoja válido para Excel: máx 31 caracteres y sin : \ / ? * [ ]
+function nombreHoja(txt){
+  return String(txt||'Sin categoría').replace(/[:\\\/\?\*\[\]]/g,'-').slice(0,31);
+}
 function exportarMaterialesExcel(){
   if(typeof XLSX==='undefined'){ showToast('La librería Excel no cargó','err'); return; }
   if(!materiales.length){ showToast('No hay materiales para exportar','err'); return; }
-  // Hoja 1: catálogo actual
-  const cat = materiales.map(m=>({
-    'Material':m.nombre, 'Categoría':m.categoria||'Otros', 'Unidad':m.unidad,
+
+  const wb = XLSX.utils.book_new();
+  const filaCat = m=>({
+    'Material':m.nombre, 'Unidad':m.unidad,
     'Cantidad':m.cantidad, 'Mínimo':m.minimo||0,
     'Estado': m.cantidad<=0?'Agotado':(m.minimo>0&&m.cantidad<=m.minimo?'Stock bajo':'En stock')
-  }));
-  // Hoja 2: movimientos
-  const movs = materialesMov.map(mv=>({
+  });
+  const filaMov = mv=>({
     'Fecha': mv.fecha?new Date(mv.fecha).toLocaleString('es-CL'):'',
     'Material': mv.material_nom||'',
     'Tipo': mv.tipo==='entrada'?'Entrada':'Salida',
     'Cantidad': mv.cantidad,
+    'Solicitante': mv.solicitante||'',
+    'Destino': mv.destino||'',
     'Motivo/Referencia': mv.motivo||'',
     'Usuario': mv.usuario||''
-  }));
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cat), 'Materiales');
-  if(movs.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(movs), 'Movimientos');
+  });
+
+  // Hoja RESUMEN: todo el catálogo junto, con su categoría
+  const resumen = materiales.map(m=>Object.assign({'Categoría':m.categoria||'Otros'}, filaCat(m)));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(resumen), 'Resumen');
+
+  // UNA HOJA POR DIVISIÓN: Alambres, Herramientas, Protectores, Clavos, Útiles de aseo, Otros...
+  // Se respeta el orden de CAT_MATERIALES y al final las categorías sueltas que no estén en la lista.
+  const catsPresentes = [...new Set(materiales.map(m=>m.categoria||'Otros'))];
+  const orden = [...CAT_MATERIALES.filter(c=>catsPresentes.includes(c)),
+                 ...catsPresentes.filter(c=>!CAT_MATERIALES.includes(c))];
+  orden.forEach(cat=>{
+    const delaCat = materiales.filter(m=>(m.categoria||'Otros')===cat);
+    if(!delaCat.length) return;
+    const nombres = new Set(delaCat.map(m=>m.nombre));
+    const movsCat = materialesMov.filter(mv=>nombres.has(mv.material_nom));
+
+    // En la hoja de cada división: primero su catálogo, más abajo sus movimientos
+    const aoa = [];
+    aoa.push([cat.toUpperCase()]);
+    aoa.push([]);
+    const cabCat = Object.keys(filaCat(delaCat[0]));
+    aoa.push(cabCat);
+    delaCat.forEach(m=>{ const f=filaCat(m); aoa.push(cabCat.map(k=>f[k])); });
+    aoa.push([]);
+    aoa.push(['MOVIMIENTOS DE '+cat.toUpperCase()]);
+    aoa.push([]);
+    if(movsCat.length){
+      const cabMov = Object.keys(filaMov(movsCat[0]));
+      aoa.push(cabMov);
+      movsCat.forEach(mv=>{ const f=filaMov(mv); aoa.push(cabMov.map(k=>f[k])); });
+    } else {
+      aoa.push(['Sin movimientos registrados']);
+    }
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), nombreHoja(cat));
+  });
+
+  // Hoja final con TODOS los movimientos juntos
+  if(materialesMov.length){
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(materialesMov.map(filaMov)), 'Movimientos');
+  }
+
   XLSX.writeFile(wb, 'Materiales_San_Jose_'+isoLocal(new Date())+'.xlsx');
-  showToast('Excel generado');
+  showToast('Excel generado · '+(orden.length)+' divisiones');
 }
 
 function abrirNuevoMaterial(){
@@ -1828,32 +1894,139 @@ async function guardarNuevoMaterial(nombre, unidad, categoria){
   }
 }
 
-async function movMaterial(matId, tipo){
+// ── MOVIMIENTO DE MATERIAL: formulario (la salida pide solicitante y destino) ──
+function movMaterial(matId, tipo){
   const m = materiales.find(x=>String(x.id)===String(matId));
   if(!m) return;
-  const verbo = tipo==='entrada'?'ingresar':'sacar';
-  const txt = prompt(`¿Cuánto ${verbo} de ${m.nombre}? (en ${m.unidad})`);
-  if(txt===null) return;
-  const cant = parseFloat(txt)||0;
+  const prev = document.getElementById('modal-movmat'); if(prev) prev.remove();
+  const esSalida = (tipo==='salida');
+  const inp = 'width:100%;padding:11px;border:1px solid var(--bd2);border-radius:9px;font-size:14px;margin:5px 0 14px';
+  const lbl = 'font-size:12px;font-weight:700;color:var(--tx3);text-transform:uppercase';
+  const div = document.createElement('div');
+  div.id = 'modal-movmat';
+  div.style = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;display:flex;align-items:flex-end;justify-content:center';
+  div.innerHTML = `
+    <div style="background:#fff;width:100%;max-width:480px;border-radius:18px 18px 0 0;padding:20px;max-height:88vh;overflow-y:auto">
+      <div style="font-size:17px;font-weight:800;margin-bottom:2px">${esSalida?'Salida':'Entrada'} de material</div>
+      <div style="font-size:12px;color:var(--tx3);margin-bottom:16px">${m.nombre} · hay ${fmt(m.cantidad)} ${m.unidad}</div>
+
+      <label style="${lbl}">Cantidad (${m.unidad})</label>
+      <input id="mm-cant" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="0" style="${inp}">
+
+      ${esSalida ? `
+      <label style="${lbl}">Solicitante</label>
+      <input id="mm-solic" placeholder="¿Quién lo pidió?" autocomplete="off" style="${inp}">
+
+      <label style="${lbl}">Destino</label>
+      <input id="mm-dest" placeholder="Ej: Cerrillos, cuartel C12, taller" autocomplete="off" style="${inp}">
+      ` : `
+      <label style="${lbl}">Proveedor / referencia</label>
+      <input id="mm-motivo" placeholder="Opcional" autocomplete="off" style="${inp}">
+      `}
+
+      <div style="display:flex;gap:10px">
+        <button class="btn-sec" style="flex:1" onclick="document.getElementById('modal-movmat').remove()">Cancelar</button>
+        <button class="btn-primary" style="flex:1;margin:0" onclick="confirmarMovMaterial('${m.id}','${tipo}')">${esSalida?'Registrar salida':'Registrar entrada'}</button>
+      </div>
+    </div>`;
+  document.body.appendChild(div);
+  setTimeout(()=>document.getElementById('mm-cant')?.focus(), 80);
+}
+
+async function confirmarMovMaterial(matId, tipo){
+  const m = materiales.find(x=>String(x.id)===String(matId));
+  if(!m) return;
+  const g = id => (document.getElementById(id)?.value || '').trim();
+  const cant = parseFloat(g('mm-cant'))||0;
   if(cant<=0){ showToast('Cantidad inválida','err'); return; }
   if(tipo==='salida' && cant>m.cantidad){ showToast('No puedes sacar más de lo que hay ('+fmt(m.cantidad)+' '+m.unidad+')','err'); return; }
-  const motivo = tipo==='salida' ? (prompt('¿Para qué o para quién? (opcional)')||'') : (prompt('Proveedor / referencia (opcional)')||'');
+
+  const solicitante = tipo==='salida' ? g('mm-solic') : '';
+  const destino     = tipo==='salida' ? g('mm-dest')  : '';
+  if(tipo==='salida' && (!solicitante || !destino)){
+    if(!confirm('Dejaste en blanco el solicitante o el destino.\n\n¿Registrar la salida igual?')) return;
+  }
+  // El motivo resume solicitante y destino: así queda legible incluso si la base
+  // todavía no tiene las columnas nuevas.
+  const motivo = tipo==='salida'
+    ? [solicitante?('Solicita: '+solicitante):'', destino?('Destino: '+destino):''].filter(Boolean).join(' · ')
+    : g('mm-motivo');
 
   const nuevaCant = tipo==='entrada' ? m.cantidad+cant : m.cantidad-cant;
   showToast('Guardando...','info');
   try{
     const { error: e1 } = await sb.from('materiales').update({cantidad:nuevaCant}).eq('id',m.id);
     if(e1) throw e1;
-    const { error: e2 } = await sb.from('materiales_mov').insert({
-      material_id:m.id, material_nom:m.nombre, tipo, cantidad:cant, motivo, usuario:curUser.id
-    });
+
+    const base = { material_id:m.id, material_nom:m.nombre, tipo, cantidad:cant, motivo, usuario:curUser.id };
+    let { error: e2 } = await sb.from('materiales_mov').insert(Object.assign({}, base, {solicitante, destino}));
+    // Si las columnas solicitante/destino aún no existen, se guarda sin ellas (el motivo lleva el detalle)
+    if(e2 && /solicitante|destino|column/i.test(e2.message||'')){
+      const r = await sb.from('materiales_mov').insert(base);
+      e2 = r.error;
+    }
     if(e2) throw e2;
+
     m.cantidad = nuevaCant; // reflejar en memoria
+    document.getElementById('modal-movmat')?.remove();
     showToast((tipo==='entrada'?'+':'-')+cant+' '+m.unidad+' · '+m.nombre);
     await syncData();
   }catch(e){
     showToast('Error: '+(e.message||''),'err');
   }
+}
+
+// ── EDITAR / ANULAR movimientos de materiales ──
+// Ojo: esto vive SOLO en materiales_mov. No toca el historial de productos.
+async function editarMovMaterial(movId){
+  const mv = materialesMov.find(x=>String(x.id)===String(movId));
+  if(!mv){ showToast('No encontré el movimiento','err'); return; }
+  const m = materiales.find(x=>String(x.id)===String(mv.material_id));
+  const txt = prompt('Nueva cantidad de '+(mv.material_nom||'')+' ('+(mv.tipo==='entrada'?'entrada':'salida')+'):', mv.cantidad);
+  if(txt===null) return;
+  const nueva = parseFloat(txt)||0;
+  if(nueva<=0){ showToast('Cantidad inválida','err'); return; }
+  const delta = nueva - (parseFloat(mv.cantidad)||0);
+  if(delta===0){ showToast('La cantidad es la misma','info'); return; }
+  showToast('Guardando...','info');
+  try{
+    if(m){
+      // Una entrada mayor suma stock; una salida mayor lo resta
+      const ajuste = (mv.tipo==='entrada') ? delta : -delta;
+      const nuevoStock = (parseFloat(m.cantidad)||0) + ajuste;
+      if(nuevoStock<0){ showToast('Ese cambio dejaría el stock en negativo','err'); return; }
+      const { error:e1 } = await sb.from('materiales').update({cantidad:nuevoStock}).eq('id',m.id);
+      if(e1) throw e1;
+      m.cantidad = nuevoStock;
+    }
+    const { error:e2 } = await sb.from('materiales_mov').update({cantidad:nueva}).eq('id',mv.id);
+    if(e2) throw e2;
+    showToast('Movimiento editado');
+    await syncData();
+  }catch(e){ showToast('Error: '+(e.message||''),'err'); }
+}
+
+async function anularMovMaterial(movId){
+  const mv = materialesMov.find(x=>String(x.id)===String(movId));
+  if(!mv){ showToast('No encontré el movimiento','err'); return; }
+  const m = materiales.find(x=>String(x.id)===String(mv.material_id));
+  const cant = parseFloat(mv.cantidad)||0;
+  if(!confirm('¿Anular este movimiento?\n\n'+(mv.material_nom||'')+' · '+(mv.tipo==='entrada'?'entrada':'salida')+' de '+fmt(cant)+
+              '\n\nSe devuelve el stock y el movimiento se borra del listado de materiales.')) return;
+  showToast('Anulando...','info');
+  try{
+    if(m){
+      const nuevoStock = (parseFloat(m.cantidad)||0) + ((mv.tipo==='entrada') ? -cant : cant);
+      if(nuevoStock<0){ showToast('Anular dejaría el stock en negativo','err'); return; }
+      const { error:e1 } = await sb.from('materiales').update({cantidad:nuevoStock}).eq('id',m.id);
+      if(e1) throw e1;
+      m.cantidad = nuevoStock;
+    }
+    const { error:e2 } = await sb.from('materiales_mov').delete().eq('id',mv.id);
+    if(e2) throw e2;
+    showToast('Movimiento anulado · stock devuelto');
+    await syncData();
+  }catch(e){ showToast('Error: '+(e.message||''),'err'); }
 }
 
 function renderRecibir(){
