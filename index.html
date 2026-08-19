@@ -1542,7 +1542,7 @@ function renderPedir(){
       <div style="width:22px;height:22px;border-radius:6px;border:2px solid ${marcada?'var(--vino)':'var(--bd2)'};background:${marcada?'var(--vino)':'#fff'};flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;margin-top:2px">${marcada?'✓':''}</div>
       <div style="min-width:0;flex:1">
         <div style="font-size:15px;font-weight:700">${num} · ${d.fundo||o.campo}</div>
-        <div style="font-size:12px;color:var(--tx3)">${(d.cuarteles||[]).map(c=>c.c).join(', ')}</div>
+        <div style="font-size:12px;color:var(--tx3)">${textoCuarteles(d)}</div>
         <div style="font-size:12.5px;color:var(--tx2);margin-top:3px">${prods}</div>
       </div>
     </div>`;
@@ -2311,6 +2311,14 @@ const GENERAL_CCOSTO = {
   'CERRILLOS':'10020-1', 'PAINE':'10019-1', 'RULO':'10017-1', 'LO VALDES':'10018-1'
 };
 const GENERAL_BODEGA = { 'CERRILLOS':'B1', 'PAINE':'B2', 'RULO':'B3', 'LO VALDES':'B4' };
+// Texto corto de cuarteles para pantallas. En una orden general del fundo no se
+// listan los 47 códigos, se resume. (Los exports sí llevan la lista completa.)
+function textoCuarteles(d){
+  if(!d) return '—';
+  const lista = d.cuarteles||[];
+  if(d.destino==='general') return 'GENERAL '+(d.fundo||'')+' · '+lista.length+' cuarteles';
+  return lista.length ? lista.map(c=>c.c).join(', ') : '—';
+}
 let _consProds = []; // [{nombre, cantidad, bodega}]
 function renderConsumo(){
   const consumos = ordenes.filter(o=> (o.detalle?.tipo)==='consumo')
@@ -2487,16 +2495,26 @@ async function guardarConsumo(){
       </div>
 
       <div class="form-group">
+        <label class="form-label">Destino</label>
+        <select class="form-control" id="ord-destino" onchange="onOrdDestinoChange()">
+          <option value="cuarteles">Cuarteles específicos</option>
+          <option value="general">General del fundo</option>
+        </select>
+      </div>
+
+      <div class="form-group">
         <label class="form-label">Fecha de aplicación <span style="color:var(--tx3);font-weight:400">(programable)</span></label>
         <input type="date" class="form-control" id="ord-fecha">
       </div>
 
-      <div class="form-group">
+      <div class="form-group" id="ord-cuarteles-wrap">
         <label class="form-label">Cuarteles <span style="color:var(--tx3);font-weight:400">(marca uno o varios)</span></label>
         <div id="ord-cuarteles" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(62px,1fr));gap:5px;max-height:170px;overflow-y:auto;border:1px solid var(--bd);border-radius:8px;padding:7px;background:var(--surf2)">
           <div style="grid-column:1/-1;color:var(--tx3);font-size:13px;text-align:center;padding:10px">Elige un fundo primero</div>
         </div>
       </div>
+
+      <div class="form-group" id="ord-general-info" style="display:none"></div>
 
       <div style="background:var(--surf2);border:1px solid var(--bd);border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:12px">
         <div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:var(--tx3)">Especie</span><span style="font-weight:600" id="ord-especie">Uva de Mesa</span></div>
@@ -2635,7 +2653,7 @@ ${misOrdenes.length ? misOrdenes.map(o => {
       <span style="width:9px;height:9px;border-radius:50%;background:${estCol};flex-shrink:0"></span>
       <div style="flex:1;min-width:0">
         <div style="font-weight:700;font-size:14px;line-height:1.2">N°${d.numeroOrden||o.idOrden} · ${d.fundo||o.campo}</div>
-        <div style="font-size:11px;color:var(--tx3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px">${cuarts.map(c=>c.c).join(', ')} · ${d.hectareas} ha · ${fechaCorta(d.fecha||o.fecha)}</div>
+        <div style="font-size:11px;color:var(--tx3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px">${d.destino==='general'?('GENERAL '+(d.fundo||'')+' · '+cuarts.length+' cuarteles'):cuarts.map(c=>c.c).join(', ')} · ${d.hectareas} ha · ${fechaCorta(d.fecha||o.fecha)}</div>
       </div>
       <span style="font-size:9.5px;font-weight:700;color:#fff;background:${estCol};padding:3px 8px;border-radius:9px;flex-shrink:0;letter-spacing:.02em">${estTxt}</span>
       <i id="ordchev-${o.idOrden}" class="ti ti-chevron-down" style="font-size:17px;color:var(--tx3);transition:transform .15s;transform:rotate(${abierta?180:0}deg)"></i>
@@ -2647,7 +2665,7 @@ ${misOrdenes.length ? misOrdenes.map(o => {
     </div>
     <div class="orden-campo-chip"><i class="ti ti-map-pin" style="font-size:13px"></i> ${d.fundo||o.campo}</div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0;font-size:11px">
-      <span style="background:var(--surf2);padding:3px 8px;border-radius:6px">Cuarteles: ${cuarts.map(c=>c.c).join(', ')}</span>
+      <span style="background:var(--surf2);padding:3px 8px;border-radius:6px">Cuarteles: ${textoCuarteles(d)}</span>
       <span style="background:var(--surf2);padding:3px 8px;border-radius:6px">${d.hectareas} ha</span>
       <span style="background:var(--surf2);padding:3px 8px;border-radius:6px">Mojamiento: ${d.mojamiento}</span>
       <span style="background:var(--surf2);padding:3px 8px;border-radius:6px">Lts/maq: ${d.ltsMaq}</span>
@@ -2656,10 +2674,16 @@ ${misOrdenes.length ? misOrdenes.map(o => {
       <span style="background:#e8f5ec;color:#1d6b3a;font-weight:700;padding:3px 8px;border-radius:6px">N° maquinadas: ${(tl&&d.ltsMaq)?nm.toFixed(1):'—'}</span>`;})()}
     </div>
     <div style="background:var(--surf2);border-radius:8px;padding:8px;margin:6px 0">
+      ${d.destino==='general' ? `
+      <div style="font-size:11px;color:var(--tx3);font-weight:600;margin-bottom:6px">Cuarteles</div>
+      <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px">
+        <span style="background:var(--surf);border:1px solid var(--vino);color:var(--vino);padding:4px 8px;border-radius:6px;font-size:11px;font-weight:700">GENERAL ${d.fundo||''} · ${cuarts.length} cuarteles · ${d.hectareas||0} ha</span>
+      </div>` : `
       <div style="font-size:11px;color:var(--tx3);font-weight:600;margin-bottom:6px">Ajustar cuarteles (si hubo cambios en terreno)</div>
       <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px">
         ${cuarts.map(c=>`<span style="background:var(--surf);border:1px solid var(--bd2);padding:3px 6px;border-radius:6px;font-size:11px">${c.c} <button onclick="quitarCuartelOrden('${o.idOrden}','${c.c}')" style="border:none;background:none;color:var(--red);font-weight:700;cursor:pointer;padding:0 2px">✕</button></span>`).join('')}
-      </div>
+      </div>`}
+      ${d.destino==='general' ? '' : `
       <div style="display:flex;gap:6px">
         <select id="add-cuartel-${o.idOrden}" style="flex:1;font-size:11px;padding:5px">${(()=>{
           const fundoKey = String(d.fundo||'').toUpperCase();
@@ -2667,7 +2691,7 @@ ${misOrdenes.length ? misOrdenes.map(o => {
           return '<option value="">— Agregar cuartel —</option>'+disp.map(q=>`<option value="${q.c}">${q.c} (${q.ha} ha)</option>`).join('');
         })()}</select>
         <button onclick="agregarCuartelOrden('${o.idOrden}')" style="font-size:11px;padding:5px 12px;border:1px solid var(--vino);border-radius:6px;background:var(--vino);color:#fff">+ Agregar</button>
-      </div>
+      </div>`}
     </div>
     <div style="font-size:11px;color:var(--tx3);margin-bottom:4px">Escribe el <strong>Real Aplicado</strong> (total por producto). Eso descontará del stock de ${o.campo}.</div>
     ${tabla}
@@ -2799,7 +2823,7 @@ ${(()=>{
         <span class="orden-num-badge" style="background:#1d6b3a">${num}</span>
         <span class="orden-date">${fechaCorta(d.fecha||o.fecha)}</span>
       </div>
-      <div class="orden-campo-chip"><i class="ti ti-map-pin" style="font-size:13px"></i> ${d.fundo||o.campo} · ${(d.cuarteles||[]).map(c=>c.c).join(', ')}</div>
+      <div class="orden-campo-chip"><i class="ti ti-map-pin" style="font-size:13px"></i> ${d.fundo||o.campo} · ${textoCuarteles(d)}</div>
       <div style="font-size:12px;color:var(--tx2);margin:6px 0">
         ${reales?('<b>Aplicado:</b> '+reales):'Sin detalle de real'}
         ${ia.horaTermino?`<br><span style="font-size:11px;color:var(--tx3)">Terminada: ${fechaCorta(ia.fechaTermino||'')} ${ia.horaTermino}</span>`:''}
@@ -2822,7 +2846,7 @@ function onFundoChange(){
   const cont = document.getElementById('ord-cuarteles');
   if(!fundo || !CUARTELES[fundo]){
     cont.innerHTML = '<div style="grid-column:1/-1;color:var(--tx3);font-size:13px;text-align:center;padding:10px">Elige un fundo primero</div>';
-    recalcOrden();
+    onOrdDestinoChange();
     return;
   }
   cont.innerHTML = CUARTELES[fundo].map(q =>
@@ -2831,7 +2855,40 @@ function onFundoChange(){
        <span style="line-height:1.1"><strong>${q.c}</strong><br><span style="color:var(--tx3);font-size:9px">${q.ha}</span></span>
      </label>`
   ).join('');
+  onOrdDestinoChange();
+}
+
+// ── DESTINO DE LA ORDEN: cuarteles específicos o general del fundo ──
+// En "general" se marcan TODOS los cuarteles del fundo y se esconde la grilla.
+// Así el cálculo de hectáreas, dosis y teórico por cuartel sigue funcionando igual.
+function ordenEsGeneral(){
+  return (document.getElementById('ord-destino')?.value === 'general');
+}
+function onOrdDestinoChange(){
+  const general = ordenEsGeneral();
+  const wrap = document.getElementById('ord-cuarteles-wrap');
+  const info = document.getElementById('ord-general-info');
+  if(wrap) wrap.style.display = general ? 'none' : 'block';
+  if(info) info.style.display = general ? 'block' : 'none';
+  document.querySelectorAll('.cuartel-chk').forEach(ch => { ch.checked = general; });
+  pintarGeneralInfo();
   recalcOrden();
+}
+function pintarGeneralInfo(){
+  const info = document.getElementById('ord-general-info');
+  if(!info) return;
+  const fundo = document.getElementById('ord-fundo')?.value || '';
+  const lista = (fundo && CUARTELES[fundo]) ? CUARTELES[fundo] : [];
+  if(!lista.length){
+    info.innerHTML = `<div style="border:1px solid var(--bd2);border-radius:8px;padding:12px;background:var(--surf2);color:var(--tx3);font-size:13px;text-align:center">Elige un fundo primero</div>`;
+    return;
+  }
+  const ha = lista.reduce((s,q)=>s+(q.ha||0),0);
+  info.innerHTML = `<div style="border:1px solid var(--vino);border-radius:8px;padding:12px;background:var(--surf2)">
+    <div style="font-size:13px;font-weight:800;color:var(--vino)">GENERAL ${fundo}</div>
+    <div style="font-size:12px;color:var(--tx2);margin-top:3px">${lista.length} cuarteles · ${ha.toFixed(2)} ha</div>
+    <div style="font-size:11px;color:var(--tx3);margin-top:3px">Centro de costo del vale: <b>${GENERAL_CCOSTO[fundo]||'—'}</b> · Bodega: <b>${GENERAL_BODEGA[fundo]||'—'}</b></div>
+  </div>`;
 }
 
 function hectareasOrden(){
@@ -2942,7 +2999,11 @@ function recalcOrden(){
   const primero = document.querySelector('.cuartel-chk:checked');
   const vEl = document.getElementById('ord-variedad');
   const dEl = document.getElementById('ord-direccion');
-  if(primero && fundo && CUARTELES[fundo]){
+  if(ordenEsGeneral() && fundo && CUARTELES[fundo]){
+    // General del fundo: puede abarcar varias variedades
+    if(vEl) vEl.textContent = variedadDeCuarteles(fundo, CUARTELES[fundo].map(q=>q.c)) || '—';
+    if(dEl) dEl.textContent = (CUARTELES[fundo][0]?.dir) || '—';
+  } else if(primero && fundo && CUARTELES[fundo]){
     const cdata = CUARTELES[fundo].find(q=>q.c===primero.dataset.c);
     if(cdata){
       if(vEl) vEl.textContent = cdata.var || '—';
@@ -2977,6 +3038,17 @@ function recalcOrden(){
   });
 
   buildBodegaTabla();
+}
+
+// Variedad de un conjunto de cuarteles: si todos comparten variedad devuelve esa,
+// si hay varias devuelve "VARIAS" (para el PDF y la hoja de trazabilidad).
+function variedadDeCuarteles(fundo, codigos){
+  const lista = (fundo && CUARTELES[fundo]) ? CUARTELES[fundo] : [];
+  const vars = [...new Set(
+    lista.filter(q=>codigos.includes(q.c)).map(q=>(q.var||'').trim()).filter(Boolean)
+  )];
+  if(!vars.length) return '';
+  return vars.length===1 ? vars[0] : 'VARIAS';
 }
 
 // Datos crudos de cuarteles seleccionados {c, ha}
@@ -3082,15 +3154,26 @@ async function crearOrdenNueva(){
     }
   });
 
+  const esGeneral = ordenEsGeneral();
+
   const primerCuartel = cuarts.length ? cuarts[0].c : null;
   let variedadOrden='', direccionOrden='';
-  if(primerCuartel && CUARTELES[fundo]){
+  if(esGeneral && CUARTELES[fundo]){
+    // General del fundo: puede abarcar varias variedades
+    variedadOrden = variedadDeCuarteles(fundo, cuarts.map(c=>c.c));
+    direccionOrden = CUARTELES[fundo][0]?.dir || '';
+  } else if(primerCuartel && CUARTELES[fundo]){
     const cd = CUARTELES[fundo].find(q=>q.c===primerCuartel);
     if(cd){ variedadOrden=cd.var||''; direccionOrden=cd.dir||''; }
   }
 
   const detalle = {
     fundo, fecha, numeroOrden, tipo: tipoOrden,
+    // Los cuarteles SIEMPRE son los reales (trazabilidad, hectáreas, dosis, carencias).
+    // "destino" es el eje contable: en general el vale va a un solo centro de costo.
+    destino: esGeneral ? 'general' : 'cuarteles',
+    ccostoGeneral: esGeneral ? (GENERAL_CCOSTO[fundo]||'') : '',
+    bodegaVale: esGeneral ? (GENERAL_BODEGA[fundo]||'') : '',
     cuarteles: cuarts, hectareas:+has.toFixed(2),
     pct:pctV, mojamiento:parseFloat(mojamiento)||0, ltsMaq:parseFloat(ltsMaq)||0,
     totalLitros: +((+has.toFixed(2))*(parseFloat(mojamiento)||0)).toFixed(2),
@@ -3373,6 +3456,10 @@ function generarPDFOrden(idOrden, modo){
   const W = 210;
   const VINO=[123,45,45], GRIS=[243,234,227], TX=[40,40,40], LBL=[130,130,130];
   const ia = d.infoAplicacion;
+  // Orden general del fundo: el reparto por cuartel se imprime como UNA columna
+  // "GENERAL <FUNDO>" en vez de una columna por cuartel (con 47 no cabrían).
+  const esGen = (d.destino==='general');
+  const etiquetaGen = 'GENERAL '+(d.fundo||'');
 
   // ── ENCABEZADO con logo ──
   doc.setFillColor(...VINO); doc.rect(0,0,W,22,'F');
@@ -3400,7 +3487,7 @@ function generarPDFOrden(idOrden, modo){
   kv('Fundo',d.fundo,L,y); kv('% Superficie',(d.pct||100)+'%',R,y); y+=6;
   kv('Especie',d.especie||'Uva de Mesa',L,y); kv('Mojamiento (lts/há)',d.mojamiento,R,y); y+=6;
   kv('Variedad',d.variedad,L,y); kv('Lts o Kg / máquina',d.ltsMaq,R,y); y+=6;
-  kv('Cuartel(es)',(d.cuarteles||[]).map(c=>c.c).join(', '),L,y); kv('Total litros a aplic.', (d.totalLitros!=null?d.totalLitros:((d.hectareas||0)*(d.mojamiento||0)).toFixed(2)), R, y); y+=6;
+  kv('Cuartel(es)', esGen ? (etiquetaGen+' ('+(d.cuarteles||[]).length+' cuarteles)') : (d.cuarteles||[]).map(c=>c.c).join(', '),L,y); kv('Total litros a aplic.', (d.totalLitros!=null?d.totalLitros:((d.hectareas||0)*(d.mojamiento||0)).toFixed(2)), R, y); y+=6;
   kv('Fecha',d.fecha,L,y); kv('Equipo a usar',d.equipo,R,y); y+=6;
   kv('Método',d.metodo,R,y); y+=9;
 
@@ -3436,8 +3523,8 @@ function generarPDFOrden(idOrden, modo){
   y+=5;
 
   // ── PARA BODEGA ──
-  seccion('Para bodega — Real aplicado por cuartel');
-  const cuarts=(d.cuarteles||[]).slice(0,5);
+  seccion(esGen ? 'Para bodega — Real aplicado (general del fundo)' : 'Para bodega — Real aplicado por cuartel');
+  const cuarts = esGen ? [{c:etiquetaGen, ha:d.hectareas||0}] : (d.cuarteles||[]).slice(0,5);
   const bh=['Producto','Real Aplic.',...cuarts.map(c=>c.c),'Total'];
   const bw=(W-20)/bh.length;
   doc.setFillColor(...VINO); doc.setTextColor(255,255,255); doc.rect(10,y,W-20,5,'F'); doc.setFontSize(6.5); doc.setFont('helvetica','bold');
@@ -3449,7 +3536,11 @@ function generarPDFOrden(idOrden, modo){
     if(ia&&ia.realAplicado){ const f=ia.realAplicado.find(x=>x.producto===p.nombre); if(f) ra=f.cantidad; }
     doc.text(String(p.nombre).substring(0,16),11,y+3.4);
     doc.setFont('helvetica','bold'); doc.text(String(ra||'—'),10+bw+1,y+3.4); doc.setFont('helvetica','normal');
-    (p.porCuartel||[]).slice(0,5).forEach((pc,j)=>doc.text(pc.val.toFixed(2),10+bw*(j+2)+1,y+3.4));
+    if(esGen){
+      doc.text((p.totalTeorico||0).toFixed(2),10+bw*2+1,y+3.4);
+    } else {
+      (p.porCuartel||[]).slice(0,5).forEach((pc,j)=>doc.text(pc.val.toFixed(2),10+bw*(j+2)+1,y+3.4));
+    }
     doc.setFont('helvetica','bold'); doc.text(String((p.totalTeorico||0).toFixed(2)),10+bw*(bh.length-1)+1,y+3.4); doc.setFont('helvetica','normal');
     doc.setDrawColor(220,220,220); doc.rect(10,y,W-20,5); y+=5;
   });
@@ -3517,12 +3608,16 @@ function generarPDFOrden(idOrden, modo){
     let y2 = 14;
     doc.setFillColor(...VINO); doc.rect(0,0,W,16,'F');
     doc.setTextColor(255,255,255); doc.setFontSize(11); doc.setFont('helvetica','bold');
-    doc.text('CONSUMO REAL POR CUARTEL — Orden N°'+(d.numeroOrden||o.idOrden), W/2, 10, {align:'center'});
+    doc.text((esGen?'CONSUMO REAL — GENERAL DEL FUNDO':'CONSUMO REAL POR CUARTEL')+' — Orden N°'+(d.numeroOrden||o.idOrden), W/2, 10, {align:'center'});
     y2 = 24;
     doc.setTextColor(...TX); doc.setFontSize(8); doc.setFont('helvetica','normal');
-    doc.text('Reparto del consumo real de cada producto entre los cuarteles, proporcional a sus hectáreas.', 10, y2); y2+=7;
+    doc.text(esGen
+      ? 'Aplicación general del fundo: el consumo real se carga al general, no se reparte por cuartel.'
+      : 'Reparto del consumo real de cada producto entre los cuarteles, proporcional a sus hectáreas.', 10, y2); y2+=7;
 
-    const cuartsF = (d.cuartelesFinales||d.cuarteles||[]);
+    const cuartsF = esGen
+      ? [{c:etiquetaGen, ha:(d.hectareas||0)}]
+      : (d.cuartelesFinales||d.cuarteles||[]);
     const totHa = cuartsF.reduce((s,c)=>s+(c.ha||0),0) || 1;
     const bh2=['Producto','Real Total',...cuartsF.map(c=>c.c)];
     const bw2=(W-20)/bh2.length;
@@ -4316,14 +4411,20 @@ function renderGerencia(){
           const ra = ia.realAplicado.find(x=>x.producto===p.nombre);
           if(ra) realTotal = ra.cantidad;
         }
-        // reparto por cuartel segun proporcion teorica
-        const teoricoTotal = (p.porCuartel||[]).reduce((s,c)=>s+c.val,0) || 1;
-        (p.porCuartel||[]).forEach(pc=>{
-          const proporcion = pc.val/teoricoTotal;
-          const costoCuartel = realTotal * proporcion * precio;
-          porCampo[campo] = porCampo[campo]||{};
-          porCampo[campo][pc.c] = (porCampo[campo][pc.c]||0) + costoCuartel;
-        });
+        porCampo[campo] = porCampo[campo]||{};
+        if(d.destino==='general'){
+          // Aplicación general del fundo: se carga al general, no se reparte por cuartel
+          const clave = 'GENERAL '+(d.fundo||campo);
+          porCampo[campo][clave] = (porCampo[campo][clave]||0) + realTotal*precio;
+        } else {
+          // reparto por cuartel segun proporcion teorica
+          const teoricoTotal = (p.porCuartel||[]).reduce((s,c)=>s+c.val,0) || 1;
+          (p.porCuartel||[]).forEach(pc=>{
+            const proporcion = pc.val/teoricoTotal;
+            const costoCuartel = realTotal * proporcion * precio;
+            porCampo[campo][pc.c] = (porCampo[campo][pc.c]||0) + costoCuartel;
+          });
+        }
       });
     });
 
@@ -4399,12 +4500,15 @@ function renderGerencia(){
           const d=o.detalle;
           const num = d&&d.numeroOrden ? d.numeroOrden : o.idOrden;
           const fecha = (d&&d.fecha) ? d.fecha : o.fecha;
-          const cuarts = (d&&d.cuarteles) ? d.cuarteles.map(c=>c.c).join(', ') : '—';
+          const cuarts = (d&&d.destino==='general')
+            ? ('GENERAL '+(d.fundo||'')+' · '+((d.cuarteles||[]).length)+' cuarteles')
+            : ((d&&d.cuarteles) ? d.cuarteles.map(c=>c.c).join(', ') : '—');
           const prods = (d&&d.productos) ? d.productos.map(p=>p.nombre).join(', ') : (o.productos||'—');
           const term = String(o.estado||'').toUpperCase()==='TERMINADA';
           const anulada = String(o.estado||'').toUpperCase()==='ANULADA';
           const iniciada = String(o.estado||'').toUpperCase()==='INICIADA';
-          const badge = anulada ? `<span class="badge b-out">Anulada</span>` : term ? `<span class="badge b-ok">Terminada</span>` : iniciada ? `<span class="badge b-low">▶️ Iniciada</span>` : `<span class="badge" style="background:#e8f0fb;color:#2456a0">Creada</span>`;
+          const badgeGen = (d&&d.destino==='general') ? `<span class="badge" style="background:#f3eae3;color:#7b2d2d">GENERAL</span> ` : '';
+          const badge = badgeGen + (anulada ? `<span class="badge b-out">Anulada</span>` : term ? `<span class="badge b-ok">Terminada</span>` : iniciada ? `<span class="badge b-low">▶️ Iniciada</span>` : `<span class="badge" style="background:#e8f0fb;color:#2456a0">Creada</span>`);
           const esMaestro = curUser && curUser.role==='maestro';
           let botones = '';
           if(esMaestro && !anulada){
