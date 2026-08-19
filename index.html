@@ -2631,15 +2631,25 @@ ${misOrdenes.length ? misOrdenes.map(o => {
   // Si la orden tiene detalle estructurado, mostramos la orden completa
   if(d && d.productos && d.productos.length){
     const cuarts = d.cuarteles || [];
+    // General del fundo: una sola columna GENERAL en vez de una por cuartel
+    const genOrd = (d.destino==='general');
     let tabla = `<div style="overflow-x:auto;border:1px solid var(--bd);border-radius:8px;margin:10px 0">
       <table class="ord-tabla">
         <thead><tr><th style="min-width:100px">Producto</th><th>Real<br>Aplic.</th>`;
-    cuarts.forEach(q=>tabla+=`<th>${q.c}<br><span style="font-weight:400;font-size:9px">${q.ha}ha</span></th>`);
+    if(genOrd){
+      tabla += `<th style="min-width:96px">GENERAL ${d.fundo||''}<br><span style="font-weight:400;font-size:9px">${cuarts.length} cuarteles · ${d.hectareas||0}ha</span></th>`;
+    } else {
+      cuarts.forEach(q=>tabla+=`<th>${q.c}<br><span style="font-weight:400;font-size:9px">${q.ha}ha</span></th>`);
+    }
     tabla += `<th>Total<br>teórico</th></tr></thead><tbody>`;
     d.productos.forEach((p,idx)=>{
       tabla += `<tr><td style="text-align:left;font-size:11px">${p.nombre}</td>`;
       tabla += `<td><input type="number" id="ra-${o.idOrden}-${idx}" data-prod="${p.nombre}" placeholder="0" style="min-width:54px;border:1.5px solid var(--vino)"></td>`;
-      (p.porCuartel||[]).forEach(pc=>tabla+=`<td class="calc-cell">${pc.val.toFixed(2)}</td>`);
+      if(genOrd){
+        tabla += `<td class="calc-cell">${(p.totalTeorico||0).toFixed(2)}</td>`;
+      } else {
+        (p.porCuartel||[]).forEach(pc=>tabla+=`<td class="calc-cell">${pc.val.toFixed(2)}</td>`);
+      }
       tabla += `<td class="calc-cell" style="background:var(--vino-glow)">${(p.totalTeorico||0).toFixed(2)}</td></tr>`;
     });
     tabla += `</tbody></table></div>`;
