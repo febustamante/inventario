@@ -2288,7 +2288,7 @@ function exportarTraza(){
   });
 
   // Encabezados: A-D fórmulas (vacías), luego el resto
-  const headers=['','','','','CUARTELES','VARIEDAD','HECTAREAS','FECHA INICIO','FECHA TERMINO','PRODUCTO','ING. ACTIVO','DOSIS','UNIDAD','EQUIPO','METODO','COD. MAQUINARIA','TRACTORISTA','KILOS TOTALES','OBJETIVO'];
+  const headers=['','','','','CUARTELES','VARIEDAD','HECTAREAS','FECHA INICIO','FECHA TERMINO','PRODUCTO','ING. ACTIVO','DOSIS','UNIDAD','EQUIPO','METODO','COD. MAQUINARIA','IMPLEMENTO','TRACTORISTA','KILOS TOTALES','OBJETIVO'];
   const filas=[];
 
   term.forEach(o=>{
@@ -2305,6 +2305,7 @@ function exportarTraza(){
     // Código maquinaria y tractorista: del primer equipo registrado
     const eq0 = (ia.equipos&&ia.equipos[0]) || {};
     const codMaq = eq0.tractor || '';
+    const implemento = eq0.implemento || '';
     const tractorista = eq0.tractorista || '';
     const objetivoOrden = d.objetivo || '';
 
@@ -2323,7 +2324,7 @@ function exportarTraza(){
         '':'', 'CUARTELES':cuartelesTxt, 'VARIEDAD':variedad, 'HECTAREAS':totHa,
         'FECHA INICIO':fInicio, 'FECHA TERMINO':fTermino, 'PRODUCTO':nombreProd,
         'ING. ACTIVO':ingAct, 'DOSIS':dosis, 'UNIDAD':unidad, 'EQUIPO':equipo,
-        'METODO':metodo, 'COD. MAQUINARIA':codMaq, 'TRACTORISTA':tractorista,
+        'METODO':metodo, 'COD. MAQUINARIA':codMaq, 'IMPLEMENTO':implemento, 'TRACTORISTA':tractorista,
         'KILOS TOTALES':kilosTot, 'OBJETIVO':objetivo
       });
     });
@@ -2334,7 +2335,7 @@ function exportarTraza(){
   // Construir matriz respetando las 4 columnas vacías A-D al inicio
   const aoa=[headers];
   filas.forEach(f=>{
-    aoa.push(['','','','', f['CUARTELES'],f['VARIEDAD'],f['HECTAREAS'],f['FECHA INICIO'],f['FECHA TERMINO'],f['PRODUCTO'],f['ING. ACTIVO'],f['DOSIS'],f['UNIDAD'],f['EQUIPO'],f['METODO'],f['COD. MAQUINARIA'],f['TRACTORISTA'],f['KILOS TOTALES'],f['OBJETIVO']]);
+    aoa.push(['','','','', f['CUARTELES'],f['VARIEDAD'],f['HECTAREAS'],f['FECHA INICIO'],f['FECHA TERMINO'],f['PRODUCTO'],f['ING. ACTIVO'],f['DOSIS'],f['UNIDAD'],f['EQUIPO'],f['METODO'],f['COD. MAQUINARIA'],f['IMPLEMENTO'],f['TRACTORISTA'],f['KILOS TOTALES'],f['OBJETIVO']]);
   });
   const ws=XLSX.utils.aoa_to_sheet(aoa);
   const wb=XLSX.utils.book_new();
