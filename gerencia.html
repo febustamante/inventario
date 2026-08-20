@@ -1751,7 +1751,9 @@ function calcOC(){
     const el=document.getElementById('ocp-sub-'+id); if(el)el.textContent=(c&&pr)?plata(c*pr):'—';
   });
 }
+let _creandoOC = false;
 async function guardarOC(){
+  if(_creandoOC){ return; } // ya se está creando: evita la OC duplicada por doble toque
   const prov=document.getElementById('oc-prov').value.trim();
   const num=document.getElementById('oc-num').value.trim();
   const fecha=document.getElementById('oc-fecha').value;
@@ -1771,7 +1773,19 @@ async function guardarOC(){
 
   if(!prov||!fecha||!items.length){ msg.innerHTML='<span style="color:#d64545">Faltan datos: proveedor, fecha y al menos un producto con cantidad.</span>'; return; }
 
+  // ¿Ya existe una OC con este número? (evita el duplicado aunque se recargue la página)
+  if(num){
+    const yaExiste = (compras||[]).find(o=>String(o.numero_oc||'').trim()===num);
+    if(yaExiste){
+      msg.innerHTML='<span style="color:#d64545">La OC N°'+num+' ya existe ('+(yaExiste.proveedor||'')+'). Cambia el número o revisa el listado.</span>';
+      return;
+    }
+  }
+
   msg.innerHTML='<span style="color:#80868b">Creando orden de compra...</span>';
+  _creandoOC = true;
+  const btnOC = document.querySelector('button[onclick="guardarOC()"]');
+  if(btnOC){ btnOC.disabled=true; btnOC.style.opacity='0.5'; btnOC.style.pointerEvents='none'; }
   try{
     const {error}=await sb.from('ordenes_compra').insert({
       numero_oc:num, proveedor:prov, fecha, estado:'PENDIENTE',
@@ -1783,6 +1797,10 @@ async function guardarOC(){
     await cargar();
   }catch(e){
     msg.innerHTML='<span style="color:#d64545">Error: '+(e.message||'')+'. ¿Existe la tabla ordenes_compra en Supabase?</span>';
+    // reactivar para que pueda reintentar
+    if(btnOC){ btnOC.disabled=false; btnOC.style.opacity=''; btnOC.style.pointerEvents=''; }
+  } finally {
+    _creandoOC = false;
   }
 }
 function exportarComprasExcel(){
