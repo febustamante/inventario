@@ -2130,7 +2130,7 @@ function renderPetroleo(){
   ${puedeEditar?`<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
     <button class="btn-primary" style="margin:0;flex:1;min-width:150px" onclick="abrirNuevoVale('salida')"><i class="ti ti-plus"></i> Nuevo vale</button>
     <button class="btn-sec" style="flex:1;min-width:150px" onclick="abrirNuevoVale('entrada')"><i class="ti ti-package-import"></i> Recepción</button>
-    <button class="btn-sec" style="flex-shrink:0;padding:0 16px;display:flex;align-items:center;gap:6px" onclick="exportarPetroleoExcel()"><i class="ti ti-file-spreadsheet"></i> Excel</button>
+    <button class="btn-sec" style="flex-shrink:0;padding:0 16px;display:flex;align-items:center;gap:6px" onclick="abrirExportarPetroleo()"><i class="ti ti-file-spreadsheet"></i> Excel</button>
   </div>`:''}
 
   <div class="section-label">Últimos vales${petroleoMovs.length>10?` <span style="font-weight:400;text-transform:none;color:var(--tx3)">· 10 más recientes de ${petroleoMovs.length}</span>`:''}</div>
@@ -2236,7 +2236,7 @@ function abrirNuevoVale(tipo){ // 'salida' = vale a tractorista, 'entrada' = rec
 
       <div style="display:flex;gap:10px">
         <button class="btn-sec" style="flex:1" onclick="document.getElementById('modal-vale').remove()">Cancelar</button>
-        <button class="btn-primary" style="flex:1;margin:0" onclick="confirmarVale('${tipo}')">${esSalida?'Registrar vale':'Registrar recepción'}</button>
+        <button id="vp-btn-guardar" class="btn-primary" style="flex:1;margin:0" onclick="confirmarVale('${tipo}')">${esSalida?'Registrar vale':'Registrar recepción'}</button>
       </div>
     </div>`;
   document.body.appendChild(div);
@@ -2245,6 +2245,9 @@ function abrirNuevoVale(tipo){ // 'salida' = vale a tractorista, 'entrada' = rec
 }
 
 async function confirmarVale(tipo){
+  const btn = document.getElementById('vp-btn-guardar');
+  if(btn && btn.disabled) return; // ya se está guardando: ignora el doble clic/doble tap
+
   const g = id => (document.getElementById(id)?.value || '').trim();
   const esSalida = (tipo==='salida');
   const litros = parseFloat(g('vp-litros'))||0;
@@ -2274,16 +2277,19 @@ async function confirmarVale(tipo){
     usuario: curUser.id,
     estado: 'ACTIVO'
   };
+  if(btn){ btn.disabled = true; btn.textContent = 'Guardando...'; }
   showToast('Guardando...','info');
   try{
     const { error } = await sb.from('petroleo_movs').insert(base);
     if(error) throw error;
+    // El modal solo se cierra (y se da por guardado) una vez que Supabase confirma el insert.
     document.getElementById('modal-vale')?.remove();
     showToast((esSalida?'Vale registrado · ':'Recepción registrada · ')+fmt(litros)+' L');
     _firmaStrokes = []; _firmaActual = null;
     await syncData();
   }catch(e){
     showToast('Error: '+(e.message||'')+' — ¿existe la tabla petroleo_movs?','err');
+    if(btn){ btn.disabled = false; btn.textContent = esSalida?'Registrar vale':'Registrar recepción'; }
   }
 }
 
@@ -2316,15 +2322,154 @@ async function anularValePetroleo(movId){
   }catch(e){ showToast('Error: '+(e.message||''),'err'); }
 }
 
-function exportarPetroleoExcel(){
+// Modal para elegir el rango de fechas antes de exportar (para adjuntar solo lo del período que corresponde)
+function abrirExportarPetroleo(){
+  const prev = document.getElementById('modal-exp-pet'); if(prev) prev.remove();
+  const inp = 'width:100%;padding:11px;border:1px solid var(--bd2);border-radius:9px;font-size:14px;margin:5px 0 14px';
+  const lbl = 'font-size:12px;font-weight:700;color:var(--tx3);text-transform:uppercase';
+  const div = document.createElement('div');
+  div.id = 'modal-exp-pet';
+  div.style = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;display:flex;align-items:flex-end;justify-content:center';
+  div.innerHTML = `
+    <div style="background:#fff;width:100%;max-width:420px;border-radius:18px 18px 0 0;padding:20px;max-height:88vh;overflow-y:auto">
+      <div style="font-size:17px;font-weight:800;margin-bottom:2px">Exportar vales</div>
+      <div style="font-size:12px;color:var(--tx3);margin-bottom:16px">Elige el rango de fechas (déjalo vacío para exportar todo)</div>
+
+      <label style="${lbl}">Desde</label>
+      <input id="exp-pet-desde" type="date" style="${inp}">
+
+      <label style="${lbl}">Hasta</label>
+      <input id="exp-pet-hasta" type="date" style="${inp}">
+
+      <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+        <button type="button" class="btn-sec" style="flex:1;min-width:100px;font-size:12px;padding:8px" onclick="rangoRapidoPetroleo(7)">Últimos 7 días</button>
+        <button type="button" class="btn-sec" style="flex:1;min-width:100px;font-size:12px;padding:8px" onclick="rangoRapidoPetroleo(30)">Últimos 30 días</button>
+        <button type="button" class="btn-sec" style="flex:1;min-width:100px;font-size:12px;padding:8px" onclick="rangoRapidoPetroleo(0)">Todo</button>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <button class="btn-primary" style="flex:1;margin:0;display:flex;align-items:center;justify-content:center;gap:5px" onclick="confirmarExportarPetroleo('excel')"><i class="ti ti-file-spreadsheet"></i> Excel</button>
+        <button class="btn-primary" style="flex:1;margin:0;display:flex;align-items:center;justify-content:center;gap:5px" onclick="confirmarExportarPetroleo('pdf')"><i class="ti ti-file-text"></i> PDF firmados</button>
+      </div>
+      <button class="btn-sec" style="width:100%" onclick="document.getElementById('modal-exp-pet').remove()">Cancelar</button>
+    </div>`;
+  document.body.appendChild(div);
+}
+
+function rangoRapidoPetroleo(dias){
+  const desdeEl = document.getElementById('exp-pet-desde');
+  const hastaEl = document.getElementById('exp-pet-hasta');
+  if(!desdeEl || !hastaEl) return;
+  if(dias<=0){ desdeEl.value=''; hastaEl.value=''; return; }
+  const hoyD = new Date();
+  const desdeD = new Date(hoyD); desdeD.setDate(desdeD.getDate()-dias);
+  desdeEl.value = isoLocal(desdeD);
+  hastaEl.value = isoLocal(hoyD);
+}
+
+function confirmarExportarPetroleo(formato){
+  const desde = document.getElementById('exp-pet-desde')?.value || '';
+  const hasta = document.getElementById('exp-pet-hasta')?.value || '';
+  document.getElementById('modal-exp-pet')?.remove();
+  if(formato==='pdf') exportarPetroleoPDF(desde, hasta);
+  else exportarPetroleoExcel(desde, hasta);
+}
+
+// ── PDF con los vales firmados (uno por vale, con la firma redibujada desde el trazo guardado) ──
+// Solo incluye 'salida' (los vales al tractorista) — las recepciones no llevan firma.
+function dibujarValeCardPDF(doc, mv, x, y, w, h){
+  const VINO=[123,45,45], TX=[35,30,28], LBL=[140,128,120], BD=[220,213,206];
+  doc.setDrawColor(...BD); doc.setLineWidth(0.3); doc.roundedRect(x,y,w,h,3,3);
+  doc.setFillColor(...VINO); doc.roundedRect(x,y,w,4,1.5,1.5,'F'); doc.rect(x,y+2,w,2,'F');
+
+  doc.setTextColor(255,255,255); doc.setFontSize(9); doc.setFont('helvetica','bold');
+  doc.text('AGRÍCOLA SAN JOSÉ · VALE DE PETRÓLEO N° '+mv.id, x+6, y+3);
+
+  const f = mv.fecha ? new Date(mv.fecha) : null;
+  doc.setTextColor(...LBL); doc.setFontSize(8); doc.setFont('helvetica','normal');
+  doc.text(f ? (f.toLocaleDateString('es-CL')+' · '+f.toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'})) : '', x+w-6, y+11, {align:'right'});
+
+  let yy = y+18;
+  const fila = (label, val)=>{
+    doc.setFontSize(8); doc.setTextColor(...LBL); doc.setFont('helvetica','normal'); doc.text(label, x+6, yy);
+    doc.setTextColor(...TX); doc.setFont('helvetica','bold'); doc.text(String(val||'—'), x+w-6, yy, {align:'right'});
+    doc.setDrawColor(...BD); doc.line(x+6, yy+1.8, x+w-6, yy+1.8);
+    yy += 8;
+  };
+  fila('Tractorista', mv.tractorista);
+  fila('Tractor / camioneta', mv.vehiculo);
+  fila('Litros entregados', fmt(mv.litros)+' L');
+  fila('Registrado por', mv.usuario);
+
+  yy += 2;
+  doc.setFontSize(6.5); doc.setTextColor(...LBL); doc.text('FIRMA DEL TRACTORISTA', x+6, yy); yy += 2.5;
+  const boxX=x+6, boxY=yy, boxW=w-12, boxH=Math.max(18, (y+h-6)-yy);
+  doc.setDrawColor(...BD); doc.roundedRect(boxX,boxY,boxW,boxH,1.5,1.5);
+  const trazos = (mv.firma||[]).filter(s=>s&&s.length>1);
+  if(trazos.length){
+    doc.setDrawColor(...TX); doc.setLineWidth(0.35);
+    trazos.forEach(stroke=>{
+      for(let i=1;i<stroke.length;i++){
+        doc.line(boxX+stroke[i-1][0]*boxW, boxY+stroke[i-1][1]*boxH, boxX+stroke[i][0]*boxW, boxY+stroke[i][1]*boxH);
+      }
+    });
+  } else {
+    doc.setFontSize(8); doc.setTextColor(...LBL); doc.setFont('helvetica','italic');
+    doc.text('Sin firma', boxX+boxW/2, boxY+boxH/2, {align:'center'});
+  }
+}
+
+function exportarPetroleoPDF(fechaDesde, fechaHasta){
+  if(typeof window.jspdf === 'undefined'){ showToast('La librería de PDF no cargó','err'); return; }
+  const vales = (petroleoMovs||[]).filter(mv=>mv.tipo==='salida');
+  if(!vales.length){ showToast('No hay vales para exportar','err'); return; }
+
+  const desde = fechaDesde ? new Date(fechaDesde+'T00:00:00') : null;
+  const hasta = fechaHasta ? new Date(fechaHasta+'T23:59:59') : null;
+  const filtrados = vales.filter(mv=>{
+    const f = mv.fecha ? new Date(mv.fecha) : null;
+    if(desde && (!f || f<desde)) return false;
+    if(hasta && (!f || f>hasta)) return false;
+    return true;
+  }).sort((a,b)=> new Date(a.fecha||0) - new Date(b.fecha||0));
+
+  if(!filtrados.length){ showToast('No hay vales en ese rango de fechas','err'); return; }
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({unit:'mm', format:'a4'});
+  const margin=10, gap=8, cardW=210-margin*2, cardH=128;
+
+  filtrados.forEach((mv,i)=>{
+    const posEnHoja = i % 2;
+    if(i>0 && posEnHoja===0) doc.addPage();
+    const y = margin + posEnHoja*(cardH+gap);
+    dibujarValeCardPDF(doc, mv, margin, y, cardW, cardH);
+  });
+
+  const sufijo = (fechaDesde||fechaHasta) ? ('_'+(fechaDesde||'inicio')+'_a_'+(fechaHasta||hoy())) : '_'+hoy();
+  doc.save('vales_petroleo_firmados'+sufijo+'.pdf');
+}
+
+// fechaDesde/fechaHasta: strings 'YYYY-MM-DD' (o vacío = sin límite por ese lado).
+// El saldo de la bombona se calcula siempre con el historial COMPLETO (para que la columna
+// "Saldo bombona" muestre el nivel real), aunque solo se muestren las filas del rango elegido.
+function exportarPetroleoExcel(fechaDesde, fechaHasta){
   if(typeof XLSX==='undefined'){ showToast('La librería Excel no cargó','err'); return; }
   if(!petroleoMovs.length){ showToast('No hay vales para exportar','err'); return; }
+
+  const desde = fechaDesde ? new Date(fechaDesde+'T00:00:00') : null;
+  const hasta = fechaHasta ? new Date(fechaHasta+'T23:59:59') : null;
+
   const ordenados = [...petroleoMovs].sort((a,b)=> new Date(a.fecha||0) - new Date(b.fecha||0));
   let saldo = 0;
-  const filas = ordenados.map(mv=>{
+  const filas = [];
+  ordenados.forEach(mv=>{
     if(mv.estado!=='ANULADO') saldo += (mv.tipo==='entrada' ? (+mv.litros||0) : -(+mv.litros||0));
-    return {
-      'Fecha': mv.fecha ? new Date(mv.fecha).toLocaleString('es-CL') : '',
+    const f = mv.fecha ? new Date(mv.fecha) : null;
+    if(desde && (!f || f<desde)) return;
+    if(hasta && (!f || f>hasta)) return;
+    filas.push({
+      'Fecha': f ? f.toLocaleString('es-CL') : '',
       'Tipo': mv.tipo==='entrada' ? 'Recepción' : 'Vale',
       'Tractorista': mv.tractorista||'',
       'Vehículo': mv.vehiculo||'',
@@ -2334,11 +2479,15 @@ function exportarPetroleoExcel(){
       'Usuario': mv.usuario||'',
       'Estado': mv.estado||'ACTIVO',
       'Saldo bombona': mv.estado!=='ANULADO' ? saldo : ''
-    };
+    });
   });
+
+  if(!filas.length){ showToast('No hay vales en ese rango de fechas','err'); return; }
+
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filas), 'Vales petróleo');
-  XLSX.writeFile(wb, 'vales_petroleo_'+hoy()+'.xlsx');
+  const sufijo = (fechaDesde||fechaHasta) ? ('_'+(fechaDesde||'inicio')+'_a_'+(fechaHasta||hoy())) : '_'+hoy();
+  XLSX.writeFile(wb, 'vales_petroleo'+sufijo+'.xlsx');
 }
 
 function renderRecibir(){
