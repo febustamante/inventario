@@ -1462,7 +1462,7 @@ async function recibirOC(ocId){
 let subRecibir='compras'; // 'compras' | 'manual'
 function setSubRecibir(v){subRecibir=v;refresh();}
 // ══════ MATERIALES DE CAMPO (alambres, protectores, clavos, herramientas) ══════
-const CAT_MATERIALES = ['Alambres','Herramientas','Protectores','Clavos','Útiles de aseo','Otros'];
+const CAT_MATERIALES = ['Alambres','Herramientas','Protectores','Clavos','Útiles de aseo','Aceite','Otros'];
 let matCatFiltro = '';
 
 // ══════ MI STOCK (dosificador ve solo su bodega, solo lo que tiene) ══════
@@ -1776,7 +1776,7 @@ function abrirNuevoMaterial(){
 
       <label style="font-size:12px;font-weight:700;color:var(--tx3);text-transform:uppercase">Unidad de medida</label>
       <div id="nm-uni" style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 20px">
-        ${['unidad','rollo','metro','kilo','caja'].map((u,i)=>`<button type="button" onclick="selNmUni(this,'${u}')" class="nm-chip${i===0?' on':''}" style="padding:8px 14px;border-radius:20px;border:1.5px solid ${i===0?'var(--vino)':'var(--bd2)'};background:${i===0?'var(--vino)':'#fff'};color:${i===0?'#fff':'var(--tx2)'};font-size:13px;font-weight:600;cursor:pointer">${u}</button>`).join('')}
+        ${['unidad','rollo','metro','kilo','caja','litros'].map((u,i)=>`<button type="button" onclick="selNmUni(this,'${u}')" class="nm-chip${i===0?' on':''}" style="padding:8px 14px;border-radius:20px;border:1.5px solid ${i===0?'var(--vino)':'var(--bd2)'};background:${i===0?'var(--vino)':'#fff'};color:${i===0?'#fff':'var(--tx2)'};font-size:13px;font-weight:600;cursor:pointer">${u}</button>`).join('')}
       </div>
 
       <div style="display:flex;gap:10px">
@@ -1827,7 +1827,7 @@ function editarMaterial(matId){
 
       <label style="font-size:12px;font-weight:700;color:var(--tx3);text-transform:uppercase">Unidad</label>
       <div id="nm-uni" style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 14px">
-        ${['unidad','rollo','metro','kilo','caja'].map(u=>{const on=m.unidad===u;return `<button type="button" onclick="selNmUni(this,'${u}')" class="nm-chip" style="padding:8px 14px;border-radius:20px;border:1.5px solid ${on?'var(--vino)':'var(--bd2)'};background:${on?'var(--vino)':'#fff'};color:${on?'#fff':'var(--tx2)'};font-size:13px;font-weight:600;cursor:pointer">${u}</button>`;}).join('')}
+        ${['unidad','rollo','metro','kilo','caja','litros'].map(u=>{const on=m.unidad===u;return `<button type="button" onclick="selNmUni(this,'${u}')" class="nm-chip" style="padding:8px 14px;border-radius:20px;border:1.5px solid ${on?'var(--vino)':'var(--bd2)'};background:${on?'var(--vino)':'#fff'};color:${on?'#fff':'var(--tx2)'};font-size:13px;font-weight:600;cursor:pointer">${u}</button>`;}).join('')}
       </div>
 
       <label style="font-size:12px;font-weight:700;color:var(--tx3);text-transform:uppercase">Ajustar cantidad</label>
