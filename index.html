@@ -412,6 +412,33 @@ const operadorOpts = () => '<option value="">— Tractorista —</option>' + OPE
 const IMPLEMENTOS = ['LEVERA N1','LEVERA N2','ATASA N3','ATASA N4','ATASA N5','ATASA N6','CAFINI N7','CAFINI N8','VENTIS N9','LERPAIN N10','ELECTROSTATIC ESS1','ELECTROSTATIC ESS2','JACTO CERRILLOS','JACTO RULO','BARRA 1','BARRA 2'];
 const implementoOpts = () => '<option value="">— Implemento —</option>' + IMPLEMENTOS.map(t=>`<option>${t}</option>`).join('');
 
+// Vehículos que retiran petróleo de la bombona: se leen en vivo desde maq_maquinas
+// (tabla real de Supabase, compartida con el otro proyecto de maquinaria) — tipo TRACTOR o Vehiculo.
+function vehiculoPetroleoOpts(){
+  if(!maqMaquinas.length){
+    // Respaldo si la tabla aún no cargó: lista fija de tractores para no dejar el select vacío
+    return '<option value="">— Tractor / camioneta —</option>' + TRACTORES.map(t=>`<option>${t}</option>`).join('');
+  }
+  const grupos = {};
+  maqMaquinas.forEach(m=>{
+    const tipoNorm = String(m.tipo||'').trim().toUpperCase();
+    const etiqueta = tipoNorm==='TRACTOR' ? 'Tractores' : (tipoNorm==='VEHICULO' ? 'Camionetas' : (m.tipo||'Otros'));
+    (grupos[etiqueta] = grupos[etiqueta]||[]).push(m);
+  });
+  let html = '<option value="">— Tractor / camioneta —</option>';
+  Object.keys(grupos).forEach(g=>{
+    html += `<optgroup label="${g}">` + grupos[g].map(m=>`<option value="${m.maq}">${m.maq}</option>`).join('') + '</optgroup>';
+  });
+  return html;
+}
+
+// Tractoristas: se leen en vivo desde maq_operadores (solo los marcados activo=true)
+function tractoristaPetroleoOpts(){
+  const activos = maqOperadores.filter(o=>o.activo!==false);
+  if(!activos.length) return operadorOpts(); // respaldo a la lista fija si aún no cargó la tabla
+  return '<option value="">— Tractorista —</option>' + activos.map(o=>`<option>${o.nombre}</option>`).join('');
+}
+
 // Acordeón de "Mis Órdenes" del dosificador: solo una abierta a la vez
 let ordenExpandida = null;
 function toggleOrdenDosif(id){
@@ -445,7 +472,9 @@ const USERS = [
 // Estado
 let stockByLoc = {};
 let products = [];
-let movimientos = [], ordenes = [], compras = [], materiales = [], materialesMov = [];
+let movimientos = [], ordenes = [], compras = [], materiales = [], materialesMov = [], petroleoMovs = [], maqMaquinas = [], maqOperadores = [];
+// Captura de firma vectorial (trazo, no imagen) para vales de petróleo
+let _firmaStrokes = [], _firmaActual = null, _firmaDrawing = false;
 let nextMov = 1, nextOrden = 1;
 let curUser = null, selUser = null, curTab = 0;
 let chartInst = {}, extraLines = 4;
@@ -626,6 +655,22 @@ async function syncData() {
       if(!e7) matsMov = mmData||[];
     }catch(_){ mats=[]; matsMov=[]; }
 
+    // 6b) Vales de petróleo (tabla nueva; si no existe, no rompe)
+    let petMovs=[];
+    try{
+      const { data: pmData, error: e8 } = await sb.from('petroleo_movs').select('*').order('fecha',{ascending:false});
+      if(!e8) petMovs = pmData||[];
+    }catch(_){ petMovs=[]; }
+
+    // 6c) Maquinaria y operadores (tablas del proyecto de maquinaria, mismo Supabase)
+    let maqs=[], opers=[];
+    try{
+      const { data: maqData, error: e9 } = await sb.from('maq_maquinas').select('*');
+      if(!e9) maqs = maqData||[];
+      const { data: operData, error: e10 } = await sb.from('maq_operadores').select('*').order('nombre');
+      if(!e10) opers = operData||[];
+    }catch(_){ maqs=[]; opers=[]; }
+
     // ── Armar products y stockByLoc con el formato que usa la app ──
     const nuevosProducts = [];
     const nuevoStockByLoc = {};
@@ -694,6 +739,9 @@ async function syncData() {
     compras = ocs;
     materiales = mats;
     materialesMov = matsMov;
+    petroleoMovs = petMovs;
+    maqMaquinas = maqs;
+    maqOperadores = opers;
 
     sheetsConnected = true;
     setSyncStatus('on', 'Conectado · ' + products.length + ' productos');
@@ -1063,6 +1111,7 @@ function getTabs(role) {
     {k:'historial',icon:'ti-clipboard-list', label:'Historial',roles:['maestro','bodeguero','gerencia'], render:renderHistorial,   prim:true},
     {k:'gerencia', icon:'ti-chart-bar',      label:'Gerencia', roles:['maestro','gerencia'],             render:renderGerencia,    prim:true},
     {k:'materiales',icon:'ti-tool',          label:'Materiales',roles:['maestro','bodeguero','gerencia'],render:renderMateriales,  prim:false},
+    {k:'petroleo', icon:'ti-gas-station',    label:'Petróleo', roles:['maestro','bodeguero'],            render:renderPetroleo,    prim:false},
     {k:'admin',    icon:'ti-settings',       label:'Admin',    roles:['maestro'],                        render:renderAdmin,       prim:false},
   ];
   return all.filter(t=>t.roles.includes(role));
@@ -2035,6 +2084,261 @@ async function anularMovMaterial(movId){
     showToast('Movimiento anulado · stock devuelto');
     await syncData();
   }catch(e){ showToast('Error: '+(e.message||''),'err'); }
+}
+
+// ══════════════════ PETRÓLEO (vales digitales de la bombona) ══════════════════
+// Reemplaza el papel: el tractorista firma en pantalla (trazo vectorial, no foto)
+// y queda registrado en petroleo_movs. El saldo se calcula sumando/restando
+// los movimientos ACTIVOS, nunca se guarda como número suelto que se pueda desincronizar.
+
+function saldoPetroleo(){
+  return petroleoMovs.filter(m=>m.estado!=='ANULADO')
+    .reduce((s,m)=> s + (m.tipo==='entrada' ? (+m.litros||0) : -(+m.litros||0)), 0);
+}
+
+// Redibuja la firma guardada (array de trazos, cada trazo es una lista de puntos [x,y] normalizados 0-1)
+// como un <path> SVG — por eso se ve nítida en cualquier tamaño, sin pesar como una imagen.
+function firmaThumbSvg(firma, vbW, vbH){
+  if(!firma || !Array.isArray(firma) || !firma.length){
+    return `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--tx3)">Sin firma</div>`;
+  }
+  const d = firma.filter(t=>t&&t.length).map(t=>
+    'M'+t.map(p=>(p[0]*vbW).toFixed(1)+','+(p[1]*vbH).toFixed(1)).join(' L')
+  ).join(' ');
+  return `<svg viewBox="0 0 ${vbW} ${vbH}" style="width:100%;height:100%;display:block"><path d="${d}" fill="none" stroke="#231b17" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+
+function renderPetroleo(){
+  const puedeEditar = ['maestro','bodeguero'].includes(curUser.role);
+  const saldo = saldoPetroleo();
+  const bajo = saldo < 80;
+  const movsOrden = [...petroleoMovs].sort((a,b)=> new Date(b.fecha||0) - new Date(a.fecha||0));
+  const movs = movsOrden.slice(0,10);
+
+  return `
+  <div class="section-header">
+    <div class="section-title">Petróleo</div>
+    <div class="section-sub">Vales digitales de la bombona · firma en pantalla</div>
+  </div>
+
+  <div class="card" style="padding:18px;margin-bottom:14px;text-align:center;background:${bajo?'#fff6f0':'#fff'}">
+    <div style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.4px">Saldo bombona</div>
+    <div style="font-size:34px;font-weight:800;color:${bajo?'var(--red)':'var(--tx)'};line-height:1.25">${fmt(saldo)} <span style="font-size:16px;font-weight:600;color:var(--tx3)">L</span></div>
+    ${bajo?'<div style="font-size:12px;color:var(--red);font-weight:600;margin-top:4px">Saldo bajo — considera recargar</div>':''}
+  </div>
+
+  ${puedeEditar?`<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+    <button class="btn-primary" style="margin:0;flex:1;min-width:150px" onclick="abrirNuevoVale('salida')"><i class="ti ti-plus"></i> Nuevo vale</button>
+    <button class="btn-sec" style="flex:1;min-width:150px" onclick="abrirNuevoVale('entrada')"><i class="ti ti-package-import"></i> Recepción</button>
+    <button class="btn-sec" style="flex-shrink:0;padding:0 16px;display:flex;align-items:center;gap:6px" onclick="exportarPetroleoExcel()"><i class="ti ti-file-spreadsheet"></i> Excel</button>
+  </div>`:''}
+
+  <div class="section-label">Últimos vales${petroleoMovs.length>10?` <span style="font-weight:400;text-transform:none;color:var(--tx3)">· 10 más recientes de ${petroleoMovs.length}</span>`:''}</div>
+  <div class="card">${movs.length?movs.map(mv=>{
+    const esEnt = mv.tipo==='entrada';
+    const f = mv.fecha ? new Date(mv.fecha) : null;
+    const p2 = n => String(n).padStart(2,'0');
+    const fFecha = f ? (p2(f.getDate())+'/'+p2(f.getMonth()+1)+'/'+f.getFullYear()) : '';
+    const fHora  = f ? (p2(f.getHours())+':'+p2(f.getMinutes())) : '';
+    const anulado = mv.estado==='ANULADO';
+    return `<div class="move-item" style="${anulado?'opacity:.5':''}">
+      <div class="move-dot" style="background:${esEnt?'#2d6b2d':'#a32d2d'}"></div>
+      <div class="move-body" style="flex:1;min-width:0">
+        <div class="move-prod">${esEnt?(mv.proveedor||'Recepción de petróleo'):(mv.tractorista||'Sin tractorista')}</div>
+        <div class="move-detail">${esEnt?'Recepción':'Vale'}${mv.vehiculo?' · '+mv.vehiculo:''}${mv.usuario?' · '+mv.usuario:''}${anulado?' · ANULADO':''}</div>
+        ${!esEnt?`<div style="width:96px;height:38px;margin-top:6px;border:1px solid var(--bd2);border-radius:6px;background:#fcfbf9;overflow:hidden">${firmaThumbSvg(mv.firma,110,44)}</div>`:''}
+        ${puedeEditar&&!anulado?`<div style="display:flex;gap:6px;margin-top:8px">
+          <button onclick="editarValePetroleo('${mv.id}')" style="font-size:11px;padding:4px 10px;border:1px solid var(--bd2);border-radius:6px;background:var(--surf);color:var(--blue)">Editar</button>
+          <button onclick="anularValePetroleo('${mv.id}')" style="font-size:11px;padding:4px 10px;border:1px solid var(--bd2);border-radius:6px;background:var(--surf);color:var(--red)">Anular</button>
+        </div>`:''}
+      </div>
+      <div class="move-right" style="flex-shrink:0">
+        <div class="move-qty" style="color:${esEnt?'var(--green)':'var(--red)'}">${esEnt?'+':'-'}${fmt(mv.litros)} L</div>
+        <div class="move-date">${fFecha}</div>
+        ${fHora?`<div class="move-date" style="font-size:10px;opacity:.75">${fHora}</div>`:''}
+      </div>
+    </div>`;
+  }).join(''):'<div class="empty-state"><div class="empty-icon">⛽</div><div class="empty-text">Sin vales registrados</div></div>'}</div>`;
+}
+
+// ── Captura de firma: canvas con trazo (se guarda como puntos, no como imagen) ──
+function initFirmaCanvas(){
+  const cv = document.getElementById('vp-firma-cv');
+  if(!cv) return;
+  const ctx = cv.getContext('2d');
+  const rect = cv.getBoundingClientRect();
+  const dpr = window.devicePixelRatio||1;
+  cv.width = Math.max(1,rect.width*dpr); cv.height = Math.max(1,rect.height*dpr);
+  ctx.scale(dpr,dpr);
+  ctx.lineWidth = 2.4; ctx.lineCap='round'; ctx.lineJoin='round'; ctx.strokeStyle='#231b17';
+  _firmaStrokes = []; _firmaActual = null; _firmaDrawing = false;
+
+  const getPos = (e)=>{
+    const r = cv.getBoundingClientRect();
+    return [ (e.clientX-r.left)/r.width, (e.clientY-r.top)/r.height ];
+  };
+  cv.onpointerdown = (e)=>{
+    e.preventDefault();
+    _firmaDrawing = true;
+    _firmaActual = [];
+    _firmaStrokes.push(_firmaActual);
+    const p = getPos(e); _firmaActual.push(p);
+    ctx.beginPath(); ctx.moveTo(p[0]*rect.width, p[1]*rect.height);
+    try{ cv.setPointerCapture(e.pointerId); }catch(_){}
+  };
+  cv.onpointermove = (e)=>{
+    if(!_firmaDrawing) return;
+    e.preventDefault();
+    const p = getPos(e); _firmaActual.push(p);
+    ctx.lineTo(p[0]*rect.width, p[1]*rect.height); ctx.stroke();
+  };
+  cv.onpointerup = cv.onpointercancel = ()=>{ _firmaDrawing=false; };
+}
+
+function limpiarFirma(){
+  const cv = document.getElementById('vp-firma-cv');
+  if(cv){ const ctx=cv.getContext('2d'); ctx.clearRect(0,0,cv.width,cv.height); }
+  _firmaStrokes = []; _firmaActual = null;
+}
+
+function abrirNuevoVale(tipo){ // 'salida' = vale a tractorista, 'entrada' = recarga de bombona
+  const prev = document.getElementById('modal-vale'); if(prev) prev.remove();
+  const esSalida = (tipo==='salida');
+  const inp = 'width:100%;padding:11px;border:1px solid var(--bd2);border-radius:9px;font-size:14px;margin:5px 0 14px';
+  const lbl = 'font-size:12px;font-weight:700;color:var(--tx3);text-transform:uppercase';
+  const div = document.createElement('div');
+  div.id = 'modal-vale';
+  div.style = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;display:flex;align-items:flex-end;justify-content:center';
+  div.innerHTML = `
+    <div style="background:#fff;width:100%;max-width:480px;border-radius:18px 18px 0 0;padding:20px;max-height:92vh;overflow-y:auto">
+      <div style="font-size:17px;font-weight:800;margin-bottom:2px">${esSalida?'Vale de petróleo':'Recepción de petróleo'}</div>
+      <div style="font-size:12px;color:var(--tx3);margin-bottom:16px">Saldo actual: ${fmt(saldoPetroleo())} L</div>
+
+      ${esSalida ? `
+      <label style="${lbl}">Tractorista</label>
+      <select id="vp-tractorista" style="${inp}">${tractoristaPetroleoOpts()}</select>
+
+      <label style="${lbl}">Tractor / camioneta</label>
+      <select id="vp-vehiculo" style="${inp}">${vehiculoPetroleoOpts()}</select>
+      ` : `
+      <label style="${lbl}">Proveedor / referencia</label>
+      <input id="vp-proveedor" placeholder="Opcional" autocomplete="off" style="${inp}">
+      `}
+
+      <label style="${lbl}">Litros</label>
+      <input id="vp-litros" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="0" style="${inp}">
+
+      ${esSalida ? `
+      <label style="${lbl}">Firma del tractorista</label>
+      <canvas id="vp-firma-cv" style="width:100%;height:120px;border:1.3px solid var(--bd2);border-radius:10px;background:#fcfbf9;touch-action:none;display:block"></canvas>
+      <div style="text-align:right;margin:6px 0 14px"><button type="button" onclick="limpiarFirma()" style="font-size:12px;color:var(--red);background:none;border:none;cursor:pointer">Borrar firma</button></div>
+      ` : ''}
+
+      <div style="display:flex;gap:10px">
+        <button class="btn-sec" style="flex:1" onclick="document.getElementById('modal-vale').remove()">Cancelar</button>
+        <button class="btn-primary" style="flex:1;margin:0" onclick="confirmarVale('${tipo}')">${esSalida?'Registrar vale':'Registrar recepción'}</button>
+      </div>
+    </div>`;
+  document.body.appendChild(div);
+  if(esSalida) setTimeout(initFirmaCanvas, 80);
+  setTimeout(()=>document.getElementById(esSalida?'vp-tractorista':'vp-proveedor')?.focus(), 80);
+}
+
+async function confirmarVale(tipo){
+  const g = id => (document.getElementById(id)?.value || '').trim();
+  const esSalida = (tipo==='salida');
+  const litros = parseFloat(g('vp-litros'))||0;
+  if(litros<=0){ showToast('Litros inválidos','err'); return; }
+
+  const saldo = saldoPetroleo();
+  if(esSalida && litros>saldo){
+    if(!confirm('Estás registrando '+fmt(litros)+' L pero el saldo de la bombona es '+fmt(saldo)+' L.\n\n¿Registrar igual?')) return;
+  }
+
+  const tractorista = esSalida ? g('vp-tractorista') : '';
+  const vehiculo = esSalida ? g('vp-vehiculo') : '';
+  if(esSalida && (!tractorista || !vehiculo)){
+    if(!confirm('Dejaste en blanco el tractorista o el vehículo.\n\n¿Registrar el vale igual?')) return;
+  }
+  if(esSalida && (!_firmaStrokes || !_firmaStrokes.filter(s=>s&&s.length).length)){
+    if(!confirm('No hay firma registrada.\n\n¿Registrar el vale sin firma?')) return;
+  }
+  const proveedor = !esSalida ? g('vp-proveedor') : '';
+
+  const base = {
+    tipo, litros,
+    tractorista: tractorista || null,
+    vehiculo: vehiculo || null,
+    firma: (esSalida && _firmaStrokes && _firmaStrokes.length) ? _firmaStrokes : null,
+    proveedor: proveedor || null,
+    usuario: curUser.id,
+    estado: 'ACTIVO'
+  };
+  showToast('Guardando...','info');
+  try{
+    const { error } = await sb.from('petroleo_movs').insert(base);
+    if(error) throw error;
+    document.getElementById('modal-vale')?.remove();
+    showToast((esSalida?'Vale registrado · ':'Recepción registrada · ')+fmt(litros)+' L');
+    _firmaStrokes = []; _firmaActual = null;
+    await syncData();
+  }catch(e){
+    showToast('Error: '+(e.message||'')+' — ¿existe la tabla petroleo_movs?','err');
+  }
+}
+
+async function editarValePetroleo(movId){
+  const mv = petroleoMovs.find(x=>String(x.id)===String(movId));
+  if(!mv){ showToast('No encontré el vale','err'); return; }
+  const txt = prompt('Nueva cantidad de litros ('+(mv.tipo==='entrada'?'recepción':'vale')+'):', mv.litros);
+  if(txt===null) return;
+  const nueva = parseFloat(txt)||0;
+  if(nueva<=0){ showToast('Cantidad inválida','err'); return; }
+  showToast('Guardando...','info');
+  try{
+    const { error } = await sb.from('petroleo_movs').update({litros:nueva}).eq('id',mv.id);
+    if(error) throw error;
+    showToast('Vale actualizado');
+    await syncData();
+  }catch(e){ showToast('Error: '+(e.message||''),'err'); }
+}
+
+async function anularValePetroleo(movId){
+  const mv = petroleoMovs.find(x=>String(x.id)===String(movId));
+  if(!mv){ showToast('No encontré el vale','err'); return; }
+  if(!confirm('¿Anular este '+(mv.tipo==='entrada'?'ingreso':'vale')+' de '+fmt(mv.litros)+' L?\n\nNo se borra, queda marcado como anulado y deja de contar en el saldo.')) return;
+  showToast('Anulando...','info');
+  try{
+    const { error } = await sb.from('petroleo_movs').update({estado:'ANULADO'}).eq('id',mv.id);
+    if(error) throw error;
+    showToast('Anulado');
+    await syncData();
+  }catch(e){ showToast('Error: '+(e.message||''),'err'); }
+}
+
+function exportarPetroleoExcel(){
+  if(typeof XLSX==='undefined'){ showToast('La librería Excel no cargó','err'); return; }
+  if(!petroleoMovs.length){ showToast('No hay vales para exportar','err'); return; }
+  const ordenados = [...petroleoMovs].sort((a,b)=> new Date(a.fecha||0) - new Date(b.fecha||0));
+  let saldo = 0;
+  const filas = ordenados.map(mv=>{
+    if(mv.estado!=='ANULADO') saldo += (mv.tipo==='entrada' ? (+mv.litros||0) : -(+mv.litros||0));
+    return {
+      'Fecha': mv.fecha ? new Date(mv.fecha).toLocaleString('es-CL') : '',
+      'Tipo': mv.tipo==='entrada' ? 'Recepción' : 'Vale',
+      'Tractorista': mv.tractorista||'',
+      'Vehículo': mv.vehiculo||'',
+      'Litros': mv.litros,
+      'Firmado': mv.tipo==='salida' ? ((mv.firma&&mv.firma.length)?'Sí':'No') : '',
+      'Proveedor/Ref.': mv.proveedor||'',
+      'Usuario': mv.usuario||'',
+      'Estado': mv.estado||'ACTIVO',
+      'Saldo bombona': mv.estado!=='ANULADO' ? saldo : ''
+    };
+  });
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filas), 'Vales petróleo');
+  XLSX.writeFile(wb, 'vales_petroleo_'+hoy()+'.xlsx');
 }
 
 function renderRecibir(){
