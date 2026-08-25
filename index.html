@@ -2175,7 +2175,10 @@ function initFirmaCanvas(){
 
   const getPos = (e)=>{
     const r = cv.getBoundingClientRect();
-    return [ (e.clientX-r.left)/r.width, (e.clientY-r.top)/r.height ];
+    // Redondeado a 3 decimales: de sobra para que el trazo se vea igual de nítido,
+    // y baja el peso guardado a un tercio (sin esto, cada punto guarda ~15 decimales de más).
+    const round3 = n => Math.round(n*1000)/1000;
+    return [ round3((e.clientX-r.left)/r.width), round3((e.clientY-r.top)/r.height) ];
   };
   cv.onpointerdown = (e)=>{
     e.preventDefault();
@@ -2347,11 +2350,10 @@ function abrirExportarPetroleo(){
         <button type="button" class="btn-sec" style="flex:1;min-width:100px;font-size:12px;padding:8px" onclick="rangoRapidoPetroleo(0)">Todo</button>
       </div>
 
-      <div style="display:flex;gap:8px;margin-bottom:8px">
-        <button class="btn-primary" style="flex:1;margin:0;display:flex;align-items:center;justify-content:center;gap:5px" onclick="confirmarExportarPetroleo('excel')"><i class="ti ti-file-spreadsheet"></i> Excel</button>
-        <button class="btn-primary" style="flex:1;margin:0;display:flex;align-items:center;justify-content:center;gap:5px" onclick="confirmarExportarPetroleo('pdf')"><i class="ti ti-file-text"></i> PDF firmados</button>
+      <div style="display:flex;gap:10px">
+        <button class="btn-sec" style="flex:1" onclick="document.getElementById('modal-exp-pet').remove()">Cancelar</button>
+        <button class="btn-primary" style="flex:1;margin:0;display:flex;align-items:center;justify-content:center;gap:5px" onclick="confirmarExportarPetroleo()"><i class="ti ti-download"></i> Descargar Excel + PDF</button>
       </div>
-      <button class="btn-sec" style="width:100%" onclick="document.getElementById('modal-exp-pet').remove()">Cancelar</button>
     </div>`;
   document.body.appendChild(div);
 }
@@ -2367,58 +2369,59 @@ function rangoRapidoPetroleo(dias){
   hastaEl.value = isoLocal(hoyD);
 }
 
-function confirmarExportarPetroleo(formato){
+function confirmarExportarPetroleo(){
   const desde = document.getElementById('exp-pet-desde')?.value || '';
   const hasta = document.getElementById('exp-pet-hasta')?.value || '';
   document.getElementById('modal-exp-pet')?.remove();
-  if(formato==='pdf') exportarPetroleoPDF(desde, hasta);
-  else exportarPetroleoExcel(desde, hasta);
+  exportarPetroleoExcel(desde, hasta);
+  // Pequeño desfase para que el navegador no bloquee la segunda descarga por "múltiples archivos a la vez"
+  setTimeout(()=> exportarPetroleoPDF(desde, hasta), 400);
 }
 
 // ── PDF con los vales firmados (uno por vale, con la firma redibujada desde el trazo guardado) ──
 // Solo incluye 'salida' (los vales al tractorista) — las recepciones no llevan firma.
 function dibujarValeCardPDF(doc, mv, x, y, w, h){
   const VINO=[123,45,45], TX=[35,30,28], LBL=[140,128,120], BD=[220,213,206];
-  doc.setDrawColor(...BD); doc.setLineWidth(0.3); doc.roundedRect(x,y,w,h,3,3);
-  doc.setFillColor(...VINO); doc.roundedRect(x,y,w,4,1.5,1.5,'F'); doc.rect(x,y+2,w,2,'F');
+  doc.setDrawColor(...BD); doc.setLineWidth(0.2); doc.roundedRect(x,y,w,h,1.5,1.5);
+  doc.setFillColor(...VINO); doc.rect(x,y,w,2.6,'F');
 
-  doc.setTextColor(255,255,255); doc.setFontSize(9); doc.setFont('helvetica','bold');
-  doc.text('AGRÍCOLA SAN JOSÉ · VALE DE PETRÓLEO N° '+mv.id, x+6, y+3);
+  doc.setTextColor(...TX); doc.setFontSize(7); doc.setFont('helvetica','bold');
+  doc.text('VALE PETRÓLEO N° '+mv.id, x+3.5, y+7.5);
 
   const f = mv.fecha ? new Date(mv.fecha) : null;
-  doc.setTextColor(...LBL); doc.setFontSize(8); doc.setFont('helvetica','normal');
-  doc.text(f ? (f.toLocaleDateString('es-CL')+' · '+f.toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'})) : '', x+w-6, y+11, {align:'right'});
+  doc.setTextColor(...LBL); doc.setFontSize(5.8); doc.setFont('helvetica','normal');
+  doc.text(f ? (f.toLocaleDateString('es-CL')+' '+f.toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'})) : '', x+w-3.5, y+7.5, {align:'right'});
 
-  let yy = y+18;
+  let yy = y+12.5;
   const fila = (label, val)=>{
-    doc.setFontSize(8); doc.setTextColor(...LBL); doc.setFont('helvetica','normal'); doc.text(label, x+6, yy);
-    doc.setTextColor(...TX); doc.setFont('helvetica','bold'); doc.text(String(val||'—'), x+w-6, yy, {align:'right'});
-    doc.setDrawColor(...BD); doc.line(x+6, yy+1.8, x+w-6, yy+1.8);
-    yy += 8;
+    doc.setFontSize(6); doc.setTextColor(...LBL); doc.setFont('helvetica','normal'); doc.text(label, x+3.5, yy);
+    doc.setTextColor(...TX); doc.setFont('helvetica','bold'); doc.text(String(val||'—').substring(0,16), x+w-3.5, yy, {align:'right'});
+    doc.setDrawColor(...BD); doc.setLineWidth(0.15); doc.line(x+3.5, yy+1, x+w-3.5, yy+1);
+    yy += 4.6;
   };
   fila('Tractorista', mv.tractorista);
-  fila('Tractor / camioneta', mv.vehiculo);
-  fila('Litros entregados', fmt(mv.litros)+' L');
-  fila('Registrado por', mv.usuario);
+  fila('Vehículo', mv.vehiculo);
+  fila('Litros', fmt(mv.litros)+' L');
 
-  yy += 2;
-  doc.setFontSize(6.5); doc.setTextColor(...LBL); doc.text('FIRMA DEL TRACTORISTA', x+6, yy); yy += 2.5;
-  const boxX=x+6, boxY=yy, boxW=w-12, boxH=Math.max(18, (y+h-6)-yy);
-  doc.setDrawColor(...BD); doc.roundedRect(boxX,boxY,boxW,boxH,1.5,1.5);
+  yy += 1.3;
+  doc.setFontSize(5); doc.setTextColor(...LBL); doc.text('FIRMA', x+3.5, yy); yy += 1.3;
+  const boxX=x+3.5, boxY=yy, boxW=w-7, boxH=Math.max(12, (y+h-2.5)-yy);
+  doc.setDrawColor(...BD); doc.setLineWidth(0.15); doc.roundedRect(boxX,boxY,boxW,boxH,1,1);
   const trazos = (mv.firma||[]).filter(s=>s&&s.length>1);
   if(trazos.length){
-    doc.setDrawColor(...TX); doc.setLineWidth(0.35);
+    doc.setDrawColor(...TX); doc.setLineWidth(0.25);
     trazos.forEach(stroke=>{
       for(let i=1;i<stroke.length;i++){
         doc.line(boxX+stroke[i-1][0]*boxW, boxY+stroke[i-1][1]*boxH, boxX+stroke[i][0]*boxW, boxY+stroke[i][1]*boxH);
       }
     });
   } else {
-    doc.setFontSize(8); doc.setTextColor(...LBL); doc.setFont('helvetica','italic');
+    doc.setFontSize(6); doc.setTextColor(...LBL); doc.setFont('helvetica','italic');
     doc.text('Sin firma', boxX+boxW/2, boxY+boxH/2, {align:'center'});
   }
 }
 
+// Grilla de 2 columnas x 3 filas (6 vales por hoja) — mucho más compacto que 1 por fila.
 function exportarPetroleoPDF(fechaDesde, fechaHasta){
   if(typeof window.jspdf === 'undefined'){ showToast('La librería de PDF no cargó','err'); return; }
   const vales = (petroleoMovs||[]).filter(mv=>mv.tipo==='salida');
@@ -2437,13 +2440,17 @@ function exportarPetroleoPDF(fechaDesde, fechaHasta){
 
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({unit:'mm', format:'a4'});
-  const margin=10, gap=8, cardW=210-margin*2, cardH=128;
+  const margin=10, gap=5, cols=2, rows=3, porPagina=cols*rows;
+  const cardW = (210 - margin*2 - gap*(cols-1))/cols;
+  const cardH = (297 - margin*2 - gap*(rows-1))/rows;
 
   filtrados.forEach((mv,i)=>{
-    const posEnHoja = i % 2;
+    const posEnHoja = i % porPagina;
     if(i>0 && posEnHoja===0) doc.addPage();
-    const y = margin + posEnHoja*(cardH+gap);
-    dibujarValeCardPDF(doc, mv, margin, y, cardW, cardH);
+    const col = posEnHoja % cols, fil = Math.floor(posEnHoja/cols);
+    const x = margin + col*(cardW+gap);
+    const y = margin + fil*(cardH+gap);
+    dibujarValeCardPDF(doc, mv, x, y, cardW, cardH);
   });
 
   const sufijo = (fechaDesde||fechaHasta) ? ('_'+(fechaDesde||'inicio')+'_a_'+(fechaHasta||hoy())) : '_'+hoy();
