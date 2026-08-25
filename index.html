@@ -2381,12 +2381,13 @@ function confirmarExportarPetroleo(){
 // ── PDF con los vales firmados (uno por vale, con la firma redibujada desde el trazo guardado) ──
 // Solo incluye 'salida' (los vales al tractorista) — las recepciones no llevan firma.
 function dibujarValeCardPDF(doc, mv, x, y, w, h){
-  const VINO=[123,45,45], TX=[35,30,28], LBL=[140,128,120], BD=[220,213,206];
-  doc.setDrawColor(...BD); doc.setLineWidth(0.2); doc.roundedRect(x,y,w,h,1.5,1.5);
-  doc.setFillColor(...VINO); doc.rect(x,y,w,2.6,'F');
+  const anulado = mv.estado === 'ANULADO';
+  const VINO=[123,45,45], TX=[35,30,28], LBL=[140,128,120], BD=[220,213,206], ROJO=[168,26,26];
+  doc.setDrawColor(...(anulado?ROJO:BD)); doc.setLineWidth(anulado?0.4:0.2); doc.roundedRect(x,y,w,h,1.5,1.5);
+  doc.setFillColor(...(anulado?[190,190,190]:VINO)); doc.rect(x,y,w,2.6,'F');
 
-  doc.setTextColor(...TX); doc.setFontSize(7); doc.setFont('helvetica','bold');
-  doc.text('VALE PETRÓLEO N° '+mv.id, x+3.5, y+7.5);
+  doc.setTextColor(...(anulado?ROJO:TX)); doc.setFontSize(7); doc.setFont('helvetica','bold');
+  doc.text('VALE PETRÓLEO N° '+mv.id+(anulado?' · ANULADO':''), x+3.5, y+7.5);
 
   const f = mv.fecha ? new Date(mv.fecha) : null;
   doc.setTextColor(...LBL); doc.setFontSize(5.8); doc.setFont('helvetica','normal');
@@ -2418,6 +2419,12 @@ function dibujarValeCardPDF(doc, mv, x, y, w, h){
   } else {
     doc.setFontSize(6); doc.setTextColor(...LBL); doc.setFont('helvetica','italic');
     doc.text('Sin firma', boxX+boxW/2, boxY+boxH/2, {align:'center'});
+  }
+
+  // Sello diagonal "ANULADO" sobre toda la tarjeta, para que se note de un vistazo
+  if(anulado){
+    doc.setTextColor(...ROJO); doc.setFontSize(13); doc.setFont('helvetica','bold');
+    doc.text('ANULADO', x+w/2, y+h/2, {align:'center', angle:20});
   }
 }
 
