@@ -161,7 +161,7 @@ const ROL_USER={'2511':'admin','5555':'admin','3232':'compras','7777':'consulta'
 let rolActual='admin';
 const plata=n=>'$'+Math.round(n).toLocaleString('es-CL');
 
-let products=[],stockByLoc={},movimientos=[],ordenes=[],compras=[],vista='dash',charts=[];
+let products=[],stockByLoc={},movimientos=[],ordenes=[],compras=[],petroleoMovs=[],maqMaquinas=[],vista='dash',charts=[];
 
 function entrar(){
   const p=document.getElementById('pin').value.trim();
@@ -209,6 +209,15 @@ async function cargar(){
       const {data:ocs,error:eOc}=await sb.from('ordenes_compra').select('*').order('creado_en',{ascending:false});
       compras = eOc ? [] : (ocs||[]);
     }catch(_){ compras=[]; }
+    // Petróleo (tabla nueva; si aún no existe, no rompe el resto)
+    try{
+      const {data:pmv,error:ePet}=await sb.from('petroleo_movs').select('*').order('fecha',{ascending:false});
+      petroleoMovs = ePet ? [] : (pmv||[]);
+    }catch(_){ petroleoMovs=[]; }
+    try{
+      const {data:maqs,error:eMaq}=await sb.from('maq_maquinas').select('*');
+      maqMaquinas = eMaq ? [] : (maqs||[]);
+    }catch(_){ maqMaquinas=[]; }
     render();
   }catch(e){
     document.getElementById('contenido').innerHTML='<div class="loading" style="color:#a32d2d">Error al cargar: '+(e.message||e)+'</div>';
@@ -2225,6 +2234,61 @@ function exportarVales(){
     if(huboFila) numVale++;
   });
 
+  // ── PETRÓLEO: agrupado por día — un solo NUMERO VALE cubre todas las entregas de ese día,
+  // en vez de un correlativo por cada vale individual del tractorista. ──
+  const PETROLEO_CODIGO = 'PET-1';
+  const PETROLEO_CTA_CONTABLE = '4103101';
+  const sinFundoVeh = new Set();
+
+  const valesPet = (petroleoMovs||[]).filter(mv=>{
+    if(mv.tipo!=='salida' || mv.estado==='ANULADO') return false;
+    const dia = mv.fecha ? String(mv.fecha).slice(0,10) : '';
+    return dia && dia>=vDesde && dia<=vHasta;
+  });
+
+  const porDia = {};
+  valesPet.forEach(mv=>{
+    const dia = String(mv.fecha).slice(0,10);
+    (porDia[dia] = porDia[dia]||[]).push(mv);
+  });
+
+  Object.keys(porDia).sort().forEach(dia=>{
+    const [y,m,d] = dia.split('-');
+    const fechaVale = d+'-'+m+'-'+y;
+    const valeDelDia = numVale;
+    let hubo = false;
+    porDia[dia].forEach(mv=>{
+      const cant = +(Number(mv.litros)||0).toFixed(2);
+      if(cant<=0) return;
+      const maqInfo = (maqMaquinas||[]).find(x=>x.maq===mv.vehiculo);
+      const fundoVeh = maqInfo ? String(maqInfo.ubicacion||'').toUpperCase() : '';
+      if(!fundoVeh) sinFundoVeh.add(mv.vehiculo||'(sin vehículo)');
+      filas.push({
+        'NUMERO VALE':valeDelDia,
+        'FECHA VALE':fechaVale,
+        'MOVIMIENTO':'SALIDA',
+        'TIPO VALE':'',
+        'SUCURSAL':1,
+        'GLOSAS':(mv.tractorista||'')+(mv.vehiculo?' · '+mv.vehiculo:''),
+        'CODIGOS':PETROLEO_CODIGO,
+        'CANTIDAD':cant,
+        'BODEGA':BOD_FUNDO[fundoVeh]||'',
+        'COSTO':'',
+        'NUMERO OT':'',
+        'NUMERO OP':'',
+        'NUMERO LOTE':'',
+        'VENCIMIENTO':'',
+        'NUMERO SERIE':'',
+        'CTA CONTABLE':PETROLEO_CTA_CONTABLE,
+        'CENTRO COSTO':CCOSTO_GENERAL[fundoVeh]||'',
+        'BODEGA TRASPASO':'',
+        'PRODUCTO (verificación)':'PETRÓLEO/DIÉSEL'
+      });
+      hubo = true;
+    });
+    if(hubo) numVale++;
+  });
+
   if(!filas.length){ alert('No hay filas para exportar en este rango (¿las órdenes tienen real aplicado y cuarteles?)'); return; }
 
   // Columnas OFICIALES del importador (A a R) + nombre del producto al final para verificar
@@ -2240,6 +2304,7 @@ function exportarVales(){
   let aviso='Excel generado con '+filas.length+' filas.\n\nRevisa la última columna (nombre del producto) para verificar que está todo. Luego copia las columnas A a R (sin la de verificación) y pégalas en el importador oficial (clave 2026).';
   if(sinCodigo.size) aviso+='\n\n⚠️ Productos SIN código:\n'+[...sinCodigo].join('\n');
   if(sinCcosto.size) aviso+='\n\n⚠️ Cuarteles SIN centro de costo:\n'+[...sinCcosto].join(', ');
+  if(sinFundoVeh.size) aviso+='\n\n⚠️ Vehículos de petróleo SIN fundo identificado (revisa maq_maquinas):\n'+[...sinFundoVeh].join(', ');
   alert(aviso);
 }
 
