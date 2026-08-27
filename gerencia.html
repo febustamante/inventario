@@ -2238,7 +2238,12 @@ function exportarVales(){
   // en vez de un correlativo por cada vale individual del tractorista. ──
   const PETROLEO_CODIGO = 'PET-1';
   const PETROLEO_CTA_CONTABLE = '4103101';
-  const sinFundoVeh = new Set();
+  const PETROLEO_CCOSTO = '10022-1'; // Maquinaria — fijo para Cerrillos/Rulo/Paine (no varía por fundo como Generales)
+  // La bodega del vale de petróleo la define QUIÉN lo crea (no el vehículo/tractorista).
+  // Por ahora solo Freddy (bodeg) y el maestro registran, y ambos caen en Cerrillos (B1).
+  // Cuando se sume un bodeguero en otro fundo (ej. Hector → B2), agrega su usuario aquí.
+  const PETROLEO_BODEGA_POR_USUARIO = { 'BODEG':'B1', 'MAESTRO':'B1' };
+  const PETROLEO_BODEGA_DEFAULT = 'B1';
 
   const valesPet = (petroleoMovs||[]).filter(mv=>{
     if(mv.tipo!=='salida' || mv.estado==='ANULADO') return false;
@@ -2260,9 +2265,6 @@ function exportarVales(){
     porDia[dia].forEach(mv=>{
       const cant = +(Number(mv.litros)||0).toFixed(2);
       if(cant<=0) return;
-      const maqInfo = (maqMaquinas||[]).find(x=>x.maq===mv.vehiculo);
-      const fundoVeh = maqInfo ? String(maqInfo.ubicacion||'').toUpperCase() : '';
-      if(!fundoVeh) sinFundoVeh.add(mv.vehiculo||'(sin vehículo)');
       filas.push({
         'NUMERO VALE':valeDelDia,
         'FECHA VALE':fechaVale,
@@ -2272,7 +2274,7 @@ function exportarVales(){
         'GLOSAS':(mv.tractorista||'')+(mv.vehiculo?' · '+mv.vehiculo:''),
         'CODIGOS':PETROLEO_CODIGO,
         'CANTIDAD':cant,
-        'BODEGA':BOD_FUNDO[fundoVeh]||'',
+        'BODEGA':PETROLEO_BODEGA_POR_USUARIO[String(mv.usuario||'').trim().toUpperCase()] || PETROLEO_BODEGA_DEFAULT,
         'COSTO':'',
         'NUMERO OT':'',
         'NUMERO OP':'',
@@ -2280,7 +2282,7 @@ function exportarVales(){
         'VENCIMIENTO':'',
         'NUMERO SERIE':'',
         'CTA CONTABLE':PETROLEO_CTA_CONTABLE,
-        'CENTRO COSTO':CCOSTO_GENERAL[fundoVeh]||'',
+        'CENTRO COSTO':PETROLEO_CCOSTO,
         'BODEGA TRASPASO':'',
         'PRODUCTO (verificación)':'PETRÓLEO/DIÉSEL'
       });
@@ -2304,7 +2306,6 @@ function exportarVales(){
   let aviso='Excel generado con '+filas.length+' filas.\n\nRevisa la última columna (nombre del producto) para verificar que está todo. Luego copia las columnas A a R (sin la de verificación) y pégalas en el importador oficial (clave 2026).';
   if(sinCodigo.size) aviso+='\n\n⚠️ Productos SIN código:\n'+[...sinCodigo].join('\n');
   if(sinCcosto.size) aviso+='\n\n⚠️ Cuarteles SIN centro de costo:\n'+[...sinCcosto].join(', ');
-  if(sinFundoVeh.size) aviso+='\n\n⚠️ Vehículos de petróleo SIN fundo identificado (revisa maq_maquinas):\n'+[...sinFundoVeh].join(', ');
   alert(aviso);
 }
 
