@@ -2234,8 +2234,8 @@ function exportarVales(){
     if(huboFila) numVale++;
   });
 
-  // ── PETRÓLEO: agrupado por día — un solo NUMERO VALE cubre todas las entregas de ese día,
-  // en vez de un correlativo por cada vale individual del tractorista. ──
+  // ── PETRÓLEO: UNA sola fila por día × bodega, con la CANTIDAD ya sumada
+  // (ej. T10 9L + T12 10L + camioneta 15L el mismo día en Bodega 1 → una fila de 34L). ──
   const PETROLEO_CODIGO = 'PET-1';
   const PETROLEO_CTA_CONTABLE = '4103101';
   const PETROLEO_CCOSTO = '10022-1'; // Maquinaria — fijo para Cerrillos/Rulo/Paine (no varía por fundo como Generales)
@@ -2251,44 +2251,43 @@ function exportarVales(){
     return dia && dia>=vDesde && dia<=vHasta;
   });
 
-  const porDia = {};
+  const porDiaBodega = {};
   valesPet.forEach(mv=>{
     const dia = String(mv.fecha).slice(0,10);
-    (porDia[dia] = porDia[dia]||[]).push(mv);
+    const bod = PETROLEO_BODEGA_POR_USUARIO[String(mv.usuario||'').trim().toUpperCase()] || PETROLEO_BODEGA_DEFAULT;
+    const key = dia+'|'+bod;
+    if(!porDiaBodega[key]) porDiaBodega[key] = { dia, bod, total:0 };
+    porDiaBodega[key].total += Number(mv.litros)||0;
   });
 
-  Object.keys(porDia).sort().forEach(dia=>{
-    const [y,m,d] = dia.split('-');
+  Object.keys(porDiaBodega).sort().forEach(key=>{
+    const g = porDiaBodega[key];
+    const cant = +g.total.toFixed(2);
+    if(cant<=0) return;
+    const [y,m,d] = g.dia.split('-');
     const fechaVale = d+'-'+m+'-'+y;
-    const valeDelDia = numVale;
-    let hubo = false;
-    porDia[dia].forEach(mv=>{
-      const cant = +(Number(mv.litros)||0).toFixed(2);
-      if(cant<=0) return;
-      filas.push({
-        'NUMERO VALE':valeDelDia,
-        'FECHA VALE':fechaVale,
-        'MOVIMIENTO':'SALIDA',
-        'TIPO VALE':'',
-        'SUCURSAL':1,
-        'GLOSAS':(mv.tractorista||'')+(mv.vehiculo?' · '+mv.vehiculo:''),
-        'CODIGOS':PETROLEO_CODIGO,
-        'CANTIDAD':cant,
-        'BODEGA':PETROLEO_BODEGA_POR_USUARIO[String(mv.usuario||'').trim().toUpperCase()] || PETROLEO_BODEGA_DEFAULT,
-        'COSTO':'',
-        'NUMERO OT':'',
-        'NUMERO OP':'',
-        'NUMERO LOTE':'',
-        'VENCIMIENTO':'',
-        'NUMERO SERIE':'',
-        'CTA CONTABLE':PETROLEO_CTA_CONTABLE,
-        'CENTRO COSTO':PETROLEO_CCOSTO,
-        'BODEGA TRASPASO':'',
-        'PRODUCTO (verificación)':'PETRÓLEO/DIÉSEL'
-      });
-      hubo = true;
+    filas.push({
+      'NUMERO VALE':numVale,
+      'FECHA VALE':fechaVale,
+      'MOVIMIENTO':'SALIDA',
+      'TIPO VALE':'',
+      'SUCURSAL':1,
+      'GLOSAS':'COMBUSTIBLE',
+      'CODIGOS':PETROLEO_CODIGO,
+      'CANTIDAD':cant,
+      'BODEGA':g.bod,
+      'COSTO':'',
+      'NUMERO OT':'',
+      'NUMERO OP':'',
+      'NUMERO LOTE':'',
+      'VENCIMIENTO':'',
+      'NUMERO SERIE':'',
+      'CTA CONTABLE':PETROLEO_CTA_CONTABLE,
+      'CENTRO COSTO':PETROLEO_CCOSTO,
+      'BODEGA TRASPASO':'',
+      'PRODUCTO (verificación)':'PETRÓLEO/DIÉSEL'
     });
-    if(hubo) numVale++;
+    numVale++;
   });
 
   if(!filas.length){ alert('No hay filas para exportar en este rango (¿las órdenes tienen real aplicado y cuarteles?)'); return; }
