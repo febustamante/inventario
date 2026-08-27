@@ -575,6 +575,14 @@ function valorProducto(pid){const p=products.find(x=>x.id===pid);return p?totalS
 // Valor total del inventario
 function valorInventario(){return products.reduce((s,p)=>s+totalStock(p.id)*(p.precio||0),0)}
 function hoy(){return new Date().toLocaleDateString('es-CL')}
+// Corta a la fuerza los decimales que se estén escribiendo (no deja seguir tipeando el 3er decimal).
+function limitarDecimales(el, n){
+  let v = el.value;
+  if(v.indexOf('.')>-1){
+    const [ent, dec] = v.split('.');
+    if(dec.length>n) el.value = ent+'.'+dec.slice(0,n);
+  }
+}
 function prodOpts(){return products.map(p=>`<option value="${p.id}">${p.nombre}</option>`).join('')}
 function locOpts(def){return LOCS.map(l=>`<option${l===def?' selected':''}>${l}</option>`).join('')}
 function fieldLocsExclude(ex,def){return LOCS.filter(l=>l!==ex).map(l=>`<option${l===def?' selected':''}>${l}</option>`).join('')}
@@ -3326,7 +3334,7 @@ ${misOrdenes.length ? misOrdenes.map(o => {
     tabla += `<th>Total<br>teórico</th></tr></thead><tbody>`;
     d.productos.forEach((p,idx)=>{
       tabla += `<tr><td style="text-align:left;font-size:11px">${p.nombre}</td>`;
-      tabla += `<td><input type="number" id="ra-${o.idOrden}-${idx}" data-prod="${p.nombre}" placeholder="0" style="min-width:54px;border:1.5px solid var(--vino)"></td>`;
+      tabla += `<td><input type="number" id="ra-${o.idOrden}-${idx}" data-prod="${p.nombre}" placeholder="0" step="0.01" inputmode="decimal" oninput="limitarDecimales(this,2)" style="min-width:54px;border:1.5px solid var(--vino)"></td>`;
       if(genOrd){
         tabla += `<td class="calc-cell">${(p.totalTeorico||0).toFixed(2)}</td>`;
       } else {
@@ -4746,7 +4754,7 @@ async function completarOrdenReal(idOrden){
       ${productos.map((p, i) => `
         <div class="form-group">
           <label class="form-label">${p}</label>
-          <input type="number" class="form-control" id="co-cant-${i}" placeholder="Cantidad real aplicada" step="0.01">
+          <input type="number" class="form-control" id="co-cant-${i}" placeholder="Cantidad real aplicada" step="0.01" inputmode="decimal" oninput="limitarDecimales(this,2)">
           <input type="hidden" id="co-prod-${i}" value="${p}">
         </div>
       `).join('')}
@@ -4778,7 +4786,7 @@ function addProductoCierre(){
       <option value="">— Producto —</option>
       ${prodOpts()}
     </select>
-    <input type="number" class="form-control" id="co-cant-extra-${i}" placeholder="Cantidad real aplicada" step="0.01">
+    <input type="number" class="form-control" id="co-cant-extra-${i}" placeholder="Cantidad real aplicada" step="0.01" inputmode="decimal" oninput="limitarDecimales(this,2)">
   `;
 
   cont.appendChild(div);
