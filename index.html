@@ -428,9 +428,16 @@ function vehiculoPetroleoOpts(){
   let html = '<option value="">— Tractor / camioneta —</option>';
   Object.keys(grupos).forEach(g=>{
     html += `<optgroup label="${g}">` + grupos[g].map(m=>{
-      // Tractores se identifican por su código de máquina (T10, T11...); camionetas por su patente.
+      // Tractores se identifican por su código de máquina (T10, T11...); camionetas por "Responsable-Patente".
       const esCamioneta = g==='Camionetas';
-      const val = esCamioneta ? (m.patente || m.maq) : m.maq;
+      let val;
+      if(esCamioneta){
+        const resp = String(m.responsable||'').trim();
+        const pat = String(m.patente||'').trim();
+        val = (resp && pat) ? `${resp}-${pat}` : (pat || m.maq);
+      }else{
+        val = m.maq;
+      }
       return `<option value="${val}">${val}</option>`;
     }).join('') + '</optgroup>';
   });
