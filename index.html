@@ -4698,12 +4698,20 @@ async function completarOrdenReal(idOrden){
     const cuartsAviso = (d.cuartelesFinales||d.cuarteles||[]).filter(c=>c&&c.c);
     const totHaAviso = cuartsAviso.reduce((s,c)=>s+(parseFloat(c.ha)||0),0) || 1;
     const itemsAviso = [];
-    lineasDesc.forEach(ra=>{
-      cuartsAviso.forEach(c=>{
-        const val = +((parseFloat(ra.cantidad)||0)*(parseFloat(c.ha)||0)/totHaAviso).toFixed(2);
-        if(val>0) itemsAviso.push({ producto:ra.producto, cuartel:c.c, cantidad:val });
+    if(d.destino==='general'){
+      // Aplicación general del fundo: una sola línea por producto con el total real, sin repartir por cuartel.
+      lineasDesc.forEach(ra=>{
+        const cant = +(parseFloat(ra.cantidad)||0).toFixed(2);
+        if(cant>0) itemsAviso.push({ producto:ra.producto, cuartel:'GENERAL '+(d.fundo||''), cantidad:cant });
       });
-    });
+    }else{
+      lineasDesc.forEach(ra=>{
+        cuartsAviso.forEach(c=>{
+          const val = +((parseFloat(ra.cantidad)||0)*(parseFloat(c.ha)||0)/totHaAviso).toFixed(2);
+          if(val>0) itemsAviso.push({ producto:ra.producto, cuartel:c.c, cantidad:val });
+        });
+      });
+    }
     fetch('https://cmfvnluppvqyqwpfjrbs.supabase.co/functions/v1/aviso-orden', {
       method:'POST',
       headers:{ 'Content-Type':'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer '+SUPABASE_KEY },
@@ -4838,12 +4846,20 @@ for (const l of lineas) {
     const cuartsAviso = (d.cuartelesFinales||d.cuarteles||[]).filter(c=>c&&c.c);
     const totHaAviso = cuartsAviso.reduce((s,c)=>s+(parseFloat(c.ha)||0),0) || 1;
     const itemsAviso = [];
-    lineas.forEach(ra=>{
-      cuartsAviso.forEach(c=>{
-        const val = +((parseFloat(ra.cantidad)||0)*(parseFloat(c.ha)||0)/totHaAviso).toFixed(2);
-        if(val>0) itemsAviso.push({ producto:ra.producto, cuartel:c.c, cantidad:val });
+    if(d.destino==='general'){
+      // Aplicación general del fundo: una sola línea por producto con el total real, sin repartir por cuartel.
+      lineas.forEach(ra=>{
+        const cant = +(parseFloat(ra.cantidad)||0).toFixed(2);
+        if(cant>0) itemsAviso.push({ producto:ra.producto, cuartel:'GENERAL '+(d.fundo||''), cantidad:cant });
       });
-    });
+    }else{
+      lineas.forEach(ra=>{
+        cuartsAviso.forEach(c=>{
+          const val = +((parseFloat(ra.cantidad)||0)*(parseFloat(c.ha)||0)/totHaAviso).toFixed(2);
+          if(val>0) itemsAviso.push({ producto:ra.producto, cuartel:c.c, cantidad:val });
+        });
+      });
+    }
     fetch('https://cmfvnluppvqyqwpfjrbs.supabase.co/functions/v1/aviso-orden', {
       method:'POST',
       headers:{ 'Content-Type':'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer '+SUPABASE_KEY },
