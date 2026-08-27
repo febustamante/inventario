@@ -427,7 +427,12 @@ function vehiculoPetroleoOpts(){
   });
   let html = '<option value="">— Tractor / camioneta —</option>';
   Object.keys(grupos).forEach(g=>{
-    html += `<optgroup label="${g}">` + grupos[g].map(m=>`<option value="${m.maq}">${m.maq}</option>`).join('') + '</optgroup>';
+    html += `<optgroup label="${g}">` + grupos[g].map(m=>{
+      // Tractores se identifican por su código de máquina (T10, T11...); camionetas por su patente.
+      const esCamioneta = g==='Camionetas';
+      const val = esCamioneta ? (m.patente || m.maq) : m.maq;
+      return `<option value="${val}">${val}</option>`;
+    }).join('') + '</optgroup>';
   });
   return html;
 }
