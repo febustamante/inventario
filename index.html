@@ -2122,8 +2122,9 @@ function firmaThumbSvg(firma, vbW, vbH){
   if(!firma || !Array.isArray(firma) || !firma.length){
     return `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--tx3)">Sin firma</div>`;
   }
+  const cl = n => Math.max(0, Math.min(1, n));
   const d = firma.filter(t=>t&&t.length).map(t=>
-    'M'+t.map(p=>(p[0]*vbW).toFixed(1)+','+(p[1]*vbH).toFixed(1)).join(' L')
+    'M'+t.map(p=>(cl(p[0])*vbW).toFixed(1)+','+(cl(p[1])*vbH).toFixed(1)).join(' L')
   ).join(' ');
   return `<svg viewBox="0 0 ${vbW} ${vbH}" style="width:100%;height:100%;display:block"><path d="${d}" fill="none" stroke="#231b17" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 }
@@ -2199,7 +2200,11 @@ function initFirmaCanvas(){
     // Redondeado a 3 decimales: de sobra para que el trazo se vea igual de nítido,
     // y baja el peso guardado a un tercio (sin esto, cada punto guarda ~15 decimales de más).
     const round3 = n => Math.round(n*1000)/1000;
-    return [ round3((e.clientX-r.left)/r.width), round3((e.clientY-r.top)/r.height) ];
+    // Con setPointerCapture el dedo puede salirse del canvas mientras firma (queda "capturado"),
+    // así que sin este clamp el punto guarda un valor fuera de 0-1 y el trazo se dispara
+    // fuera del recuadro al redibujarlo (se nota sobre todo en el PDF, que no recorta).
+    const clamp01 = n => Math.max(0, Math.min(1, n));
+    return [ round3(clamp01((e.clientX-r.left)/r.width)), round3(clamp01((e.clientY-r.top)/r.height)) ];
   };
   cv.onpointerdown = (e)=>{
     e.preventDefault();
@@ -2451,10 +2456,13 @@ function dibujarValeCardPDF(doc, mv, x, y, w, h){
   doc.setDrawColor(...BD); doc.setLineWidth(0.15); doc.roundedRect(boxX,boxY,boxW,boxH,1,1);
   const trazos = (mv.firma||[]).filter(s=>s&&s.length>1);
   if(trazos.length){
+    // Firmas viejas pueden traer algún punto fuera de 0-1 (el dedo se salió del recuadro al firmar);
+    // sin este clamp, jsPDF no recorta y el trazo se dispara fuera de la tarjeta.
+    const cl = n => Math.max(0, Math.min(1, n));
     doc.setDrawColor(...TX); doc.setLineWidth(0.25);
     trazos.forEach(stroke=>{
       for(let i=1;i<stroke.length;i++){
-        doc.line(boxX+stroke[i-1][0]*boxW, boxY+stroke[i-1][1]*boxH, boxX+stroke[i][0]*boxW, boxY+stroke[i][1]*boxH);
+        doc.line(boxX+cl(stroke[i-1][0])*boxW, boxY+cl(stroke[i-1][1])*boxH, boxX+cl(stroke[i][0])*boxW, boxY+cl(stroke[i][1])*boxH);
       }
     });
   } else {
