@@ -2320,6 +2320,9 @@ function exportarVales(){
 
 // ══════ REPORTE MENSUAL ══════
 let rmMes=null;
+// Precio del litro de petróleo para valorizar el consumo en el reporte.
+// Si cambia el precio, se edita acá y queda aplicado en pantalla, Excel y PDF.
+const PRECIO_PETROLEO_L = 1200;
 // Mes anterior a 'YYYY-MM', para las columnas de comparación
 function mesAnteriorG(mesStr){
   const [y,m] = String(mesStr||'').split('-').map(Number);
@@ -2427,6 +2430,20 @@ function datosReporteMensual(mesStr){
   const entradasMes = (movimientos||[]).filter(m=>m.tipo==='entrada' && String(m.fechaRaw||'').slice(0,7)===mesStr)
     .map(m=>({producto:m.producto, cantidad:m.cantidad, destino:m.destino, usuario:m.usuario, fecha:m.fecha}));
 
+  // Mismas entradas sumadas por producto: una fila por producto en vez de una por recepción.
+  // No se totaliza entre productos porque las unidades no son comparables (kg, L, unidades).
+  const agrupEnt = {};
+  entradasMes.forEach(e=>{
+    const nom = String(e.producto||'').trim() || '—';
+    if(!agrupEnt[nom]) agrupEnt[nom] = { producto:nom, cantidad:0, entradas:0, destinos:[] };
+    agrupEnt[nom].cantidad += Number(e.cantidad)||0;
+    agrupEnt[nom].entradas += 1;
+    if(e.destino && agrupEnt[nom].destinos.indexOf(e.destino)===-1) agrupEnt[nom].destinos.push(e.destino);
+  });
+  const entradasPorProducto = Object.values(agrupEnt)
+    .map(e=>({...e, cantidad:+e.cantidad.toFixed(2), destino:e.destinos.join(', ')}))
+    .sort((a,b)=>a.producto.localeCompare(b.producto));
+
   // Inventario y materiales: estado ACTUAL (a hoy), no depende del mes elegido
   const valorInventarioActual = products.reduce((s,p)=>s+totalStock(p.id)*(p.precio||0),0);
   const materialesActual = (materiales||[]).map(m=>{
@@ -2436,6 +2453,23 @@ function datosReporteMensual(mesStr){
   }).sort((a,b)=>(a.categoria||'').localeCompare(b.categoria||'')||(a.nombre||'').localeCompare(b.nombre||''));
   const materialesBajoStock = materialesActual.filter(m=>m.estado!=='OK').length;
 
+  // Petróleo valorizado
+  const costoPetroleoMes = litrosMes * PRECIO_PETROLEO_L;
+  const valorSaldoPet = saldoPet * PRECIO_PETROLEO_L;
+  const gastoTotal = gastoMensual + costoPetroleoMes;
+
+  // Costo según el estado del cuartel (producción vs formación).
+  // Las órdenes con destino general no caen en un cuartel puntual, así que van aparte.
+  const agrupEstado = {};
+  costoCuartelArr.forEach(c=>{
+    const est = (c.estado && c.estado!=='—') ? c.estado : 'Sin clasificar (general)';
+    if(!agrupEstado[est]) agrupEstado[est] = { estado:est, costo:0, ha:0, cuarteles:0 };
+    agrupEstado[est].costo += c.costo;
+    agrupEstado[est].ha += (Number(c.ha)||0);
+    agrupEstado[est].cuarteles += 1;
+  });
+  const costoPorEstado = Object.values(agrupEstado).sort((a,b)=>b.costo-a.costo);
+
   return {
     mesStr, mesLabel:mesLabelG(mesStr), mesCorto:mesCortoG(mesStr),
     numOrdenesTerminadas: ordenesDelMes.length,
@@ -2443,8 +2477,9 @@ function datosReporteMensual(mesStr){
     productosAplicados, top5, gastoMensual,
     costoCuartelArr,
     litrosMes, diasConRetiroMes, saldoPet,
-    entradasMes,
-    valorInventarioActual, materialesActual, materialesBajoStock
+    entradasMes, entradasPorProducto,
+    valorInventarioActual, materialesActual, materialesBajoStock,
+    costoPetroleoMes, valorSaldoPet, gastoTotal, costoPorEstado
   };
 }
 
@@ -2463,10 +2498,10 @@ function renderReporteMensual(){
   <div class="kpis" style="grid-template-columns:repeat(4,1fr)">
     <div class="panel"><div style="font-size:12px;color:#80868b;font-weight:600">ÓRDENES TERMINADAS (MES)</div><div class="num" style="font-size:24px;font-weight:800">${R.numOrdenesTerminadas}</div></div>
     <div class="panel"><div style="font-size:12px;color:#80868b;font-weight:600">ÓRDENES PENDIENTES (A HOY)</div><div class="num" style="font-size:24px;font-weight:800">${R.ordenesPendientes.length}</div></div>
-    <div class="panel"><div style="font-size:12px;color:#80868b;font-weight:600">GASTO EN APLICACIONES (MES)</div><div class="num" style="font-size:20px;font-weight:800">${plata(R.gastoMensual)}</div></div>
-    <div class="panel"><div style="font-size:12px;color:#80868b;font-weight:600">PETRÓLEO GASTADO (MES)</div><div class="num" style="font-size:20px;font-weight:800">${R.litrosMes.toFixed(1)} L</div></div>
+    <div class="panel"><div style="font-size:12px;color:#80868b;font-weight:600">GASTO TOTAL (MES)</div><div class="num" style="font-size:20px;font-weight:800">${plata(R.gastoTotal)}</div><div style="font-size:11px;color:#80868b;margin-top:3px">Aplic. ${plata(R.gastoMensual)} · Petróleo ${plata(R.costoPetroleoMes)}</div></div>
+    <div class="panel"><div style="font-size:12px;color:#80868b;font-weight:600">PETRÓLEO GASTADO (MES)</div><div class="num" style="font-size:20px;font-weight:800">${R.litrosMes.toFixed(1)} L</div><div style="font-size:11px;color:#80868b;margin-top:3px">${plata(R.costoPetroleoMes)}</div></div>
     <div class="panel"><div style="font-size:12px;color:#80868b;font-weight:600">VALOR INVENTARIO (A HOY)</div><div class="num" style="font-size:20px;font-weight:800">${plata(R.valorInventarioActual)}</div></div>
-    <div class="panel"><div style="font-size:12px;color:#80868b;font-weight:600">SALDO BOMBONA (A HOY)</div><div class="num" style="font-size:20px;font-weight:800">${R.saldoPet.toFixed(1)} L</div></div>
+    <div class="panel"><div style="font-size:12px;color:#80868b;font-weight:600">SALDO BOMBONA (A HOY)</div><div class="num" style="font-size:20px;font-weight:800">${R.saldoPet.toFixed(1)} L</div><div style="font-size:11px;color:#80868b;margin-top:3px">${plata(R.valorSaldoPet)}</div></div>
     <div class="panel"><div style="font-size:12px;color:#80868b;font-weight:600">MATERIALES CON ALERTA</div><div class="num" style="font-size:24px;font-weight:800;color:${R.materialesBajoStock?'#c0392b':'inherit'}">${R.materialesBajoStock}</div></div>
     <div class="panel"><div style="font-size:12px;color:#80868b;font-weight:600">ENTRADAS DE STOCK (MES)</div><div class="num" style="font-size:24px;font-weight:800">${R.entradasMes.length}</div></div>
   </div>
@@ -2507,9 +2542,13 @@ function descargarReporteExcel(R){
     {Indicador:'Órdenes terminadas (mes)', Valor:R.numOrdenesTerminadas},
     {Indicador:'Órdenes pendientes (a hoy)', Valor:R.ordenesPendientes.length},
     {Indicador:'Gasto en aplicaciones (mes)', Valor:+R.gastoMensual.toFixed(0)},
+    {Indicador:'Gasto en petróleo (mes)', Valor:+R.costoPetroleoMes.toFixed(0)},
+    {Indicador:'Gasto total (mes)', Valor:+R.gastoTotal.toFixed(0)},
     {Indicador:'Petróleo gastado (mes, L)', Valor:+R.litrosMes.toFixed(2)},
     {Indicador:'Días con retiro de petróleo (mes)', Valor:R.diasConRetiroMes},
     {Indicador:'Saldo bombona (a hoy, L)', Valor:+R.saldoPet.toFixed(2)},
+    {Indicador:'Valor del petróleo en estanque (a hoy)', Valor:+R.valorSaldoPet.toFixed(0)},
+    {Indicador:'Precio del litro de petróleo', Valor:PRECIO_PETROLEO_L},
     {Indicador:'Valor inventario agroquímicos (a hoy)', Valor:+R.valorInventarioActual.toFixed(0)},
     {Indicador:'Materiales con alerta de stock (a hoy)', Valor:R.materialesBajoStock},
     {Indicador:'Entradas de stock registradas (mes)', Valor:R.entradasMes.length}
@@ -2519,20 +2558,28 @@ function descargarReporteExcel(R){
   const prodArr = Object.entries(R.productosAplicados).map(([nombre,v])=>({Producto:nombre,'Cantidad aplicada':+v.cantidad.toFixed(2),'Costo total':+v.costo.toFixed(0)})).sort((a,b)=>b['Costo total']-a['Costo total']);
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(prodArr.length?prodArr:[{Producto:'Sin aplicaciones este mes'}]), 'Productos aplicados');
 
+  const estArr = R.costoPorEstado.map(e=>({Estado:e.estado, Cuarteles:e.cuarteles, Ha:+e.ha.toFixed(2), 'Costo total':+e.costo.toFixed(0), '$/ha':e.ha>0?+(e.costo/e.ha).toFixed(0):0}));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(estArr.length?estArr:[{Estado:'Sin aplicaciones este mes'}]), 'Producción vs formación');
+
   const cuartArr = R.costoCuartelArr.map(c=>({Cuartel:c.cuartel, Campo:c.campo, Variedad:c.variedad, Estado:c.estado, Ha:+c.ha.toFixed(2), 'Costo total':+c.costo.toFixed(0), '$/ha':c.ha>0?+(c.costo/c.ha).toFixed(0):0}));
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cuartArr.length?cuartArr:[{Cuartel:'Sin aplicaciones este mes'}]), 'Costo por cuartel');
 
   const ordArr = R.ordenesTerminadasMes.map(o=>({'N° Orden':o.numero, Campo:o.campo, 'Fecha término':o.fechaTermino, Cuarteles:o.cuarteles, 'Costo total':+o.costo.toFixed(0)}));
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(ordArr.length?ordArr:[{'N° Orden':'Sin órdenes terminadas este mes'}]), 'Órdenes terminadas');
 
-  const pendArr = R.ordenesPendientes.map(o=>({'N° Orden':o.numero, Tipo:o.tipo, Campo:o.campo, Estado:o.estado, Cuarteles:o.cuarteles, Productos:o.productos, 'Fecha creación':o.fecha}));
+  const pendArr = R.ordenesPendientes.slice()
+    .sort((a,b)=> String(a.campo||'').localeCompare(String(b.campo||'')) || String(a.numero).localeCompare(String(b.numero)))
+    .map(o=>({Campo:o.campo, 'N° Orden':o.numero, Tipo:o.tipo, Estado:o.estado, Cuarteles:o.cuarteles, Productos:o.productos, 'Fecha creación':o.fecha}));
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(pendArr.length?pendArr:[{'N° Orden':'Sin órdenes pendientes'}]), 'Órdenes pendientes');
 
   const petArr = [{'Litros gastados (mes)':+R.litrosMes.toFixed(2), 'Días con retiro (mes)':R.diasConRetiroMes, 'Saldo bombona (a hoy, L)':+R.saldoPet.toFixed(2)}];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(petArr), 'Petróleo');
 
+  const entResArr = R.entradasPorProducto.map(e=>({Producto:e.producto, Recepciones:e.entradas, 'Cantidad total':e.cantidad, Destino:e.destino}));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(entResArr.length?entResArr:[{Producto:'Sin entradas este mes'}]), 'Entradas por producto');
+
   const entArr = R.entradasMes.map(e=>({Producto:e.producto, Cantidad:e.cantidad, Destino:e.destino, Usuario:e.usuario, Fecha:e.fecha}));
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(entArr.length?entArr:[{Producto:'Sin entradas este mes'}]), 'Entradas de stock');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(entArr.length?entArr:[{Producto:'Sin entradas este mes'}]), 'Entradas detalle');
 
   const matArr = R.materialesActual.map(m=>({Categoría:m.categoria, Material:m.nombre, Unidad:m.unidad, Cantidad:m.cantidad, Mínimo:m.minimo, Estado:m.estado}));
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(matArr.length?matArr:[{Categoría:'Sin materiales registrados'}]), 'Materiales');
@@ -2602,6 +2649,15 @@ function descargarReportePDF(R, RP){
       doc.text(vacio||'Sin registros en el período', M, y); y+=6;
     }
     rows.forEach((r,i)=>{
+      // Fila que solo rotula un grupo (ej. el campo en órdenes pendientes)
+      if(r && r.__grupo){
+        if(y + 11 > 268){ nuevaPagina(); cabecera(); }
+        y += 1.5;
+        doc.setFont('helvetica','bold'); doc.setFontSize(6.4); doc.setTextColor(...TX);
+        doc.setCharSpace(0.5); doc.text(String(r.__grupo).toUpperCase(), M, y); doc.setCharSpace(0);
+        y += 4.5;
+        return;
+      }
       const celdas = cols.map(c=>{
         const t = String(c.k(r));
         if(!c.wrap) return {c, l:[t]};
@@ -2618,7 +2674,8 @@ function descargarReportePDF(R, RP){
           doc.setFont('helvetica','normal'); doc.setFontSize(6.6);
           l.forEach((ln,k)=> doc.text(ln, px(x,c,ci), y + k*LH));
         } else {
-          doc.setFont('helvetica', c.bold?'bold':'normal'); doc.setFontSize(7.4);
+          const negrita = (typeof c.bold==='function') ? c.bold(r) : !!c.bold;
+          doc.setFont('helvetica', negrita?'bold':'normal'); doc.setFontSize(7.4);
           let t=l[0], s=7.4; const maxW=c.w-4;
           while(doc.getTextWidth(t)>maxW && s>5.2){ s-=0.2; doc.setFontSize(s); }
           doc.text(t, px(x,c,ci), y, c.a==='right'?{align:'right'}:undefined);
@@ -2626,7 +2683,7 @@ function descargarReportePDF(R, RP){
         x+=c.w;
       });
       y += hF;
-      if(hayWrap && i<rows.length-1){
+      if(hayWrap && i<rows.length-1 && !(rows[i+1]&&rows[i+1].__grupo)){
         doc.setDrawColor(233,233,233); doc.setLineWidth(0.15); doc.line(M,y-2.6,W-M,y-2.6);
       }
     });
@@ -2634,11 +2691,22 @@ function descargarReportePDF(R, RP){
   }
 
   const c4 = [CW*0.46, CW*0.18, CW*0.18, CW*0.18];
+  // Intercala filas rótulo {__grupo} para separar visualmente por campo/categoría
+  const agruparPor = (arr, campo)=>{
+    const out=[]; let actual=null;
+    (arr||[]).forEach(r=>{
+      const g = String(r[campo]||'—');
+      if(g!==actual){ out.push({__grupo:g}); actual=g; }
+      out.push(r);
+    });
+    return out;
+  };
+  const nb = r => !!r[4];   // 5º elemento del arreglo = fila destacada
   const comparativa = (filas, encabezado)=> tabla([
-    { t:encabezado||'Concepto', w:c4[0], a:'left',  k:r=>r[0] },
-    { t:R.mesCorto||'Mes',      w:c4[1], a:'right', k:r=>String(r[1]) },
+    { t:encabezado||'Concepto', w:c4[0], a:'left',  k:r=>r[0], bold:nb },
+    { t:R.mesCorto||'Mes',      w:c4[1], a:'right', k:r=>String(r[1]), bold:nb },
     { t:RP.mesCorto||'Anterior',w:c4[2], a:'right', k:r=>String(r[2]), gris:true },
-    { t:'Var.',                 w:c4[3], a:'right', k:r=>String(r[3]) },
+    { t:'Var.',                 w:c4[3], a:'right', k:r=>String(r[3]), bold:nb },
   ], filas);
 
   masthead();
@@ -2647,6 +2715,8 @@ function descargarReportePDF(R, RP){
   comparativa([
     ['Órdenes terminadas', R.numOrdenesTerminadas, RP.numOrdenesTerminadas, vtxt(vpct(R.numOrdenesTerminadas,RP.numOrdenesTerminadas))],
     ['Gasto en aplicaciones', plata(R.gastoMensual), plata(RP.gastoMensual), vtxt(vpct(R.gastoMensual,RP.gastoMensual))],
+    ['Gasto en petróleo', plata(R.costoPetroleoMes), plata(RP.costoPetroleoMes), vtxt(vpct(R.costoPetroleoMes,RP.costoPetroleoMes))],
+    ['Gasto total del mes', plata(R.gastoTotal), plata(RP.gastoTotal), vtxt(vpct(R.gastoTotal,RP.gastoTotal)), true],
     ['Petróleo consumido (L)', miles(R.litrosMes), miles(RP.litrosMes), vtxt(vpct(R.litrosMes,RP.litrosMes))],
     ['Días con retiro de petróleo', R.diasConRetiroMes, RP.diasConRetiroMes, vtxt(vpct(R.diasConRetiroMes,RP.diasConRetiroMes))],
     ['Entradas de stock', R.entradasMes.length, RP.entradasMes.length, vtxt(vpct(R.entradasMes.length,RP.entradasMes.length))],
@@ -2662,6 +2732,7 @@ function descargarReportePDF(R, RP){
     ['Órdenes pendientes', R.ordenesPendientes.length],
     ['Valor de inventario', plata(R.valorInventarioActual)],
     ['Saldo de estanque (L)', miles(R.saldoPet)],
+    ['Valor del petróleo en estanque', plata(R.valorSaldoPet)],
     ['Materiales bajo mínimo', R.materialesBajoStock+' de '+R.materialesActual.length],
   ]);
 
@@ -2683,6 +2754,31 @@ function descargarReportePDF(R, RP){
     { t:'% gasto',  w:c4[3], a:'right', k:r=>R.gastoMensual>0?(r.costo/R.gastoMensual*100).toFixed(1)+'%':'—', gris:true },
   ], prodArr, 'Sin aplicaciones en el mes');
 
+  titulo('Costo según estado del cuartel');
+  tabla([
+    { t:'Estado',    w:CW*0.34, a:'left',  k:r=>r.estado },
+    { t:'Cuarteles', w:CW*0.14, a:'right', k:r=>String(r.cuarteles), gris:true },
+    { t:'Ha',        w:CW*0.14, a:'right', k:r=>r.ha.toFixed(2) },
+    { t:'Costo',     w:CW*0.20, a:'right', k:r=>plata(r.costo), bold:true },
+    { t:'$/ha',      w:CW*0.18, a:'right', k:r=>r.ha>0?plata(r.costo/r.ha):'—' },
+  ], R.costoPorEstado, 'Sin aplicaciones en el mes');
+
+  // Diferencia de $/ha entre producción y formación, que es la comparación que interesa
+  (function(){
+    const prod = R.costoPorEstado.find(e=>/PRODUCCI/i.test(e.estado));
+    const form = R.costoPorEstado.find(e=>/FORMACI/i.test(e.estado));
+    if(!prod || !form || !(prod.ha>0) || !(form.ha>0)) return;
+    const hp = prod.costo/prod.ha, hf = form.costo/form.ha;
+    const dif = hp - hf;
+    const pct = hf>0 ? (dif/hf*100) : null;
+    y -= 4;
+    doc.setFont('helvetica','normal'); doc.setFontSize(6.8); doc.setTextColor(...GR);
+    doc.text('Diferencia producción vs formación: '+plata(Math.abs(dif))+' por hectárea'
+      + (pct!==null ? ' ('+(dif>=0?'+':'-')+Math.abs(pct).toFixed(0)+'%)' : '')
+      + (dif>=0 ? ' — se gasta más en producción.' : ' — se gasta más en formación.'), M, y);
+    y += 8;
+  })();
+
   titulo('Costo por cuartel');
   tabla([
     { t:'Cuartel',  w:CW*0.24, a:'left',  k:r=>r.cuartel },
@@ -2693,15 +2789,16 @@ function descargarReportePDF(R, RP){
     { t:'Costo',    w:CW*0.12, a:'right', k:r=>plata(r.costo), bold:true },
   ], R.costoCuartelArr.slice(0,24), 'Sin aplicaciones en el mes');
 
-  titulo('Órdenes pendientes');
+  titulo('Órdenes pendientes por campo');
+  const pendOrden = (R.ordenesPendientes||[]).slice()
+    .sort((a,b)=> String(a.campo||'').localeCompare(String(b.campo||'')) || String(a.numero).localeCompare(String(b.numero)));
   tabla([
-    { t:'N° Orden',  w:CW*0.13, a:'left', k:r=>r.numero, bold:true },
-    { t:'Tipo',      w:CW*0.11, a:'left', k:r=>r.tipo||'—' },
-    { t:'Campo',     w:CW*0.14, a:'left', k:r=>r.campo||'—', gris:true },
-    { t:'Estado',    w:CW*0.12, a:'left', k:r=>r.estado||'—', gris:true },
-    { t:'Cuarteles', w:CW*0.24, a:'left', k:r=>r.cuarteles||'—', wrap:true },
-    { t:'Productos', w:CW*0.26, a:'left', k:r=>r.productos||'—', wrap:true },
-  ], R.ordenesPendientes, 'Sin órdenes pendientes');
+    { t:'N° Orden',  w:CW*0.14, a:'left', k:r=>r.numero, bold:true },
+    { t:'Tipo',      w:CW*0.12, a:'left', k:r=>r.tipo||'—' },
+    { t:'Estado',    w:CW*0.14, a:'left', k:r=>r.estado||'—', gris:true },
+    { t:'Cuarteles', w:CW*0.28, a:'left', k:r=>r.cuarteles||'—', wrap:true },
+    { t:'Productos', w:CW*0.32, a:'left', k:r=>r.productos||'—', wrap:true },
+  ], agruparPor(pendOrden,'campo'), 'Sin órdenes pendientes');
 
   titulo('Consumo de petróleo');
   const promA = R.diasConRetiroMes ? R.litrosMes/R.diasConRetiroMes : 0;
@@ -2710,17 +2807,30 @@ function descargarReportePDF(R, RP){
     ['Litros consumidos', miles(R.litrosMes), miles(RP.litrosMes), vtxt(vpct(R.litrosMes,RP.litrosMes))],
     ['Días con retiro', R.diasConRetiroMes, RP.diasConRetiroMes, vtxt(vpct(R.diasConRetiroMes,RP.diasConRetiroMes))],
     ['Promedio por día (L)', promA.toFixed(1), promP.toFixed(1), vtxt(vpct(promA,promP))],
+    ['Costo del petróleo', plata(R.costoPetroleoMes), plata(RP.costoPetroleoMes), vtxt(vpct(R.costoPetroleoMes,RP.costoPetroleoMes)), true],
     ['Saldo de estanque hoy (L)', miles(R.saldoPet), '—', '—'],
+    ['Valor del saldo en estanque', plata(R.valorSaldoPet), '—', '—'],
   ]);
+  doc.setFont('helvetica','normal'); doc.setFontSize(6.4); doc.setTextColor(...GR);
+  doc.text('Valorizado a '+plata(PRECIO_PETROLEO_L)+' por litro.', M, y-4);
 
-  titulo('Entradas de stock');
+  titulo('Entradas de stock por producto');
   tabla([
-    { t:'Producto', w:CW*0.34, a:'left',  k:r=>r.producto },
-    { t:'Cantidad', w:CW*0.14, a:'right', k:r=>String(r.cantidad) },
-    { t:'Destino',  w:CW*0.20, a:'left',  k:r=>r.destino||'—', gris:true },
-    { t:'Usuario',  w:CW*0.16, a:'left',  k:r=>r.usuario||'—', gris:true },
-    { t:'Fecha',    w:CW*0.16, a:'right', k:r=>r.fecha||'—', gris:true },
-  ], R.entradasMes, 'Sin entradas registradas en el mes');
+    { t:'Producto',        w:CW*0.40, a:'left',  k:r=>r.producto },
+    { t:'Recepciones',     w:CW*0.14, a:'right', k:r=>String(r.entradas), gris:true },
+    { t:'Cantidad total',  w:CW*0.18, a:'right', k:r=>r.cantidad.toLocaleString('es-CL'), bold:true },
+    { t:'Destino',         w:CW*0.28, a:'left',  k:r=>r.destino||'—', gris:true },
+  ], R.entradasPorProducto, 'Sin entradas registradas en el mes');
+
+  titulo('Materiales de campo por categoría');
+  tabla([
+    { t:'Material', w:CW*0.42, a:'left',  k:r=>r.nombre },
+    { t:'Unidad',   w:CW*0.14, a:'left',  k:r=>r.unidad||'—', gris:true },
+    { t:'Stock',    w:CW*0.14, a:'right', k:r=>String(r.cantidad) },
+    { t:'Mínimo',   w:CW*0.14, a:'right', k:r=>String(r.minimo||'—'), gris:true },
+    { t:'Estado',   w:CW*0.16, a:'right', k:r=>r.estado,
+      bold:r=>r.estado!=='OK', gris:false },
+  ], agruparPor(R.materialesActual,'categoria'), 'Sin materiales registrados');
 
   // Pie en todas las páginas
   const total = doc.getNumberOfPages();
