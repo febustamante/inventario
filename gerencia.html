@@ -2323,6 +2323,9 @@ let rmMes=null;
 // Precio del litro de petróleo para valorizar el consumo en el reporte.
 // Si cambia el precio, se edita acá y queda aplicado en pantalla, Excel y PDF.
 const PRECIO_PETROLEO_L = 1200;
+// El precio de cada material sale de materiales.precio_unitario en Supabase
+// (columna agregada con precios_materiales.sql). Para cambiar un precio se
+// edita en Supabase, no acá.
 // Mes anterior a 'YYYY-MM', para las columnas de comparación
 function mesAnteriorG(mesStr){
   const [y,m] = String(mesStr||'').split('-').map(Number);
@@ -2449,9 +2452,13 @@ function datosReporteMensual(mesStr){
   const materialesActual = (materiales||[]).map(m=>{
     const cant=Number(m.cantidad)||0, min=Number(m.minimo)||0;
     const estado = cant<=0 ? 'AGOTADO' : (min>0 && cant<=min) ? 'STOCK BAJO' : 'OK';
-    return {categoria:m.categoria||'Otros', nombre:m.nombre, unidad:m.unidad||'', cantidad:cant, minimo:min, estado};
+    const precioUnit = Number(m.precio_unitario)||0;
+    return {categoria:m.categoria||'Otros', nombre:m.nombre, unidad:m.unidad||'', cantidad:cant, minimo:min, estado,
+            precioUnit, valorTotal:+(cant*precioUnit).toFixed(2)};
   }).sort((a,b)=>(a.categoria||'').localeCompare(b.categoria||'')||(a.nombre||'').localeCompare(b.nombre||''));
   const materialesBajoStock = materialesActual.filter(m=>m.estado!=='OK').length;
+  const valorMaterialesActual = materialesActual.reduce((s,m)=>s+m.valorTotal,0);
+  const materialesSinPrecio = materialesActual.filter(m=>m.cantidad>0 && !m.precioUnit).map(m=>m.nombre);
 
   // Petróleo valorizado
   const costoPetroleoMes = litrosMes * PRECIO_PETROLEO_L;
@@ -2478,7 +2485,7 @@ function datosReporteMensual(mesStr){
     costoCuartelArr,
     litrosMes, diasConRetiroMes, saldoPet,
     entradasMes, entradasPorProducto,
-    valorInventarioActual, materialesActual, materialesBajoStock,
+    valorInventarioActual, materialesActual, materialesBajoStock, valorMaterialesActual, materialesSinPrecio,
     costoPetroleoMes, valorSaldoPet, gastoTotal, costoPorEstado
   };
 }
@@ -2581,7 +2588,8 @@ function descargarReporteExcel(R){
   const entArr = R.entradasMes.map(e=>({Producto:e.producto, Cantidad:e.cantidad, Destino:e.destino, Usuario:e.usuario, Fecha:e.fecha}));
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(entArr.length?entArr:[{Producto:'Sin entradas este mes'}]), 'Entradas detalle');
 
-  const matArr = R.materialesActual.map(m=>({Categoría:m.categoria, Material:m.nombre, Unidad:m.unidad, Cantidad:m.cantidad, Mínimo:m.minimo, Estado:m.estado}));
+  const matArr = R.materialesActual.map(m=>({Categoría:m.categoria, Material:m.nombre, Unidad:m.unidad, Cantidad:m.cantidad, Mínimo:m.minimo, 'Precio unitario':m.precioUnit||'', 'Valor total':m.precioUnit?m.valorTotal:'', Estado:m.estado}));
+  matArr.push({Categoría:'', Material:'TOTAL', Unidad:'', Cantidad:'', Mínimo:'', 'Precio unitario':'', 'Valor total':R.valorMaterialesActual, Estado:''});
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(matArr.length?matArr:[{Categoría:'Sin materiales registrados'}]), 'Materiales');
 
   XLSX.writeFile(wb, 'Reporte_mensual_'+R.mesStr+'.xlsx');
@@ -2734,6 +2742,7 @@ function descargarReportePDF(R, RP){
     ['Saldo de estanque (L)', miles(R.saldoPet)],
     ['Valor del petróleo en estanque', plata(R.valorSaldoPet)],
     ['Materiales bajo mínimo', R.materialesBajoStock+' de '+R.materialesActual.length],
+    ['Valor de materiales en bodega', plata(R.valorMaterialesActual)],
   ]);
 
   titulo('Gasto por campo');
@@ -2824,13 +2833,23 @@ function descargarReportePDF(R, RP){
 
   titulo('Materiales de campo por categoría');
   tabla([
-    { t:'Material', w:CW*0.42, a:'left',  k:r=>r.nombre },
-    { t:'Unidad',   w:CW*0.14, a:'left',  k:r=>r.unidad||'—', gris:true },
-    { t:'Stock',    w:CW*0.14, a:'right', k:r=>String(r.cantidad) },
-    { t:'Mínimo',   w:CW*0.14, a:'right', k:r=>String(r.minimo||'—'), gris:true },
-    { t:'Estado',   w:CW*0.16, a:'right', k:r=>r.estado,
+    { t:'Material',      w:CW*0.30, a:'left',  k:r=>r.nombre },
+    { t:'Unidad',        w:CW*0.09, a:'left',  k:r=>r.unidad||'—', gris:true },
+    { t:'Stock',         w:CW*0.11, a:'right', k:r=>String(r.cantidad) },
+    { t:'Precio unit.',  w:CW*0.16, a:'right', k:r=>r.precioUnit?plata(r.precioUnit):'—', gris:true },
+    { t:'Valor',         w:CW*0.17, a:'right', k:r=>r.precioUnit?plata(r.valorTotal):'—', bold:true },
+    { t:'Estado',        w:CW*0.17, a:'right', k:r=>r.estado,
       bold:r=>r.estado!=='OK', gris:false },
   ], agruparPor(R.materialesActual,'categoria'), 'Sin materiales registrados');
+  doc.setFont('helvetica','bold'); doc.setFontSize(7.4); doc.setTextColor(...TX);
+  doc.text('Valor total de materiales en bodega: '+plata(R.valorMaterialesActual), M, y-4);
+  if(R.materialesSinPrecio.length){
+    y += 4;
+    doc.setFont('helvetica','italic'); doc.setFontSize(6); doc.setTextColor(...GR);
+    const txSinPrecio = doc.splitTextToSize('Sin precio unitario cargado (no se valorizan): '+R.materialesSinPrecio.join(', '), CW);
+    txSinPrecio.forEach((ln,i)=> doc.text(ln, M, y-4+i*3));
+    y += (txSinPrecio.length-1)*3;
+  }
 
   // Pie en todas las páginas
   const total = doc.getNumberOfPages();
