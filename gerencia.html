@@ -2458,6 +2458,8 @@ function datosReporteMensual(mesStr){
   }).sort((a,b)=>(a.categoria||'').localeCompare(b.categoria||'')||(a.nombre||'').localeCompare(b.nombre||''));
   const materialesBajoStock = materialesActual.filter(m=>m.estado!=='OK').length;
   const valorMaterialesActual = materialesActual.reduce((s,m)=>s+m.valorTotal,0);
+  // Inventario total = productos (pesticidas/fertilizantes) + materiales de campo
+  const valorInventarioTotal = valorInventarioActual + valorMaterialesActual;
   const materialesSinPrecio = materialesActual.filter(m=>m.cantidad>0 && !m.precioUnit).map(m=>m.nombre);
 
   // Petróleo valorizado
@@ -2485,7 +2487,7 @@ function datosReporteMensual(mesStr){
     costoCuartelArr,
     litrosMes, diasConRetiroMes, saldoPet,
     entradasMes, entradasPorProducto,
-    valorInventarioActual, materialesActual, materialesBajoStock, valorMaterialesActual, materialesSinPrecio,
+    valorInventarioActual, materialesActual, materialesBajoStock, valorMaterialesActual, materialesSinPrecio, valorInventarioTotal,
     costoPetroleoMes, valorSaldoPet, gastoTotal, costoPorEstado
   };
 }
@@ -2507,9 +2509,9 @@ function renderReporteMensual(){
     <div class="panel"><div style="font-size:12px;color:#80868b;font-weight:600">ÓRDENES PENDIENTES (A HOY)</div><div class="num" style="font-size:24px;font-weight:800">${R.ordenesPendientes.length}</div></div>
     <div class="panel"><div style="font-size:12px;color:#80868b;font-weight:600">GASTO TOTAL (MES)</div><div class="num" style="font-size:20px;font-weight:800">${plata(R.gastoTotal)}</div><div style="font-size:11px;color:#80868b;margin-top:3px">Aplic. ${plata(R.gastoMensual)} · Petróleo ${plata(R.costoPetroleoMes)}</div></div>
     <div class="panel"><div style="font-size:12px;color:#80868b;font-weight:600">PETRÓLEO GASTADO (MES)</div><div class="num" style="font-size:20px;font-weight:800">${R.litrosMes.toFixed(1)} L</div><div style="font-size:11px;color:#80868b;margin-top:3px">${plata(R.costoPetroleoMes)}</div></div>
-    <div class="panel"><div style="font-size:12px;color:#80868b;font-weight:600">VALOR INVENTARIO (A HOY)</div><div class="num" style="font-size:20px;font-weight:800">${plata(R.valorInventarioActual)}</div></div>
+    <div class="panel"><div style="font-size:12px;color:#80868b;font-weight:600">VALOR INVENTARIO TOTAL (A HOY)</div><div class="num" style="font-size:20px;font-weight:800">${plata(R.valorInventarioTotal)}</div><div style="font-size:11px;color:#80868b;margin-top:3px">Productos ${plata(R.valorInventarioActual)} · Materiales ${plata(R.valorMaterialesActual)}</div></div>
     <div class="panel"><div style="font-size:12px;color:#80868b;font-weight:600">SALDO BOMBONA (A HOY)</div><div class="num" style="font-size:20px;font-weight:800">${R.saldoPet.toFixed(1)} L</div><div style="font-size:11px;color:#80868b;margin-top:3px">${plata(R.valorSaldoPet)}</div></div>
-    <div class="panel"><div style="font-size:12px;color:#80868b;font-weight:600">MATERIALES CON ALERTA</div><div class="num" style="font-size:24px;font-weight:800;color:${R.materialesBajoStock?'#c0392b':'inherit'}">${R.materialesBajoStock}</div></div>
+    <div class="panel"><div style="font-size:12px;color:#80868b;font-weight:600">MATERIALES CON ALERTA</div><div class="num" style="font-size:24px;font-weight:800;color:${R.materialesBajoStock?'#c0392b':'inherit'}">${R.materialesBajoStock}</div><div style="font-size:11px;color:#80868b;margin-top:3px">de ${R.materialesActual.length} materiales</div></div>
     <div class="panel"><div style="font-size:12px;color:#80868b;font-weight:600">ENTRADAS DE STOCK (MES)</div><div class="num" style="font-size:24px;font-weight:800">${R.entradasMes.length}</div></div>
   </div>
 
@@ -2731,18 +2733,20 @@ function descargarReportePDF(R, RP){
   ]);
 
   titulo('Situación al día de hoy');
+  const nbSit = r => !!r[2];   // 3er elemento = fila destacada (totales)
   tabla([
-    { t:'Concepto', w:c4[0], a:'left',  k:r=>r[0] },
-    { t:'Valor',    w:c4[1], a:'right', k:r=>String(r[1]) },
+    { t:'Concepto', w:c4[0], a:'left',  k:r=>r[0], bold:nbSit },
+    { t:'Valor',    w:c4[1], a:'right', k:r=>String(r[1]), bold:nbSit },
     { t:'',         w:c4[2], a:'right', k:()=>'' },
     { t:'',         w:c4[3], a:'right', k:()=>'' },
   ], [
     ['Órdenes pendientes', R.ordenesPendientes.length],
-    ['Valor de inventario', plata(R.valorInventarioActual)],
+    ['Inventario de productos (pesticidas y fertilizantes)', plata(R.valorInventarioActual)],
+    ['Inventario de materiales de campo', plata(R.valorMaterialesActual)],
+    ['VALOR TOTAL DE INVENTARIO', plata(R.valorInventarioTotal), true],
+    ['Materiales bajo mínimo', R.materialesBajoStock+' de '+R.materialesActual.length],
     ['Saldo de estanque (L)', miles(R.saldoPet)],
     ['Valor del petróleo en estanque', plata(R.valorSaldoPet)],
-    ['Materiales bajo mínimo', R.materialesBajoStock+' de '+R.materialesActual.length],
-    ['Valor de materiales en bodega', plata(R.valorMaterialesActual)],
   ]);
 
   titulo('Gasto por campo');
