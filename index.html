@@ -481,6 +481,29 @@ const USERS = [
   {id:'cerrillos', name:'Eduardo', full:'EDUARDO · Cerrillos', role:'dosificador', pin:'6666', av:'av-d', desc:'Caseta Cerrillos'},
 ];
 
+// ══════ BOMBONAS DE PETRÓLEO ══════
+// Cada bombona lleva su propio saldo. En petroleo_movs la columna 'bombona'
+// dice a cuál pertenece cada vale; lo antiguo quedó marcado como CERRILLOS.
+const BOMBONAS = ['CERRILLOS','PAINE'];
+// Qué bombona(s) puede operar cada usuario. Si no está en la lista, no ve la pestaña.
+const BOMBONAS_USUARIO = {
+  maestro: ['CERRILLOS','PAINE'],   // Felipe
+  bodeg:   ['CERRILLOS','PAINE'],   // Freddy
+  paine:   ['PAINE'],               // Hector
+};
+function bombonasDe(u){ return BOMBONAS_USUARIO[(u&&u.id)||''] || []; }
+// Bombona que se está mirando en la pestaña de petróleo
+let petBombona = null;
+function petBombonaActual(){
+  const mias = bombonasDe(curUser);
+  if(!petBombona || mias.indexOf(petBombona)===-1) petBombona = mias[0] || 'CERRILLOS';
+  return petBombona;
+}
+function setPetBombona(b){ petBombona = b; refresh(); }
+// La bombona de un movimiento. Lo que se registró antes de separar las bombonas
+// no trae el dato, y en ese entonces todo era Cerrillos.
+function bombonaDe(mv){ return String((mv&&mv.bombona)||'CERRILLOS').toUpperCase(); }
+
 // Estado
 let stockByLoc = {};
 let products = [];
@@ -1134,7 +1157,12 @@ function getTabs(role) {
     {k:'petroleo', icon:'ti-gas-station',    label:'Petróleo', roles:['maestro','bodeguero'],            render:renderPetroleo,    prim:false},
     {k:'admin',    icon:'ti-settings',       label:'Admin',    roles:['maestro'],                        render:renderAdmin,       prim:false},
   ];
-  return all.filter(t=>t.roles.includes(role));
+  return all.filter(t=>{
+    // Petróleo no va por rol sino por bombona asignada: así Hector (dosificador
+    // de Paine) entra, pero los demás dosificadores no.
+    if(t.k==='petroleo') return bombonasDe(curUser).length>0;
+    return t.roles.includes(role);
+  });
 }
 
 function buildApp() {
@@ -2111,8 +2139,10 @@ async function anularMovMaterial(movId){
 // y queda registrado en petroleo_movs. El saldo se calcula sumando/restando
 // los movimientos ACTIVOS, nunca se guarda como número suelto que se pueda desincronizar.
 
-function saldoPetroleo(){
-  return petroleoMovs.filter(m=>m.estado!=='ANULADO')
+// Saldo de una bombona. Sin argumento devuelve el de la que se está mirando.
+function saldoPetroleo(bombona){
+  const b = String(bombona || petBombonaActual()).toUpperCase();
+  return petroleoMovs.filter(m=>m.estado!=='ANULADO' && bombonaDe(m)===b)
     .reduce((s,m)=> s + (m.tipo==='entrada' ? (+m.litros||0) : -(+m.litros||0)), 0);
 }
 
@@ -2130,11 +2160,16 @@ function firmaThumbSvg(firma, vbW, vbH){
 }
 
 function renderPetroleo(){
-  const puedeEditar = ['maestro','bodeguero'].includes(curUser.role);
-  const saldo = saldoPetroleo();
+  const mias = bombonasDe(curUser);
+  const bAct = petBombonaActual();
+  const puedeEditar = mias.indexOf(bAct)>-1;
+  const saldo = saldoPetroleo(bAct);
   const bajo = saldo < 80;
-  const movsOrden = [...petroleoMovs].sort((a,b)=> new Date(b.fecha||0) - new Date(a.fecha||0));
+  // Solo los vales de esta bombona
+  const propios = petroleoMovs.filter(m=>bombonaDe(m)===bAct);
+  const movsOrden = [...propios].sort((a,b)=> new Date(b.fecha||0) - new Date(a.fecha||0));
   const movs = movsOrden.slice(0,10);
+  const nombreB = b => b.charAt(0)+b.slice(1).toLowerCase();
 
   return `
   <div class="section-header">
@@ -2142,8 +2177,12 @@ function renderPetroleo(){
     <div class="section-sub">Vales digitales de la bombona · firma en pantalla</div>
   </div>
 
+  ${mias.length>1?`<div style="display:flex;gap:8px;margin-bottom:12px">
+    ${mias.map(b=>`<button onclick="setPetBombona('${b}')" style="flex:1;padding:10px;border-radius:10px;border:1.5px solid ${b===bAct?'var(--vino)':'var(--bd2)'};background:${b===bAct?'var(--vino)':'#fff'};color:${b===bAct?'#fff':'var(--tx2)'};font-size:13.5px;font-weight:700">Bombona ${nombreB(b)}</button>`).join('')}
+  </div>`:''}
+
   <div class="card" style="padding:18px;margin-bottom:14px;text-align:center;background:${bajo?'#fff6f0':'#fff'}">
-    <div style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.4px">Saldo bombona</div>
+    <div style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.4px">Saldo bombona ${nombreB(bAct)}</div>
     <div style="font-size:34px;font-weight:800;color:${bajo?'var(--red)':'var(--tx)'};line-height:1.25">${fmt(saldo)} <span style="font-size:16px;font-weight:600;color:var(--tx3)">L</span></div>
     ${bajo?'<div style="font-size:12px;color:var(--red);font-weight:600;margin-top:4px">Saldo bajo — considera recargar</div>':''}
   </div>
@@ -2154,7 +2193,7 @@ function renderPetroleo(){
     <button class="btn-sec" style="flex-shrink:0;padding:0 16px;display:flex;align-items:center;gap:6px" onclick="abrirExportarPetroleo()"><i class="ti ti-file-spreadsheet"></i> Excel</button>
   </div>`:''}
 
-  <div class="section-label">Últimos vales${petroleoMovs.length>10?` <span style="font-weight:400;text-transform:none;color:var(--tx3)">· 10 más recientes de ${petroleoMovs.length}</span>`:''}</div>
+  <div class="section-label">Últimos vales${propios.length>10?` <span style="font-weight:400;text-transform:none;color:var(--tx3)">· 10 más recientes de ${propios.length}</span>`:''}</div>
   <div class="card">${movs.length?movs.map(mv=>{
     const esEnt = mv.tipo==='entrada';
     const f = mv.fecha ? new Date(mv.fecha) : null;
@@ -2241,7 +2280,7 @@ function abrirNuevoVale(tipo){ // 'salida' = vale a tractorista, 'entrada' = rec
   div.innerHTML = `
     <div style="background:#fff;width:100%;max-width:480px;border-radius:18px 18px 0 0;padding:20px;max-height:92vh;overflow-y:auto">
       <div style="font-size:17px;font-weight:800;margin-bottom:2px">${esSalida?'Vale de petróleo':'Recepción de petróleo'}</div>
-      <div style="font-size:12px;color:var(--tx3);margin-bottom:16px">Saldo actual: ${fmt(saldoPetroleo())} L</div>
+      <div style="font-size:12px;color:var(--tx3);margin-bottom:16px">Bombona <b>${petBombonaActual()}</b> · saldo actual: ${fmt(saldoPetroleo())} L</div>
 
       ${esSalida ? `
       <label style="${lbl}">Tractorista</label>
@@ -2299,9 +2338,10 @@ async function confirmarVale(tipo){
   const litros = parseFloat(g('vp-litros'))||0;
   if(litros<=0){ showToast('Litros inválidos','err'); return; }
 
-  const saldo = saldoPetroleo();
+  const bombonaVale = petBombonaActual();
+  const saldo = saldoPetroleo(bombonaVale);
   if(esSalida && litros>saldo){
-    if(!confirm('Estás registrando '+fmt(litros)+' L pero el saldo de la bombona es '+fmt(saldo)+' L.\n\n¿Registrar igual?')) return;
+    if(!confirm('Estás registrando '+fmt(litros)+' L pero el saldo de la bombona '+bombonaVale+' es '+fmt(saldo)+' L.\n\n¿Registrar igual?')) return;
   }
 
   const tractorista = esSalida ? g('vp-tractorista') : '';
@@ -2317,6 +2357,7 @@ async function confirmarVale(tipo){
 
   const base = {
     tipo, litros,
+    bombona: bombonaVale,
     tractorista: tractorista || null,
     vehiculo: vehiculo || null,
     firma: (esSalida && _firmaStrokes && _firmaStrokes.length) ? _firmaStrokes : null,
@@ -2445,6 +2486,7 @@ function dibujarValeCardPDF(doc, mv, x, y, w, h){
     doc.setDrawColor(...BD); doc.setLineWidth(0.15); doc.line(x+3.5, yy+1, x+w-3.5, yy+1);
     yy += 4.6;
   };
+  fila('Bombona', bombonaDe(mv));
   fila('Tractorista', mv.tractorista);
   fila('Vehículo', mv.vehiculo);
   fila('Litros', fmt(mv.litros)+' L');
@@ -2480,8 +2522,9 @@ function dibujarValeCardPDF(doc, mv, x, y, w, h){
 // Grilla de 2 columnas x 3 filas (6 vales por hoja) — mucho más compacto que 1 por fila.
 function exportarPetroleoPDF(fechaDesde, fechaHasta){
   if(typeof window.jspdf === 'undefined'){ showToast('La librería de PDF no cargó','err'); return; }
-  const vales = (petroleoMovs||[]).filter(mv=>mv.tipo==='salida');
-  if(!vales.length){ showToast('No hay vales para exportar','err'); return; }
+  const bExp = petBombonaActual();
+  const vales = (petroleoMovs||[]).filter(mv=>mv.tipo==='salida' && bombonaDe(mv)===bExp);
+  if(!vales.length){ showToast('No hay vales de la bombona '+bExp+' para exportar','err'); return; }
 
   const desde = fechaDesde ? new Date(fechaDesde+'T00:00:00') : null;
   const hasta = fechaHasta ? new Date(fechaHasta+'T23:59:59') : null;
@@ -2518,12 +2561,15 @@ function exportarPetroleoPDF(fechaDesde, fechaHasta){
 // "Saldo bombona" muestre el nivel real), aunque solo se muestren las filas del rango elegido.
 function exportarPetroleoExcel(fechaDesde, fechaHasta){
   if(typeof XLSX==='undefined'){ showToast('La librería Excel no cargó','err'); return; }
-  if(!petroleoMovs.length){ showToast('No hay vales para exportar','err'); return; }
+  const bExp = petBombonaActual();
+  const deLaBombona = petroleoMovs.filter(mv=>bombonaDe(mv)===bExp);
+  if(!deLaBombona.length){ showToast('No hay vales de la bombona '+bExp+' para exportar','err'); return; }
 
   const desde = fechaDesde ? new Date(fechaDesde+'T00:00:00') : null;
   const hasta = fechaHasta ? new Date(fechaHasta+'T23:59:59') : null;
 
-  const ordenados = [...petroleoMovs].sort((a,b)=> new Date(a.fecha||0) - new Date(b.fecha||0));
+  // Solo esta bombona: así el saldo corrido de la última columna no mezcla las dos.
+  const ordenados = [...deLaBombona].sort((a,b)=> new Date(a.fecha||0) - new Date(b.fecha||0));
   let saldo = 0;
   const filas = [];
   ordenados.forEach(mv=>{
@@ -2533,6 +2579,7 @@ function exportarPetroleoExcel(fechaDesde, fechaHasta){
     if(hasta && (!f || f>hasta)) return;
     filas.push({
       'Fecha': f ? f.toLocaleString('es-CL') : '',
+      'Bombona': bombonaDe(mv),
       'Tipo': mv.tipo==='entrada' ? 'Recepción' : 'Vale',
       'Tractorista': mv.tractorista||'',
       'Vehículo': mv.vehiculo||'',
