@@ -2396,6 +2396,8 @@ let rmMes=null;
 // Precio del litro de petróleo para valorizar el consumo en el reporte.
 // Si cambia el precio, se edita acá y queda aplicado en pantalla, Excel y PDF.
 const PRECIO_PETROLEO_L = 1200;
+// Bombonas de petróleo. Cada una lleva su saldo aparte (columna 'bombona' en petroleo_movs).
+const BOMBONAS_G = ['CERRILLOS','PAINE'];
 // El precio de cada material sale de materiales.precio_unitario en Supabase
 // (columna agregada con precios_materiales.sql). Para cambiar un precio se
 // edita en Supabase, no acá.
@@ -2511,13 +2513,29 @@ function datosReporteMensual(mesStr){
                cuarteles:cuarts, productos:(prods.length?prods.join(' \u00b7 '):'\u2014') };
     });
 
-  // Petróleo: gasto del mes + saldo actual de la bombona (histórico completo, no solo el mes)
+  // Petróleo: gasto del mes + saldo actual, abierto por bombona.
+  // Lo registrado antes de separar las bombonas no trae el dato y era todo de Cerrillos.
+  const bombonaDeG = mv => String((mv&&mv.bombona)||'CERRILLOS').toUpperCase();
   const petMovsMes = (petroleoMovs||[]).filter(mv=>mv.tipo==='salida' && mv.estado!=='ANULADO' && String(mv.fecha||'').slice(0,7)===mesStr);
   const litrosMes = petMovsMes.reduce((s,mv)=>s+(Number(mv.litros)||0),0);
   const diasConRetiroMes = new Set(petMovsMes.map(mv=>String(mv.fecha).slice(0,10))).size;
-  const ordenadosPet = [...(petroleoMovs||[])].sort((a,b)=>new Date(a.fecha||0)-new Date(b.fecha||0));
   let saldoPet=0;
-  ordenadosPet.forEach(mv=>{ if(mv.estado!=='ANULADO') saldoPet += (mv.tipo==='entrada'?(Number(mv.litros)||0):-(Number(mv.litros)||0)); });
+  (petroleoMovs||[]).forEach(mv=>{ if(mv.estado!=='ANULADO') saldoPet += (mv.tipo==='entrada'?(Number(mv.litros)||0):-(Number(mv.litros)||0)); });
+
+  // Mismos números pero de cada bombona por separado
+  const bombonasVistas = [...new Set([...BOMBONAS_G, ...(petroleoMovs||[]).map(bombonaDeG)])];
+  const petPorBombona = bombonasVistas.map(b=>{
+    const delMes = petMovsMes.filter(mv=>bombonaDeG(mv)===b);
+    const litros = delMes.reduce((s,mv)=>s+(Number(mv.litros)||0),0);
+    let saldo=0;
+    (petroleoMovs||[]).forEach(mv=>{
+      if(mv.estado==='ANULADO' || bombonaDeG(mv)!==b) return;
+      saldo += (mv.tipo==='entrada'?(Number(mv.litros)||0):-(Number(mv.litros)||0));
+    });
+    return { bombona:b, litros, dias:new Set(delMes.map(mv=>String(mv.fecha).slice(0,10))).size,
+             saldo, costo:litros*PRECIO_PETROLEO_L, valorSaldo:saldo*PRECIO_PETROLEO_L };
+  }).filter(b=>b.litros>0 || b.saldo!==0 || BOMBONAS_G.indexOf(b.bombona)>-1)
+    .sort((a,b)=>b.litros-a.litros);
 
   // Entradas de stock (recepciones) del mes
   const entradasMes = (movimientos||[]).filter(m=>m.tipo==='entrada' && String(m.fechaRaw||'').slice(0,7)===mesStr)
@@ -2577,7 +2595,7 @@ function datosReporteMensual(mesStr){
     ordenesPendientes, ordenesTerminadasMes,
     productosAplicados, top5, gastoMensual,
     costoCuartelArr,
-    litrosMes, diasConRetiroMes, saldoPet,
+    litrosMes, diasConRetiroMes, saldoPet, petPorBombona,
     entradasMes, entradasPorProducto,
     valorInventarioActual, materialesActual, materialesBajoStock, valorMaterialesActual, materialesSinPrecio, valorInventarioTotal,
     costoPetroleoMes, valorSaldoPet, gastoTotal, costoPorEstado
@@ -2600,9 +2618,9 @@ function renderReporteMensual(){
     <div class="panel"><div style="font-size:12px;color:#80868b;font-weight:600">ÓRDENES DE APLICACIÓN (MES)</div><div class="num" style="font-size:24px;font-weight:800">${R.numAplicaciones}</div><div style="font-size:11px;color:#80868b;margin-top:3px">Herbicida ${R.numHerbicida} · Fito ${R.numFito}</div><div style="font-size:11px;color:#80868b;margin-top:2px">Consumos directos aparte: <b>${R.numConsumos}</b></div></div>
     <div class="panel"><div style="font-size:12px;color:#80868b;font-weight:600">ÓRDENES PENDIENTES (A HOY)</div><div class="num" style="font-size:24px;font-weight:800">${R.ordenesPendientes.length}</div></div>
     <div class="panel"><div style="font-size:12px;color:#80868b;font-weight:600">GASTO TOTAL (MES)</div><div class="num" style="font-size:20px;font-weight:800">${plata(R.gastoTotal)}</div><div style="font-size:11px;color:#80868b;margin-top:3px">Aplic. ${plata(R.gastoAplicaciones)} · Consumo ${plata(R.gastoConsumos)}</div><div style="font-size:11px;color:#80868b;margin-top:2px">Petróleo ${plata(R.costoPetroleoMes)}</div></div>
-    <div class="panel"><div style="font-size:12px;color:#80868b;font-weight:600">PETRÓLEO GASTADO (MES)</div><div class="num" style="font-size:20px;font-weight:800">${R.litrosMes.toFixed(1)} L</div><div style="font-size:11px;color:#80868b;margin-top:3px">${plata(R.costoPetroleoMes)}</div></div>
+    <div class="panel"><div style="font-size:12px;color:#80868b;font-weight:600">PETRÓLEO GASTADO (MES)</div><div class="num" style="font-size:20px;font-weight:800">${R.litrosMes.toFixed(1)} L</div><div style="font-size:11px;color:#80868b;margin-top:3px">${plata(R.costoPetroleoMes)}</div><div style="font-size:11px;color:#80868b;margin-top:2px">${R.petPorBombona.map(b=>b.bombona.charAt(0)+b.bombona.slice(1).toLowerCase()+' '+b.litros.toFixed(1)+' L').join(' · ')}</div></div>
     <div class="panel"><div style="font-size:12px;color:#80868b;font-weight:600">VALOR INVENTARIO TOTAL (A HOY)</div><div class="num" style="font-size:20px;font-weight:800">${plata(R.valorInventarioTotal)}</div><div style="font-size:11px;color:#80868b;margin-top:3px">Productos ${plata(R.valorInventarioActual)} · Materiales ${plata(R.valorMaterialesActual)}</div></div>
-    <div class="panel"><div style="font-size:12px;color:#80868b;font-weight:600">SALDO BOMBONA (A HOY)</div><div class="num" style="font-size:20px;font-weight:800">${R.saldoPet.toFixed(1)} L</div><div style="font-size:11px;color:#80868b;margin-top:3px">${plata(R.valorSaldoPet)}</div></div>
+    <div class="panel"><div style="font-size:12px;color:#80868b;font-weight:600">SALDO BOMBONAS (A HOY)</div><div class="num" style="font-size:20px;font-weight:800">${R.saldoPet.toFixed(1)} L</div><div style="font-size:11px;color:#80868b;margin-top:3px">${plata(R.valorSaldoPet)}</div><div style="font-size:11px;color:#80868b;margin-top:2px">${R.petPorBombona.map(b=>b.bombona.charAt(0)+b.bombona.slice(1).toLowerCase()+' '+b.saldo.toFixed(1)+' L').join(' · ')}</div></div>
     <div class="panel"><div style="font-size:12px;color:#80868b;font-weight:600">MATERIALES CON ALERTA</div><div class="num" style="font-size:24px;font-weight:800;color:${R.materialesBajoStock?'#c0392b':'inherit'}">${R.materialesBajoStock}</div><div style="font-size:11px;color:#80868b;margin-top:3px">de ${R.materialesActual.length} materiales</div></div>
     <div class="panel"><div style="font-size:12px;color:#80868b;font-weight:600">ENTRADAS DE STOCK (MES)</div><div class="num" style="font-size:24px;font-weight:800">${R.entradasMes.length}</div></div>
   </div>
@@ -2678,7 +2696,17 @@ function descargarReporteExcel(R){
     .map(o=>({Campo:o.campo, 'N° Orden':o.numero, Tipo:o.tipo, Estado:o.estado, Cuarteles:o.cuarteles, Productos:o.productos, 'Fecha creación':o.fecha}));
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(pendArr.length?pendArr:[{'N° Orden':'Sin órdenes pendientes'}]), 'Órdenes pendientes');
 
-  const petArr = [{'Litros gastados (mes)':+R.litrosMes.toFixed(2), 'Días con retiro (mes)':R.diasConRetiroMes, 'Saldo bombona (a hoy, L)':+R.saldoPet.toFixed(2)}];
+  const petArr = R.petPorBombona.map(b=>({
+    'Bombona':b.bombona,
+    'Litros gastados (mes)':+b.litros.toFixed(2),
+    'Días con retiro (mes)':b.dias,
+    'Costo del mes':+b.costo.toFixed(0),
+    'Saldo (a hoy, L)':+b.saldo.toFixed(2),
+    'Valor del saldo':+b.valorSaldo.toFixed(0)
+  }));
+  petArr.push({'Bombona':'TOTAL', 'Litros gastados (mes)':+R.litrosMes.toFixed(2),
+    'Días con retiro (mes)':R.diasConRetiroMes, 'Costo del mes':+R.costoPetroleoMes.toFixed(0),
+    'Saldo (a hoy, L)':+R.saldoPet.toFixed(2), 'Valor del saldo':+R.valorSaldoPet.toFixed(0)});
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(petArr), 'Petróleo');
 
   const entResArr = R.entradasPorProducto.map(e=>({Producto:e.producto, Recepciones:e.entradas, 'Cantidad total':e.cantidad, Destino:e.destino}));
@@ -2917,13 +2945,25 @@ function descargarReportePDF(R, RP){
   titulo('Consumo de petróleo');
   const promA = R.diasConRetiroMes ? R.litrosMes/R.diasConRetiroMes : 0;
   const promP = RP.diasConRetiroMes ? RP.litrosMes/RP.diasConRetiroMes : 0;
+  // Litros del mes de cada bombona, también en el mes anterior para poder comparar
+  const litrosPrevDe = b => {
+    const x = (RP.petPorBombona||[]).find(z=>z.bombona===b);
+    return x ? x.litros : 0;
+  };
+  const nomB = b => b.charAt(0)+b.slice(1).toLowerCase();
   comparativa([
-    ['Litros consumidos', miles(R.litrosMes), miles(RP.litrosMes), vtxt(vpct(R.litrosMes,RP.litrosMes))],
+    ...R.petPorBombona.map(b=>[
+      '   · Bombona '+nomB(b.bombona), miles(b.litros), miles(litrosPrevDe(b.bombona)),
+      vtxt(vpct(b.litros, litrosPrevDe(b.bombona)))
+    ]),
+    ['Litros consumidos (total)', miles(R.litrosMes), miles(RP.litrosMes), vtxt(vpct(R.litrosMes,RP.litrosMes)), true],
     ['Días con retiro', R.diasConRetiroMes, RP.diasConRetiroMes, vtxt(vpct(R.diasConRetiroMes,RP.diasConRetiroMes))],
     ['Promedio por día (L)', promA.toFixed(1), promP.toFixed(1), vtxt(vpct(promA,promP))],
     ['Costo del petróleo', plata(R.costoPetroleoMes), plata(RP.costoPetroleoMes), vtxt(vpct(R.costoPetroleoMes,RP.costoPetroleoMes)), true],
-    ['Saldo de estanque hoy (L)', miles(R.saldoPet), '—', '—'],
-    ['Valor del saldo en estanque', plata(R.valorSaldoPet), '—', '—'],
+    ...R.petPorBombona.map(b=>[
+      '   · Saldo hoy bombona '+nomB(b.bombona), miles(b.saldo), '—', plata(b.valorSaldo)
+    ]),
+    ['Saldo total en estanques (L)', miles(R.saldoPet), '—', plata(R.valorSaldoPet), true],
   ]);
   doc.setFont('helvetica','normal'); doc.setFontSize(6.4); doc.setTextColor(...GR);
   doc.text('Valorizado a '+plata(PRECIO_PETROLEO_L)+' por litro.', M, y-4);
