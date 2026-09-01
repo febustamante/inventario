@@ -2427,17 +2427,34 @@ function datosReporteMensual(mesStr){
     return fin.slice(0,7)===mesStr;
   });
 
+  // Tipo de cada orden. El sistema solo marca 'consumo' y 'herbicida';
+  // todo lo demás (incluidas las que quedaron sin tipo) es fitosanitario.
+  const tipoOrden = o => {
+    const t = String(o.detalle?.tipo||'').toLowerCase();
+    return t==='consumo' ? 'consumo' : (t==='herbicida' ? 'herbicida' : 'fito');
+  };
+  const ordenesAplicacion = ordenesDelMes.filter(o=>tipoOrden(o)!=='consumo');
+  const ordenesConsumoMes  = ordenesDelMes.filter(o=>tipoOrden(o)==='consumo');
+  const numHerbicida   = ordenesDelMes.filter(o=>tipoOrden(o)==='herbicida').length;
+  const numFito        = ordenesDelMes.filter(o=>tipoOrden(o)==='fito').length;
+  const numAplicaciones= ordenesAplicacion.length;
+  const numConsumos    = ordenesConsumoMes.length;
+
   // Productos aplicados en el mes (cantidad real + costo real)
   const productosAplicados = {};
+  let gastoAplicaciones = 0, gastoConsumos = 0;
   ordenesDelMes.forEach(o=>{
     const ia = o.detalle?.infoAplicacion;
     if(!ia || !ia.realAplicado) return;
+    const esConsumoO = tipoOrden(o)==='consumo';
     ia.realAplicado.forEach(ra=>{
       const cant = Number(ra.cantidad)||0;
       if(cant<=0) return;
+      const costoRa = cant*precio(ra.producto);
       if(!productosAplicados[ra.producto]) productosAplicados[ra.producto]={cantidad:0,costo:0};
       productosAplicados[ra.producto].cantidad += cant;
-      productosAplicados[ra.producto].costo += cant*precio(ra.producto);
+      productosAplicados[ra.producto].costo += costoRa;
+      if(esConsumoO) gastoConsumos += costoRa; else gastoAplicaciones += costoRa;
     });
   });
   const gastoMensual = Object.values(productosAplicados).reduce((s,v)=>s+v.costo,0);
@@ -2555,6 +2572,8 @@ function datosReporteMensual(mesStr){
   return {
     mesStr, mesLabel:mesLabelG(mesStr), mesCorto:mesCortoG(mesStr),
     numOrdenesTerminadas: ordenesDelMes.length,
+    numHerbicida, numFito, numAplicaciones, numConsumos,
+    gastoAplicaciones, gastoConsumos,
     ordenesPendientes, ordenesTerminadasMes,
     productosAplicados, top5, gastoMensual,
     costoCuartelArr,
@@ -2578,9 +2597,9 @@ function renderReporteMensual(){
   </div>
 
   <div class="kpis" style="grid-template-columns:repeat(4,1fr)">
-    <div class="panel"><div style="font-size:12px;color:#80868b;font-weight:600">ÓRDENES TERMINADAS (MES)</div><div class="num" style="font-size:24px;font-weight:800">${R.numOrdenesTerminadas}</div></div>
+    <div class="panel"><div style="font-size:12px;color:#80868b;font-weight:600">ÓRDENES DE APLICACIÓN (MES)</div><div class="num" style="font-size:24px;font-weight:800">${R.numAplicaciones}</div><div style="font-size:11px;color:#80868b;margin-top:3px">Herbicida ${R.numHerbicida} · Fito ${R.numFito}</div><div style="font-size:11px;color:#80868b;margin-top:2px">Consumos directos aparte: <b>${R.numConsumos}</b></div></div>
     <div class="panel"><div style="font-size:12px;color:#80868b;font-weight:600">ÓRDENES PENDIENTES (A HOY)</div><div class="num" style="font-size:24px;font-weight:800">${R.ordenesPendientes.length}</div></div>
-    <div class="panel"><div style="font-size:12px;color:#80868b;font-weight:600">GASTO TOTAL (MES)</div><div class="num" style="font-size:20px;font-weight:800">${plata(R.gastoTotal)}</div><div style="font-size:11px;color:#80868b;margin-top:3px">Aplic. ${plata(R.gastoMensual)} · Petróleo ${plata(R.costoPetroleoMes)}</div></div>
+    <div class="panel"><div style="font-size:12px;color:#80868b;font-weight:600">GASTO TOTAL (MES)</div><div class="num" style="font-size:20px;font-weight:800">${plata(R.gastoTotal)}</div><div style="font-size:11px;color:#80868b;margin-top:3px">Aplic. ${plata(R.gastoAplicaciones)} · Consumo ${plata(R.gastoConsumos)}</div><div style="font-size:11px;color:#80868b;margin-top:2px">Petróleo ${plata(R.costoPetroleoMes)}</div></div>
     <div class="panel"><div style="font-size:12px;color:#80868b;font-weight:600">PETRÓLEO GASTADO (MES)</div><div class="num" style="font-size:20px;font-weight:800">${R.litrosMes.toFixed(1)} L</div><div style="font-size:11px;color:#80868b;margin-top:3px">${plata(R.costoPetroleoMes)}</div></div>
     <div class="panel"><div style="font-size:12px;color:#80868b;font-weight:600">VALOR INVENTARIO TOTAL (A HOY)</div><div class="num" style="font-size:20px;font-weight:800">${plata(R.valorInventarioTotal)}</div><div style="font-size:11px;color:#80868b;margin-top:3px">Productos ${plata(R.valorInventarioActual)} · Materiales ${plata(R.valorMaterialesActual)}</div></div>
     <div class="panel"><div style="font-size:12px;color:#80868b;font-weight:600">SALDO BOMBONA (A HOY)</div><div class="num" style="font-size:20px;font-weight:800">${R.saldoPet.toFixed(1)} L</div><div style="font-size:11px;color:#80868b;margin-top:3px">${plata(R.valorSaldoPet)}</div></div>
@@ -2621,9 +2640,14 @@ function descargarReporteExcel(R){
 
   const resumen = [
     {Indicador:'Mes reportado', Valor:R.mesLabel},
-    {Indicador:'Órdenes terminadas (mes)', Valor:R.numOrdenesTerminadas},
+    {Indicador:'Órdenes de aplicación (mes)', Valor:R.numAplicaciones},
+    {Indicador:'   · Herbicida', Valor:R.numHerbicida},
+    {Indicador:'   · Fitosanitario', Valor:R.numFito},
+    {Indicador:'Consumos directos sin orden (mes)', Valor:R.numConsumos},
+    {Indicador:'Total de órdenes terminadas (mes)', Valor:R.numOrdenesTerminadas},
     {Indicador:'Órdenes pendientes (a hoy)', Valor:R.ordenesPendientes.length},
-    {Indicador:'Gasto en aplicaciones (mes)', Valor:+R.gastoMensual.toFixed(0)},
+    {Indicador:'Gasto en aplicaciones (mes)', Valor:+R.gastoAplicaciones.toFixed(0)},
+    {Indicador:'Gasto en consumos directos (mes)', Valor:+R.gastoConsumos.toFixed(0)},
     {Indicador:'Gasto en petróleo (mes)', Valor:+R.costoPetroleoMes.toFixed(0)},
     {Indicador:'Gasto total (mes)', Valor:+R.gastoTotal.toFixed(0)},
     {Indicador:'Petróleo gastado (mes, L)', Valor:+R.litrosMes.toFixed(2)},
@@ -2796,8 +2820,12 @@ function descargarReportePDF(R, RP){
 
   titulo('Indicadores del mes');
   comparativa([
-    ['Órdenes terminadas', R.numOrdenesTerminadas, RP.numOrdenesTerminadas, vtxt(vpct(R.numOrdenesTerminadas,RP.numOrdenesTerminadas))],
-    ['Gasto en aplicaciones', plata(R.gastoMensual), plata(RP.gastoMensual), vtxt(vpct(R.gastoMensual,RP.gastoMensual))],
+    ['Órdenes de aplicación', R.numAplicaciones, RP.numAplicaciones, vtxt(vpct(R.numAplicaciones,RP.numAplicaciones)), true],
+    ['   · Herbicida', R.numHerbicida, RP.numHerbicida, vtxt(vpct(R.numHerbicida,RP.numHerbicida))],
+    ['   · Fitosanitario', R.numFito, RP.numFito, vtxt(vpct(R.numFito,RP.numFito))],
+    ['Consumos directos (sin orden)', R.numConsumos, RP.numConsumos, vtxt(vpct(R.numConsumos,RP.numConsumos))],
+    ['Gasto en aplicaciones', plata(R.gastoAplicaciones), plata(RP.gastoAplicaciones), vtxt(vpct(R.gastoAplicaciones,RP.gastoAplicaciones))],
+    ['Gasto en consumos directos', plata(R.gastoConsumos), plata(RP.gastoConsumos), vtxt(vpct(R.gastoConsumos,RP.gastoConsumos))],
     ['Gasto en petróleo', plata(R.costoPetroleoMes), plata(RP.costoPetroleoMes), vtxt(vpct(R.costoPetroleoMes,RP.costoPetroleoMes))],
     ['Gasto total del mes', plata(R.gastoTotal), plata(RP.gastoTotal), vtxt(vpct(R.gastoTotal,RP.gastoTotal)), true],
     ['Petróleo consumido (L)', miles(R.litrosMes), miles(RP.litrosMes), vtxt(vpct(R.litrosMes,RP.litrosMes))],
