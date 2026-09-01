@@ -3018,9 +3018,39 @@ function textoCuarteles(d){
   return lista.length ? lista.map(c=>c.c).join(', ') : '—';
 }
 let _consProds = []; // [{nombre, cantidad, bodega}]
+let coDesde='', coHasta='';   // filtro de fechas del historial de consumos
+function coFechas(){
+  const d=document.getElementById('co-desde'), h=document.getElementById('co-hasta');
+  if(d) coDesde=d.value||'';
+  if(h) coHasta=h.value||'';
+  if(coDesde&&coHasta&&coDesde>coHasta){ const t=coDesde; coDesde=coHasta; coHasta=t; }
+  refresh();
+}
+function coRango(dias){
+  const hoyD=new Date(), desde=new Date();
+  desde.setDate(desde.getDate()-(dias-1));
+  coDesde=isoLocal(desde); coHasta=isoLocal(hoyD); refresh();
+}
+function coLimpiar(){ coDesde=''; coHasta=''; refresh(); }
 function renderConsumo(){
-  const consumos = ordenes.filter(o=> (o.detalle?.tipo)==='consumo')
-    .sort((a,b)=> (b.idOrden||0)-(a.idOrden||0)).slice(0,8);
+  // Fecha de un consumo, siempre en ISO (AAAA-MM-DD) para poder comparar.
+  // detalle.fecha ya viene en ISO; o.fecha es la de creación y viene en
+  // formato chileno (DD-MM-AAAA), así que hay que darla vuelta.
+  const fechaCons = o => {
+    const f = String((o.detalle&&o.detalle.fecha)||'').slice(0,10);
+    if(/^\d{4}-\d{2}-\d{2}$/.test(f)) return f;
+    const m = String(o.fecha||'').match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+    return m ? m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0') : '';
+  };
+  let consumos = ordenes.filter(o=> (o.detalle?.tipo)==='consumo')
+    .sort((a,b)=> (b.idOrden||0)-(a.idOrden||0));
+  const totalConsumos = consumos.length;
+  const hayFiltro = !!(coDesde||coHasta);
+  if(coDesde) consumos = consumos.filter(o=>{const f=fechaCons(o); return f && f>=coDesde;});
+  if(coHasta) consumos = consumos.filter(o=>{const f=fechaCons(o); return f && f<=coHasta;});
+  // Sin filtro de fechas se muestran solo los últimos 8, para no cargar la pantalla
+  let limitada=false;
+  if(!hayFiltro && consumos.length>8){ limitada=true; consumos=consumos.slice(0,8); }
   return `
   <div class="section-header"><div class="section-title">Consumo directo</div><div class="section-sub">Descuento de producto sin orden de aplicación · sale en vales</div></div>
   <div class="form-box">
@@ -3053,7 +3083,23 @@ function renderConsumo(){
     <div id="cons-lista" style="margin-top:12px"></div>
     <button class="btn-primary" onclick="guardarConsumo()" id="cons-guardar" style="margin-top:12px;display:none">Registrar consumo y descontar</button>
   </div>
-  <div class="section-label">Últimos consumos</div>
+  <div class="section-label">${hayFiltro?'Consumos del período':'Últimos consumos'}</div>
+  <div class="card" style="padding:12px;margin-bottom:10px">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+      <div><label style="font-size:11px;color:var(--tx3);font-weight:600;display:block;margin-bottom:3px">Desde</label><input type="date" id="co-desde" value="${coDesde}" onchange="coFechas()" style="font-size:12px;padding:6px"></div>
+      <div><label style="font-size:11px;color:var(--tx3);font-weight:600;display:block;margin-bottom:3px">Hasta</label><input type="date" id="co-hasta" value="${coHasta}" onchange="coFechas()" style="font-size:12px;padding:6px"></div>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+      <button onclick="coRango(15)" style="padding:6px 10px;border:1px solid var(--bd2);border-radius:7px;background:white;font-size:12px">15 días</button>
+      <button onclick="coRango(30)" style="padding:6px 10px;border:1px solid var(--bd2);border-radius:7px;background:white;font-size:12px">30 días</button>
+      <button onclick="coRango(90)" style="padding:6px 10px;border:1px solid var(--bd2);border-radius:7px;background:white;font-size:12px">90 días</button>
+      ${hayFiltro?`<button onclick="coLimpiar()" style="padding:6px 10px;border:1px solid var(--bd2);border-radius:7px;background:var(--surf);font-size:12px">✕ Limpiar</button>`:''}
+    </div>
+    <div style="font-size:11.5px;color:var(--tx3);margin-top:8px">
+      ${hayFiltro ? consumos.length+' de '+totalConsumos+' consumos en el período' : totalConsumos+' consumos registrados en total'}
+    </div>
+  </div>
+  ${limitada?`<div style="font-size:11px;color:var(--tx3);background:var(--surf2);border-radius:6px;padding:6px 10px;margin-bottom:8px">Mostrando los últimos 8. Usa el filtro de fechas para ver los anteriores.</div>`:''}
   <div class="card">${consumos.length?consumos.map(o=>{
     const d=o.detalle||{}; const ps=(d.productos||[]).map(x=>x.nombre).join(', ');
     const anulado = String(o.estado||'').toUpperCase()==='ANULADA';
@@ -3065,7 +3111,7 @@ function renderConsumo(){
         <div class="move-detail">${destino} · ${d.fecha||''}</div>
         ${!anulado?`<button onclick="anularOrden('${o.idOrden}',true)" style="font-size:10px;padding:4px 10px;margin-top:4px;border:1px solid var(--red);border-radius:6px;background:var(--surf);color:var(--red)">✕ Anular (devuelve stock)</button>`:''}
       </div></div>`;
-  }).join(''):`<div class="empty-state"><div class="empty-text">Sin consumos registrados</div></div>`}</div>`;
+  }).join(''):`<div class="empty-state"><div class="empty-text">${hayFiltro?'Sin consumos en esas fechas':'Sin consumos registrados'}</div></div>`}</div>`;
 }
 function onConsDestinoChange(){
   const dest=document.getElementById('cons-destino').value;
