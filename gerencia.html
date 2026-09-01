@@ -2635,6 +2635,37 @@ function renderReporteMensual(){
   <div class="panel" style="max-width:700px">
     <div style="font-size:12.5px;color:#80868b;margin-bottom:12px">El Excel trae el detalle completo (productos, costo por cuartel, órdenes, petróleo, entradas y materiales). El PDF es un resumen ejecutivo de 1-2 páginas para revisar rápido o imprimir.</div>
     <button class="btn green" onclick="descargarReporteMensual()"><i class="ti ti-file-export"></i> Descargar reporte (Excel + PDF)</button>
+  </div>
+
+  <div class="panel" style="max-width:700px">
+    <h3>Comprobante de cierre por campo</h3>
+    <div style="font-size:12.5px;color:#80868b;margin-bottom:14px">
+      Hoja firmable con el saldo de productos y petróleo de un campo, para dejar respaldo del cierre.
+      Lleva dos espacios de firma: el dosificador del campo y tú.
+    </div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px">
+      <div>
+        <label style="font-size:11px;color:#80868b;font-weight:700;text-transform:uppercase;display:block;margin-bottom:4px">Campo</label>
+        <select onchange="ccSetCampo(this.value)" style="padding:9px 11px;border:1px solid #dadce0;border-radius:9px;font-size:13.5px;min-width:190px">
+          ${CC_CAMPOS.map(c=>`<option value="${c}" ${c===ccCampo?'selected':''}>${c}</option>`).join('')}
+        </select>
+      </div>
+      <div>
+        <label style="font-size:11px;color:#80868b;font-weight:700;text-transform:uppercase;display:block;margin-bottom:4px">Fecha del cierre</label>
+        <input type="date" id="cc-fecha" value="${ccFecha||hoyISO()}" onchange="ccSetFecha()" style="padding:9px 11px;border:1px solid #dadce0;border-radius:9px;font-size:13.5px">
+      </div>
+      <button class="btn line" onclick="descargarComprobanteCierre()" style="height:39px"><i class="ti ti-file-download"></i> Descargar comprobante</button>
+    </div>
+    ${(()=>{
+      const D = datosCierreCampo(ccCampo);
+      return `<div style="font-size:12px;color:#80868b;border-top:1px solid #EEE;padding-top:10px">
+        Hoy en <b>${ccCampo}</b>: ${D.items.length} productos con saldo por ${plata(D.valorTotal)}${D.bombona?` · petróleo ${D.litros.toLocaleString('es-CL')} L (${plata(D.valorPetroleo)})`:' · sin bombona de petróleo'}
+      </div>`;
+    })()}
+    <div style="font-size:11.5px;color:#a08b6a;background:#fdf8ef;border-radius:8px;padding:9px 11px;margin-top:10px">
+      El sistema guarda el stock de hoy, no tiene histórico. La fecha que pongas se imprime como fecha del cierre,
+      pero los saldos son los del momento en que descargas — genéralo el mismo día del cierre.
+    </div>
   </div>`;
 }
 
@@ -2650,6 +2681,190 @@ function descargarReporteMensual(){
   descargarReporteExcel(R);
   // Pequeño desfase para que el navegador no bloquee la segunda descarga simultánea
   setTimeout(()=>descargarReportePDF(R, RP), 400);
+}
+
+// ══════ COMPROBANTE DE CIERRE POR CAMPO ══════
+// Hoja firmable con los saldos de un campo, para dejar respaldo del cierre de mes.
+// El stock que guarda el sistema es el de HOY: la fecha que se escribe es la del
+// cierre que se está certificando, no reconstruye el stock de una fecha pasada.
+let ccFecha = null, ccCampo = 'Caseta Cerrillos';
+const CC_CAMPOS = ['Bodega Central','Caseta Cerrillos','Rulo','Paine'];
+// Qué bombona de petróleo le corresponde a cada campo (las que tienen)
+const CC_BOMBONA = { 'Caseta Cerrillos':'CERRILLOS', 'Paine':'PAINE' };
+
+function ccSetCampo(v){ ccCampo = v; render(); }
+function ccSetFecha(){ const e=document.getElementById('cc-fecha'); if(e) ccFecha = e.value||''; }
+
+// Saldos del campo elegido: productos con stock y, si tiene bombona, el petróleo
+function datosCierreCampo(campo){
+  const items = products
+    .map(p=>({ nombre:p.nombre, familia:p.familia||'—',
+               cantidad:(stockByLoc[p.id]||{})[campo]||0,
+               precio:p.precio||0 }))
+    .filter(x=>x.cantidad>0)
+    .map(x=>({...x, valor:x.cantidad*x.precio}))
+    .sort((a,b)=> (a.familia||'').localeCompare(b.familia||'') || a.nombre.localeCompare(b.nombre));
+  const valorTotal = items.reduce((s,x)=>s+x.valor,0);
+
+  const bomb = CC_BOMBONA[campo] || null;
+  let litros = null;
+  if(bomb){
+    litros = (petroleoMovs||[])
+      .filter(mv=>mv.estado!=='ANULADO' && String(mv.bombona||'CERRILLOS').toUpperCase()===bomb)
+      .reduce((s,mv)=> s + (mv.tipo==='entrada' ? (Number(mv.litros)||0) : -(Number(mv.litros)||0)), 0);
+  }
+  return { campo, items, valorTotal, bombona:bomb, litros,
+           valorPetroleo: litros===null ? 0 : litros*PRECIO_PETROLEO_L };
+}
+
+function descargarComprobanteCierre(){
+  ccSetFecha();
+  if(!ccFecha){ alert('Escribe la fecha del cierre que estás certificando'); return; }
+  if(typeof window.jspdf === 'undefined'){ alert('La librería de PDF no cargó'); return; }
+  const D = datosCierreCampo(ccCampo);
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({unit:'mm', format:'a4'});
+  const W=210, H=297, M=16, CW=W-M*2;
+  const TX=[25,25,25], GR=[122,122,122], LIN=[205,205,205];
+  const miles = n => Math.round(n).toLocaleString('es-CL');
+  const fechaTxt = String(ccFecha).split('-').reverse().join('/');
+  let y=0;
+
+  function cabecera(primera){
+    if(primera){
+      try{
+        const p = doc.getImageProperties(LOGO_PDF_T);
+        doc.addImage(LOGO_PDF_T,'PNG',M,13,32,32*(p.height/p.width));
+      }catch(e){
+        doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(...TX);
+        doc.setCharSpace(0.8); doc.text('AGRÍCOLA SAN JOSÉ', M, 21); doc.setCharSpace(0);
+      }
+      doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...GR);
+      doc.text('Comprobante de cierre — '+fechaTxt, W-M, 21, {align:'right'});
+      doc.setDrawColor(...TX); doc.setLineWidth(0.6); doc.line(M,26.5,W-M,26.5);
+      doc.setLineWidth(0.2); doc.line(M,27.4,W-M,27.4);
+      y = 36;
+    } else {
+      doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(...TX); doc.setCharSpace(0.7);
+      doc.text('AGRÍCOLA SAN JOSÉ', M, 16); doc.setCharSpace(0);
+      doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(...GR);
+      doc.text(D.campo+' · cierre al '+fechaTxt, W-M, 16, {align:'right'});
+      doc.setDrawColor(...TX); doc.setLineWidth(0.4); doc.line(M,19,W-M,19);
+      y = 27;
+    }
+  }
+  function titulo(t){
+    y += 2;
+    doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(...TX); doc.setCharSpace(0.6);
+    doc.text(String(t).toUpperCase(), M, y); doc.setCharSpace(0);
+    y += 3.4; doc.setDrawColor(...TX); doc.setLineWidth(0.35); doc.line(M,y,W-M,y); y += 5;
+  }
+
+  cabecera(true);
+
+  // Encabezado del documento
+  doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.setTextColor(...TX);
+  doc.text('Comprobante de cierre de existencias', M, y); y += 6.5;
+  doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(...GR);
+  doc.text('Campo: ', M, y);
+  doc.setFont('helvetica','bold'); doc.setTextColor(...TX);
+  doc.text(D.campo, M+13, y);
+  doc.setFont('helvetica','normal'); doc.setTextColor(...GR);
+  doc.text('Fecha de cierre: ', M+90, y);
+  doc.setFont('helvetica','bold'); doc.setTextColor(...TX);
+  doc.text(fechaTxt, M+118, y);
+  y += 8;
+
+  // ── Productos ──
+  titulo('Saldo de productos en '+D.campo);
+  const cols = [
+    { t:'Producto', w:CW*0.40, a:'left'  },
+    { t:'Familia',  w:CW*0.22, a:'left'  },
+    { t:'Cantidad', w:CW*0.13, a:'right' },
+    { t:'Precio unit.', w:CW*0.12, a:'right' },
+    { t:'Valor',    w:CW*0.13, a:'right' },
+  ];
+  const cabTabla = ()=>{
+    doc.setFont('helvetica','normal'); doc.setFontSize(6.2); doc.setTextColor(...GR);
+    let x=M;
+    cols.forEach((cc,i)=>{
+      const px = cc.a==='right' ? x+cc.w-(i===cols.length-1?0:3) : x+(i===0?0:1.5);
+      doc.text(cc.t, px, y, cc.a==='right'?{align:'right'}:undefined); x+=cc.w;
+    });
+    y+=2.2; doc.setDrawColor(...LIN); doc.setLineWidth(0.2); doc.line(M,y,W-M,y); y+=4.6;
+  };
+  cabTabla();
+  if(!D.items.length){
+    doc.setFont('helvetica','italic'); doc.setFontSize(7.5); doc.setTextColor(...GR);
+    doc.text('Sin productos con saldo en este campo.', M, y); y+=6;
+  }
+  D.items.forEach(it=>{
+    if(y+6 > 232){ doc.addPage(); cabecera(false); cabTabla(); }
+    const vals = [it.nombre, it.familia, it.cantidad.toLocaleString('es-CL'),
+                  it.precio?plata(it.precio):'—', it.precio?plata(it.valor):'—'];
+    let x=M;
+    cols.forEach((cc,i)=>{
+      doc.setTextColor(...(i===1?GR:TX));
+      doc.setFont('helvetica', i===4?'bold':'normal'); doc.setFontSize(7.4);
+      let t=String(vals[i]), s=7.4; const maxW=cc.w-4;
+      while(doc.getTextWidth(t)>maxW && s>5.2){ s-=0.2; doc.setFontSize(s); }
+      const px = cc.a==='right' ? x+cc.w-(i===cols.length-1?0:3) : x+(i===0?0:1.5);
+      doc.text(t, px, y, cc.a==='right'?{align:'right'}:undefined);
+      x+=cc.w;
+    });
+    y += 5.4;
+  });
+  y-=1.4; doc.setDrawColor(...LIN); doc.setLineWidth(0.2); doc.line(M,y,W-M,y); y+=5;
+  doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(...TX);
+  doc.text(D.items.length+' productos con saldo', M, y);
+  doc.text('Valor total: '+plata(D.valorTotal), W-M, y, {align:'right'});
+  y += 8;
+
+  // ── Petróleo ──
+  if(D.bombona){
+    if(y+26 > 232){ doc.addPage(); cabecera(false); }
+    titulo('Saldo de petróleo — bombona '+D.bombona.charAt(0)+D.bombona.slice(1).toLowerCase());
+    doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...TX);
+    doc.text('Litros en el estanque', M, y);
+    doc.setFont('helvetica','bold');
+    doc.text(miles(D.litros)+' L', M+70, y, {align:'right'});
+    doc.setFont('helvetica','normal'); doc.setTextColor(...GR);
+    doc.text('Valorizado a '+plata(PRECIO_PETROLEO_L)+'/L', M+80, y);
+    doc.setFont('helvetica','bold'); doc.setTextColor(...TX);
+    doc.text(plata(D.valorPetroleo), W-M, y, {align:'right'});
+    y += 8;
+  }
+
+  // ── Firmas, siempre al pie de la última página ──
+  const yF = Math.max(y+14, 236);
+  doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(...GR);
+  const declara = doc.splitTextToSize(
+    'Quienes firman dejan constancia de que revisaron y aceptan los saldos detallados en este documento '+
+    'para el campo '+D.campo+' al cierre del '+fechaTxt+'.', CW);
+  declara.forEach((ln,i)=> doc.text(ln, M, yF-10+i*3.4));
+
+  const anchoF = (CW-20)/2;
+  [[M,'Dosificador del campo'],[M+anchoF+20,'Felipe Bustamante · Gerencia']].forEach(([x,rot])=>{
+    doc.setDrawColor(...TX); doc.setLineWidth(0.3); doc.line(x, yF+18, x+anchoF, yF+18);
+    doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(...TX);
+    doc.text(rot, x, yF+22);
+    doc.setFont('helvetica','normal'); doc.setFontSize(6); doc.setTextColor(...GR);
+    doc.text('Nombre, RUT y fecha', x, yF+25.5);
+  });
+
+  // Pie
+  const total = doc.getNumberOfPages();
+  const n = new Date();
+  const emi = String(n.getDate()).padStart(2,'0')+'/'+String(n.getMonth()+1).padStart(2,'0')+'/'+n.getFullYear();
+  for(let pg=1; pg<=total; pg++){
+    doc.setPage(pg);
+    doc.setDrawColor(...LIN); doc.setLineWidth(0.2); doc.line(M,280,W-M,280);
+    doc.setFont('helvetica','normal'); doc.setFontSize(6); doc.setTextColor(...GR);
+    doc.text('Agrícola San José · Comprobante de cierre · Saldos tomados del sistema el '+emi, M, 284.5);
+    doc.text('Página '+pg+' de '+total, W-M, 284.5, {align:'right'});
+  }
+
+  doc.save('Cierre_'+D.campo.replace(/\s+/g,'_')+'_'+ccFecha+'.pdf');
 }
 
 function descargarReporteExcel(R){
