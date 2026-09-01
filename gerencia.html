@@ -2657,7 +2657,7 @@ function renderReporteMensual(){
       <button class="btn line" onclick="descargarComprobanteCierre()" style="height:39px"><i class="ti ti-file-download"></i> Descargar comprobante</button>
     </div>
     ${(()=>{
-      const D = datosCierreCampo(ccCampo);
+      const D = datosCierreCampo(ccCampo, ccFecha||hoyISO());
       return `<div style="font-size:12px;color:#80868b;border-top:1px solid #EEE;padding-top:10px">
         Hoy en <b>${ccCampo}</b>: ${D.items.length} productos con saldo por ${plata(D.valorTotal)}${D.bombona?` · petróleo ${D.litros.toLocaleString('es-CL')} L (${plata(D.valorPetroleo)})`:' · sin bombona de petróleo'}
       </div>`;
@@ -2696,7 +2696,7 @@ function ccSetCampo(v){ ccCampo = v; render(); }
 function ccSetFecha(){ const e=document.getElementById('cc-fecha'); if(e) ccFecha = e.value||''; }
 
 // Saldos del campo elegido: productos con stock y, si tiene bombona, el petróleo
-function datosCierreCampo(campo){
+function datosCierreCampo(campo, hastaFecha){
   const items = products
     .map(p=>({ nombre:p.nombre, familia:p.familia||'—',
                cantidad:(stockByLoc[p.id]||{})[campo]||0,
@@ -2706,14 +2706,19 @@ function datosCierreCampo(campo){
     .sort((a,b)=> (a.familia||'').localeCompare(b.familia||'') || a.nombre.localeCompare(b.nombre));
   const valorTotal = items.reduce((s,x)=>s+x.valor,0);
 
+  // Petróleo: los movimientos tienen fecha, así que el saldo se puede reconstruir
+  // al día del cierre. Todo lo posterior (ej. retiros de septiembre) queda fuera.
   const bomb = CC_BOMBONA[campo] || null;
-  let litros = null;
+  let litros = null, movsPosteriores = 0;
   if(bomb){
-    litros = (petroleoMovs||[])
-      .filter(mv=>mv.estado!=='ANULADO' && String(mv.bombona||'CERRILLOS').toUpperCase()===bomb)
-      .reduce((s,mv)=> s + (mv.tipo==='entrada' ? (Number(mv.litros)||0) : -(Number(mv.litros)||0)), 0);
+    const delaBombona = (petroleoMovs||[])
+      .filter(mv=>mv.estado!=='ANULADO' && String(mv.bombona||'CERRILLOS').toUpperCase()===bomb);
+    const hasta = hastaFecha || '9999-12-31';
+    const alCierre = delaBombona.filter(mv=>String(mv.fecha||'').slice(0,10) <= hasta);
+    movsPosteriores = delaBombona.length - alCierre.length;
+    litros = alCierre.reduce((s,mv)=> s + (mv.tipo==='entrada' ? (Number(mv.litros)||0) : -(Number(mv.litros)||0)), 0);
   }
-  return { campo, items, valorTotal, bombona:bomb, litros,
+  return { campo, items, valorTotal, bombona:bomb, litros, movsPosteriores,
            valorPetroleo: litros===null ? 0 : litros*PRECIO_PETROLEO_L };
 }
 
@@ -2721,7 +2726,7 @@ function descargarComprobanteCierre(){
   ccSetFecha();
   if(!ccFecha){ alert('Escribe la fecha del cierre que estás certificando'); return; }
   if(typeof window.jspdf === 'undefined'){ alert('La librería de PDF no cargó'); return; }
-  const D = datosCierreCampo(ccCampo);
+  const D = datosCierreCampo(ccCampo, ccFecha);
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({unit:'mm', format:'a4'});
   const W=210, H=297, M=16, CW=W-M*2;
@@ -2823,7 +2828,7 @@ function descargarComprobanteCierre(){
   // ── Petróleo ──
   if(D.bombona){
     if(y+26 > 232){ doc.addPage(); cabecera(false); }
-    titulo('Saldo de petróleo — bombona '+D.bombona.charAt(0)+D.bombona.slice(1).toLowerCase());
+    titulo('Saldo de petróleo al '+fechaTxt+' — bombona '+D.bombona.charAt(0)+D.bombona.slice(1).toLowerCase());
     doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...TX);
     doc.text('Litros en el estanque', M, y);
     doc.setFont('helvetica','bold');
@@ -2832,7 +2837,14 @@ function descargarComprobanteCierre(){
     doc.text('Valorizado a '+plata(PRECIO_PETROLEO_L)+'/L', M+80, y);
     doc.setFont('helvetica','bold'); doc.setTextColor(...TX);
     doc.text(plata(D.valorPetroleo), W-M, y, {align:'right'});
-    y += 8;
+    y += 5;
+    if(D.movsPosteriores>0){
+      doc.setFont('helvetica','italic'); doc.setFontSize(6.2); doc.setTextColor(...GR);
+      doc.text('Saldo reconstruido a la fecha del cierre. Quedaron fuera '+D.movsPosteriores+
+               ' movimiento(s) posterior(es) a esa fecha.', M, y);
+      y += 4;
+    }
+    y += 4;
   }
 
   // ── Firmas, siempre al pie de la última página ──
@@ -2844,7 +2856,7 @@ function descargarComprobanteCierre(){
   declara.forEach((ln,i)=> doc.text(ln, M, yF-10+i*3.4));
 
   const anchoF = (CW-20)/2;
-  [[M,'Dosificador del campo'],[M+anchoF+20,'Felipe Bustamante · Gerencia']].forEach(([x,rot])=>{
+  [[M,'Dosificador del campo'],[M+anchoF+20,'Felipe Bustamante · Asistente']].forEach(([x,rot])=>{
     doc.setDrawColor(...TX); doc.setLineWidth(0.3); doc.line(x, yF+18, x+anchoF, yF+18);
     doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(...TX);
     doc.text(rot, x, yF+22);
