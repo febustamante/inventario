@@ -1353,40 +1353,67 @@ async function guardarNueva(){
 // ══════ COSTOS POR CUARTEL ══════
 const CUARTEL_INFO={"C01": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 3.6, "estado": "PRODUCCIÓN"}, "C02": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 3.39, "estado": "PRODUCCIÓN"}, "C03": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 3.44, "estado": "PRODUCCIÓN"}, "C04": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 3.41, "estado": "FORMACIÓN"}, "C05": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 3.32, "estado": "FORMACIÓN"}, "C06": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 3.49, "estado": "FORMACIÓN"}, "C07": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 3.0, "estado": "PRODUCCIÓN"}, "C08": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 2.89, "estado": "PRODUCCIÓN"}, "C09": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 2.97, "estado": "PRODUCCIÓN"}, "C10": {"campo": "CERRILLOS", "variedad": "Sweet Globe", "ha": 4.29, "estado": "PRODUCCIÓN"}, "C11": {"campo": "CERRILLOS", "variedad": "Sweet Globe", "ha": 3.51, "estado": "PRODUCCIÓN"}, "C12": {"campo": "CERRILLOS", "variedad": "Sweet Globe", "ha": 4.37, "estado": "PRODUCCIÓN"}, "C13": {"campo": "CERRILLOS", "variedad": "Sweet Globe", "ha": 4.0, "estado": "PRODUCCIÓN"}, "C14": {"campo": "CERRILLOS", "variedad": "Sweet Celebration", "ha": 1.62, "estado": "PRODUCCIÓN"}, "C15": {"campo": "CERRILLOS", "variedad": "Sweet Celebration", "ha": 3.11, "estado": "PRODUCCIÓN"}, "C16": {"campo": "CERRILLOS", "variedad": "Sweet Celebration", "ha": 2.67, "estado": "PRODUCCIÓN"}, "C17": {"campo": "CERRILLOS", "variedad": "Cotton Candy", "ha": 3.92, "estado": "PRODUCCIÓN"}, "C18": {"campo": "CERRILLOS", "variedad": "Cotton Candy", "ha": 3.52, "estado": "PRODUCCIÓN"}, "C19": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 3.35, "estado": "PRODUCCIÓN"}, "C20": {"campo": "CERRILLOS", "variedad": "Moscatel", "ha": 1.22, "estado": "PRODUCCIÓN"}, "C21": {"campo": "CERRILLOS", "variedad": "Moscatel", "ha": 1.03, "estado": "PRODUCCIÓN"}, "C22": {"campo": "CERRILLOS", "variedad": "Moscatel", "ha": 1.71, "estado": "PRODUCCIÓN"}, "C23": {"campo": "CERRILLOS", "variedad": "Moscatel", "ha": 1.14, "estado": "PRODUCCIÓN"}, "C24": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 1.85, "estado": "PRODUCCIÓN"}, "C25": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 2.42, "estado": "PRODUCCIÓN"}, "C26": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 0.71, "estado": "PRODUCCIÓN"}, "C27": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 1.82, "estado": "PRODUCCIÓN"}, "C28": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 1.73, "estado": "PRODUCCIÓN"}, "C29": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 2.32, "estado": "PRODUCCIÓN"}, "C30": {"campo": "CERRILLOS", "variedad": "Bloomfresh", "ha": 0.6, "estado": "FORMACIÓN"}, "C37": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 3.53, "estado": "PRODUCCIÓN"}, "C38": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 3.45, "estado": "PRODUCCIÓN"}, "C39": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 2.46, "estado": "PRODUCCIÓN"}, "C40": {"campo": "CERRILLOS", "variedad": "Sable", "ha": 5.87, "estado": "PRODUCCIÓN"}, "C41": {"campo": "CERRILLOS", "variedad": "Sable", "ha": 2.64, "estado": "PRODUCCIÓN"}, "C42": {"campo": "CERRILLOS", "variedad": "Cotton Candy", "ha": 3.61, "estado": "PRODUCCIÓN"}, "C43": {"campo": "CERRILLOS", "variedad": "Cotton Candy", "ha": 0.21, "estado": "PRODUCCIÓN"}, "C44": {"campo": "CERRILLOS", "variedad": "Cotton Candy", "ha": 0.99, "estado": "PRODUCCIÓN"}, "C45": {"campo": "CERRILLOS", "variedad": "Cotton Candy", "ha": 1.59, "estado": "PRODUCCIÓN"}, "C46": {"campo": "CERRILLOS", "variedad": "Cotton Candy", "ha": 0.94, "estado": "PRODUCCIÓN"}, "C50": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 4.15, "estado": "PRODUCCIÓN"}, "C51": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 2.34, "estado": "PRODUCCIÓN"}, "C52": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 5.2, "estado": "PRODUCCIÓN"}, "C53": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 4.68, "estado": "PRODUCCIÓN"}, "C54": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 3.36, "estado": "PRODUCCIÓN"}, "C55": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 4.99, "estado": "PRODUCCIÓN"}, "C56": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 4.82, "estado": "PRODUCCIÓN"}, "A01": {"campo": "RULO", "variedad": "Moscatel", "ha": 2.19, "estado": "PRODUCCIÓN"}, "A02": {"campo": "RULO", "variedad": "Moscatel", "ha": 2.02, "estado": "PRODUCCIÓN"}, "A07": {"campo": "RULO", "variedad": "Thompson", "ha": 3.04, "estado": "PRODUCCIÓN"}, "A08": {"campo": "RULO", "variedad": "Thompson", "ha": 3.17, "estado": "PRODUCCIÓN"}, "A09": {"campo": "RULO", "variedad": "Moscatel", "ha": 2.68, "estado": "PRODUCCIÓN"}, "A10": {"campo": "RULO", "variedad": "Moscatel", "ha": 2.76, "estado": "PRODUCCIÓN"}, "A11": {"campo": "RULO", "variedad": "Moscatel", "ha": 1.53, "estado": "PRODUCCIÓN"}, "R01": {"campo": "RULO", "variedad": "Moscatel", "ha": 3.91, "estado": "PRODUCCIÓN"}, "R02": {"campo": "RULO", "variedad": "Moscatel", "ha": 3.91, "estado": "PRODUCCIÓN"}, "R03": {"campo": "RULO", "variedad": "Autumn Crisp", "ha": 2.76, "estado": "PRODUCCIÓN"}, "R04": {"campo": "RULO", "variedad": "Autumn Crisp", "ha": 2.59, "estado": "PRODUCCIÓN"}, "V01": {"campo": "RULO", "variedad": "Autumn Crisp", "ha": 3.37, "estado": "FORMACIÓN"}, "V02": {"campo": "RULO", "variedad": "Autumn Crisp", "ha": 3.43, "estado": "FORMACIÓN"}, "V03": {"campo": "RULO", "variedad": "Autumn Crisp", "ha": 3.59, "estado": "FORMACIÓN"}, "V04": {"campo": "RULO", "variedad": "Autumn Crisp", "ha": 3.23, "estado": "FORMACIÓN"}, "V05": {"campo": "RULO", "variedad": "Autumn Crisp", "ha": 4.07, "estado": "FORMACIÓN"}, "V06": {"campo": "RULO", "variedad": "Autumn Crisp", "ha": 3.93, "estado": "FORMACIÓN"}, "V07": {"campo": "RULO", "variedad": "Autumn Crisp", "ha": 3.97, "estado": "FORMACIÓN"}, "V08": {"campo": "RULO", "variedad": "Autumn Crisp", "ha": 3.56, "estado": "FORMACIÓN"}, "P01": {"campo": "PAINE", "variedad": "Cotton Candy", "ha": 3.27, "estado": "PRODUCCIÓN"}, "P02": {"campo": "PAINE", "variedad": "Cotton Candy", "ha": 5.07, "estado": "PRODUCCIÓN"}, "P03": {"campo": "PAINE", "variedad": "Autumn Crisp", "ha": 3.51, "estado": "PRODUCCIÓN"}, "P04": {"campo": "PAINE", "variedad": "Autumn Crisp", "ha": 4.19, "estado": "PRODUCCIÓN"}, "P05": {"campo": "PAINE", "variedad": "Thompson", "ha": 3.17, "estado": "PRODUCCIÓN"}, "P06": {"campo": "PAINE", "variedad": "—", "ha": 3.12, "estado": "PRODUCCIÓN"}, "P07": {"campo": "PAINE", "variedad": "Autumn Crisp", "ha": 1.63, "estado": "FORMACIÓN"}, "P11": {"campo": "PAINE", "variedad": "Autumn Crisp", "ha": 3.64, "estado": "PRODUCCIÓN"}, "P12": {"campo": "PAINE", "variedad": "Sweet Globe", "ha": 3.34, "estado": "PRODUCCIÓN"}, "P13": {"campo": "PAINE", "variedad": "Sweet Globe", "ha": 3.25, "estado": "PRODUCCIÓN"}, "P14": {"campo": "PAINE", "variedad": "Cotton Candy", "ha": 3.17, "estado": "PRODUCCIÓN"}, "P15": {"campo": "PAINE", "variedad": "Cotton Candy", "ha": 4.66, "estado": "PRODUCCIÓN"}, "P16": {"campo": "PAINE", "variedad": "Autumn Crisp", "ha": 2.4, "estado": "FORMACIÓN"}, "P17": {"campo": "PAINE", "variedad": "Autumn Crisp", "ha": 2.44, "estado": "FORMACIÓN"}, "P18": {"campo": "PAINE", "variedad": "Autumn Crisp", "ha": 2.41, "estado": "FORMACIÓN"}};
 
+// Cuarteles con el detalle de productos desplegado en Costos por cuartel
+const coAbiertos = new Set();
+function coToggle(cuartel){
+  if(coAbiertos.has(cuartel)) coAbiertos.delete(cuartel); else coAbiertos.add(cuartel);
+  render();
+}
 function renderCostos(){
   const fca=document.getElementById('co-campo')?.value||'';
   const fva=document.getElementById('co-var')?.value||'';
   const fes=document.getElementById('co-estado')?.value||'';
   const precio=n=>{const p=products.find(x=>x.nombre===n);return p?p.precio:0;};
 
-  // Acumular costo real por cuartel desde órdenes terminadas
-  const costoCuartel={}; // cuartel -> {costo, ha, campo, variedad, ordenes:Set}
+  // Acumular costo real por cuartel desde órdenes terminadas.
+  // Se guarda además el desglose por producto, para poder abrir la fila y ver
+  // qué se aplicó. La cantidad de cada cuartel es lo realmente aplicado en la
+  // orden, repartido a prorrata de las hectáreas del cuartel.
+  const costoCuartel={}; // cuartel -> {costo, ha, campo, variedad, ordenes:Set, prods:{}}
+  const nuevoC = (extra)=>Object.assign({costo:0,ordenes:new Set(),prods:{}}, extra);
+  const sumaProd = (dest, ra, cant, costoP, idOrden, fecha)=>{
+    const n=(ra.producto||'').trim(); if(!n)return;
+    if(!dest.prods[n]) dest.prods[n]={producto:n, cantidad:0, costo:0, unidad:ra.unidad||'', ordenes:new Set(), ultima:''};
+    const p=dest.prods[n];
+    p.cantidad+=cant; p.costo+=costoP; p.ordenes.add(idOrden);
+    if(fecha && fecha>p.ultima) p.ultima=fecha;
+  };
   ordenes.filter(o=>o.estado==='TERMINADA').forEach(o=>{
     const d=o.detalle||{}, ia=d.infoAplicacion;
     if(!ia||!ia.realAplicado)return;
     const cuarts=(d.cuartelesFinales||d.cuarteles||[]);
     const totHa=cuarts.reduce((s,c)=>s+(c.ha||0),0)||1;
+    const fecha=(ia.fechaTermino||'');
     ia.realAplicado.forEach(ra=>{
-      const valorTotal=ra.cantidad*precio(ra.producto);
+      const cantTotal=parseFloat(ra.cantidad)||0;
+      const valorTotal=cantTotal*precio(ra.producto);
       // Orden general del fundo: se carga al general, no se reparte entre los cuarteles
       if(d.destino==='general'){
         const clave='GENERAL '+(d.fundo||o.campo||'');
-        if(!costoCuartel[clave])costoCuartel[clave]={costo:0,ha:(d.hectareas||totHa||0),campo:(d.fundo||o.campo||''),variedad:'GENERAL',estado:'—',ordenes:new Set()};
+        if(!costoCuartel[clave])costoCuartel[clave]=nuevoC({ha:(d.hectareas||totHa||0),campo:(d.fundo||o.campo||''),variedad:'GENERAL',estado:'—'});
         costoCuartel[clave].costo+=valorTotal;
         costoCuartel[clave].ordenes.add(o.idOrden);
+        sumaProd(costoCuartel[clave], ra, cantTotal, valorTotal, o.idOrden, fecha);
         return;
       }
       cuarts.forEach(c=>{
         const info=CUARTEL_INFO[c.c]||{campo:(d.fundo||o.campo),variedad:'—',ha:c.ha,estado:'—'};
-        const parte=valorTotal*(c.ha||0)/totHa;
-        if(!costoCuartel[c.c])costoCuartel[c.c]={costo:0,ha:info.ha||c.ha||0,campo:info.campo,variedad:info.variedad,estado:info.estado||'—',ordenes:new Set()};
+        const prop=(c.ha||0)/totHa;
+        const parte=valorTotal*prop, parteCant=cantTotal*prop;
+        if(!costoCuartel[c.c])costoCuartel[c.c]=nuevoC({ha:info.ha||c.ha||0,campo:info.campo,variedad:info.variedad,estado:info.estado||'—'});
         costoCuartel[c.c].costo+=parte;
         costoCuartel[c.c].ordenes.add(o.idOrden);
+        sumaProd(costoCuartel[c.c], ra, parteCant, parte, o.idOrden, fecha);
       });
     });
   });
 
-  let filas=Object.entries(costoCuartel).map(([c,v])=>({cuartel:c,...v,ordenes:v.ordenes.size,porHa:v.ha>0?v.costo/v.ha:0}));
+  let filas=Object.entries(costoCuartel).map(([c,v])=>({
+    cuartel:c, ...v, ordenes:v.ordenes.size, porHa:v.ha>0?v.costo/v.ha:0,
+    prodArr:Object.values(v.prods)
+      .map(p=>({...p, ordenes:p.ordenes.size, dosisHa:(v.ha>0?p.cantidad/v.ha:0)}))
+      .sort((a,b)=>b.costo-a.costo)
+  }));
   // Filtros
   if(fca)filas=filas.filter(f=>f.campo===fca);
   if(fva)filas=filas.filter(f=>f.variedad===fva);
@@ -1434,8 +1461,54 @@ function renderCostos(){
   <div class="grid2">
     <div class="panel">
       <h3>Costo por cuartel</h3>
-      <table><thead><tr><th>Cuartel</th><th>Campo</th><th>Variedad</th><th>Estado</th><th class="num">Ha</th><th class="num">Órdenes</th><th class="num">Costo total</th><th class="num">$/ha</th></tr></thead><tbody>
-      ${filas.length?filas.map(f=>{const es=String(f.estado||'—').toUpperCase();const col=es==='PRODUCCIÓN'?'#27ae60':es==='FORMACIÓN'?'#e0a800':'#80868b';const et=es==='—'?'—':es.charAt(0)+es.slice(1).toLowerCase();return`<tr><td><b>${f.cuartel}</b></td><td style="font-size:12px">${f.campo}</td><td style="font-size:12px">${f.variedad}</td><td><span class="tag" style="background:${col};font-size:10.5px;padding:2px 9px">${et}</span></td><td class="num">${f.ha.toFixed(2)}</td><td class="num">${f.ordenes}</td><td class="num"><b>${plata(f.costo)}</b></td><td class="num" style="color:#6E2430;font-weight:700">${plata(f.porHa)}</td></tr>`}).join(''):'<tr><td colspan="8" style="text-align:center;color:#80868b;padding:30px">No hay aplicaciones terminadas con esos filtros</td></tr>'}
+      <table><thead><tr><th style="width:22px"></th><th>Cuartel</th><th>Campo</th><th>Variedad</th><th>Estado</th><th class="num">Ha</th><th class="num">Órdenes</th><th class="num">Costo total</th><th class="num">$/ha</th></tr></thead><tbody>
+      ${filas.length?filas.map(f=>{
+        const es=String(f.estado||'—').toUpperCase();
+        const col=es==='PRODUCCIÓN'?'#27ae60':es==='FORMACIÓN'?'#e0a800':'#80868b';
+        const et=es==='—'?'—':es.charAt(0)+es.slice(1).toLowerCase();
+        const abierto=coAbiertos.has(f.cuartel);
+        const key=String(f.cuartel).replace(/'/g,"\\'");
+        const fila=`<tr onclick="coToggle('${key}')" style="cursor:pointer" title="Ver qué productos se aplicaron">
+          <td style="color:#6E2430;font-weight:800;text-align:center">${abierto?'−':'+'}</td>
+          <td><b>${f.cuartel}</b></td>
+          <td style="font-size:12px">${f.campo}</td>
+          <td style="font-size:12px">${f.variedad}</td>
+          <td><span class="tag" style="background:${col};font-size:10.5px;padding:2px 9px">${et}</span></td>
+          <td class="num">${f.ha.toFixed(2)}</td>
+          <td class="num">${f.ordenes}</td>
+          <td class="num"><b>${plata(f.costo)}</b></td>
+          <td class="num" style="color:#6E2430;font-weight:700">${plata(f.porHa)}</td></tr>`;
+        if(!abierto) return fila;
+        const det=`<tr><td colspan="9" style="padding:0;background:#FAFAF8">
+          <div style="padding:12px 16px 14px 40px">
+            <div style="font-size:11.5px;color:#80868b;font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">
+              Productos aplicados en ${f.cuartel} · ${f.ha.toFixed(2)} ha
+            </div>
+            <table style="width:100%;font-size:12.5px">
+              <thead><tr>
+                <th style="text-align:left">Producto</th>
+                <th class="num">Cantidad</th>
+                <th class="num">Por ha</th>
+                <th class="num">Veces</th>
+                <th class="num">Costo</th>
+                <th class="num">% del cuartel</th>
+                <th class="num">Última</th>
+              </tr></thead>
+              <tbody>
+              ${f.prodArr.map(p=>`<tr>
+                <td style="font-weight:600">${p.producto}</td>
+                <td class="num">${p.cantidad.toFixed(2)} ${p.unidad||''}</td>
+                <td class="num" style="color:#6E2430;font-weight:700">${p.dosisHa.toFixed(2)}</td>
+                <td class="num" style="color:#80868b">${p.ordenes}</td>
+                <td class="num">${plata(p.costo)}</td>
+                <td class="num" style="color:#80868b">${f.costo>0?(p.costo/f.costo*100).toFixed(1)+'%':'—'}</td>
+                <td class="num" style="color:#80868b">${(p.ultima||'').split('-').reverse().join('/')||'—'}</td>
+              </tr>`).join('')}
+              </tbody>
+            </table>
+          </div></td></tr>`;
+        return fila+det;
+      }).join(''):'<tr><td colspan="9" style="text-align:center;color:#80868b;padding:30px">No hay aplicaciones terminadas con esos filtros</td></tr>'}
       </tbody></table>
     </div>
     <div class="panel">
