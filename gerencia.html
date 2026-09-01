@@ -2659,7 +2659,7 @@ function renderReporteMensual(){
     ${(()=>{
       const D = datosCierreCampo(ccCampo, ccFecha||hoyISO());
       return `<div style="font-size:12px;color:#80868b;border-top:1px solid #EEE;padding-top:10px">
-        Hoy en <b>${ccCampo}</b>: ${D.items.length} productos con saldo por ${plata(D.valorTotal)}${D.bombona?` · petróleo ${D.litros.toLocaleString('es-CL')} L (${plata(D.valorPetroleo)})`:' · sin bombona de petróleo'}
+        Hoy en <b>${ccCampo}</b>: ${D.items.length} productos con saldo${D.bombona?` · petróleo ${D.litros.toLocaleString('es-CL')} L`:' · sin bombona de petróleo'}
       </div>`;
     })()}
     <div style="font-size:11.5px;color:#a08b6a;background:#fdf8ef;border-radius:8px;padding:9px 11px;margin-top:10px">
@@ -2783,11 +2783,9 @@ function descargarComprobanteCierre(){
   // ── Productos ──
   titulo('Saldo de productos en '+D.campo);
   const cols = [
-    { t:'Producto', w:CW*0.40, a:'left'  },
-    { t:'Familia',  w:CW*0.22, a:'left'  },
-    { t:'Cantidad', w:CW*0.13, a:'right' },
-    { t:'Precio unit.', w:CW*0.12, a:'right' },
-    { t:'Valor',    w:CW*0.13, a:'right' },
+    { t:'Producto', w:CW*0.52, a:'left'  },
+    { t:'Familia',  w:CW*0.30, a:'left'  },
+    { t:'Cantidad', w:CW*0.18, a:'right' },
   ];
   const cabTabla = ()=>{
     doc.setFont('helvetica','normal'); doc.setFontSize(6.2); doc.setTextColor(...GR);
@@ -2805,12 +2803,11 @@ function descargarComprobanteCierre(){
   }
   D.items.forEach(it=>{
     if(y+6 > 232){ doc.addPage(); cabecera(false); cabTabla(); }
-    const vals = [it.nombre, it.familia, it.cantidad.toLocaleString('es-CL'),
-                  it.precio?plata(it.precio):'—', it.precio?plata(it.valor):'—'];
+    const vals = [it.nombre, it.familia, it.cantidad.toLocaleString('es-CL')];
     let x=M;
     cols.forEach((cc,i)=>{
       doc.setTextColor(...(i===1?GR:TX));
-      doc.setFont('helvetica', i===4?'bold':'normal'); doc.setFontSize(7.4);
+      doc.setFont('helvetica', i===2?'bold':'normal'); doc.setFontSize(7.4);
       let t=String(vals[i]), s=7.4; const maxW=cc.w-4;
       while(doc.getTextWidth(t)>maxW && s>5.2){ s-=0.2; doc.setFontSize(s); }
       const px = cc.a==='right' ? x+cc.w-(i===cols.length-1?0:3) : x+(i===0?0:1.5);
@@ -2822,7 +2819,6 @@ function descargarComprobanteCierre(){
   y-=1.4; doc.setDrawColor(...LIN); doc.setLineWidth(0.2); doc.line(M,y,W-M,y); y+=5;
   doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(...TX);
   doc.text(D.items.length+' productos con saldo', M, y);
-  doc.text('Valor total: '+plata(D.valorTotal), W-M, y, {align:'right'});
   y += 8;
 
   // ── Petróleo ──
@@ -2832,11 +2828,7 @@ function descargarComprobanteCierre(){
     doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...TX);
     doc.text('Litros en el estanque', M, y);
     doc.setFont('helvetica','bold');
-    doc.text(miles(D.litros)+' L', M+70, y, {align:'right'});
-    doc.setFont('helvetica','normal'); doc.setTextColor(...GR);
-    doc.text('Valorizado a '+plata(PRECIO_PETROLEO_L)+'/L', M+80, y);
-    doc.setFont('helvetica','bold'); doc.setTextColor(...TX);
-    doc.text(plata(D.valorPetroleo), W-M, y, {align:'right'});
+    doc.text(miles(D.litros)+' L', W-M, y, {align:'right'});
     y += 5;
     if(D.movsPosteriores>0){
       doc.setFont('helvetica','italic'); doc.setFontSize(6.2); doc.setTextColor(...GR);
