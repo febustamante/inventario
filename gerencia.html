@@ -2397,7 +2397,7 @@ let rmMes=null;
 // Si cambia el precio, se edita acá y queda aplicado en pantalla, Excel y PDF.
 const PRECIO_PETROLEO_L = 1200;
 // Bombonas de petróleo. Cada una lleva su saldo aparte (columna 'bombona' en petroleo_movs).
-const BOMBONAS_G = ['CERRILLOS','PAINE'];
+const BOMBONAS_G = ['CERRILLOS','PAINE','RULO'];
 // El precio de cada material sale de materiales.precio_unitario en Supabase
 // (columna agregada con precios_materiales.sql). Para cambiar un precio se
 // edita en Supabase, no acá.
@@ -2537,6 +2537,33 @@ function datosReporteMensual(mesStr){
   }).filter(b=>b.litros>0 || b.saldo!==0 || BOMBONAS_G.indexOf(b.bombona)>-1)
     .sort((a,b)=>b.litros-a.litros);
 
+  // Consumo del mes por máquina: a qué vehículo se le cargó el petróleo y de qué bombona salió
+  const nomMaq = mv => String(mv.vehiculo||'').trim() || 'Sin máquina indicada';
+  const agrupMaq = {};
+  petMovsMes.forEach(mv=>{
+    const k = nomMaq(mv)+'|'+bombonaDeG(mv);
+    if(!agrupMaq[k]) agrupMaq[k] = { maquina:nomMaq(mv), bombona:bombonaDeG(mv), litros:0, vales:0 };
+    agrupMaq[k].litros += Number(mv.litros)||0;
+    agrupMaq[k].vales  += 1;
+  });
+  const petPorMaquina = Object.values(agrupMaq)
+    .map(m=>({...m, litros:+m.litros.toFixed(1), costo:m.litros*PRECIO_PETROLEO_L}))
+    .sort((a,b)=>b.litros-a.litros);
+
+  // Lo mismo pero día a día: cada fecha con las máquinas que cargaron y de qué bombona
+  const agrupDia = {};
+  petMovsMes.forEach(mv=>{
+    const dia = String(mv.fecha||'').slice(0,10);
+    const k = dia+'|'+nomMaq(mv)+'|'+bombonaDeG(mv);
+    if(!agrupDia[k]) agrupDia[k] = { fecha:dia, maquina:nomMaq(mv), bombona:bombonaDeG(mv), litros:0, vales:0 };
+    agrupDia[k].litros += Number(mv.litros)||0;
+    agrupDia[k].vales  += 1;
+  });
+  const petPorDia = Object.values(agrupDia)
+    .map(d=>({...d, litros:+d.litros.toFixed(1), costo:d.litros*PRECIO_PETROLEO_L,
+              fechaTxt:d.fecha.split('-').reverse().join('/')}))
+    .sort((a,b)=> a.fecha.localeCompare(b.fecha) || a.maquina.localeCompare(b.maquina));
+
   // Entradas de stock (recepciones) del mes
   const entradasMes = (movimientos||[]).filter(m=>m.tipo==='entrada' && String(m.fechaRaw||'').slice(0,7)===mesStr)
     .map(m=>({producto:m.producto, cantidad:m.cantidad, destino:m.destino, usuario:m.usuario, fecha:m.fecha}));
@@ -2595,7 +2622,7 @@ function datosReporteMensual(mesStr){
     ordenesPendientes, ordenesTerminadasMes,
     productosAplicados, top5, gastoMensual,
     costoCuartelArr,
-    litrosMes, diasConRetiroMes, saldoPet, petPorBombona,
+    litrosMes, diasConRetiroMes, saldoPet, petPorBombona, petPorMaquina, petPorDia,
     entradasMes, entradasPorProducto,
     valorInventarioActual, materialesActual, materialesBajoStock, valorMaterialesActual, materialesSinPrecio, valorInventarioTotal,
     costoPetroleoMes, valorSaldoPet, gastoTotal, costoPorEstado
@@ -2690,7 +2717,7 @@ function descargarReporteMensual(){
 let ccFecha = null, ccCampo = 'Caseta Cerrillos';
 const CC_CAMPOS = ['Bodega Central','Caseta Cerrillos','Rulo','Paine'];
 // Qué bombona de petróleo le corresponde a cada campo (las que tienen)
-const CC_BOMBONA = { 'Caseta Cerrillos':'CERRILLOS', 'Paine':'PAINE' };
+const CC_BOMBONA = { 'Caseta Cerrillos':'CERRILLOS', 'Paine':'PAINE', 'Rulo':'RULO' };
 
 function ccSetCampo(v){ ccCampo = v; render(); }
 function ccSetFecha(){ const e=document.getElementById('cc-fecha'); if(e) ccFecha = e.value||''; }
@@ -2927,6 +2954,14 @@ function descargarReporteExcel(R){
     'Días con retiro (mes)':R.diasConRetiroMes, 'Costo del mes':+R.costoPetroleoMes.toFixed(0),
     'Saldo (a hoy, L)':+R.saldoPet.toFixed(2), 'Valor del saldo':+R.valorSaldoPet.toFixed(0)});
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(petArr), 'Petróleo');
+
+  const maqArr = R.petPorMaquina.map(m=>({Máquina:m.maquina, Bombona:m.bombona, Vales:m.vales,
+                                          Litros:m.litros, Costo:+m.costo.toFixed(0)}));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(maqArr.length?maqArr:[{Máquina:'Sin retiros este mes'}]), 'Petróleo por máquina');
+
+  const diaArr = R.petPorDia.map(d=>({Fecha:d.fechaTxt, Bombona:d.bombona, Máquina:d.maquina,
+                                      Vales:d.vales, Litros:d.litros, Costo:+d.costo.toFixed(0)}));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(diaArr.length?diaArr:[{Fecha:'Sin retiros este mes'}]), 'Petróleo diario');
 
   const entResArr = R.entradasPorProducto.map(e=>({Producto:e.producto, Recepciones:e.entradas, 'Cantidad total':e.cantidad, Destino:e.destino}));
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(entResArr.length?entResArr:[{Producto:'Sin entradas este mes'}]), 'Entradas por producto');
@@ -3186,6 +3221,23 @@ function descargarReportePDF(R, RP){
   ]);
   doc.setFont('helvetica','normal'); doc.setFontSize(6.4); doc.setTextColor(...GR);
   doc.text('Valorizado a '+plata(PRECIO_PETROLEO_L)+' por litro.', M, y-4);
+
+  titulo('Petróleo por máquina');
+  tabla([
+    { t:'Máquina',  w:CW*0.40, a:'left',  k:r=>r.maquina },
+    { t:'Bombona',  w:CW*0.20, a:'left',  k:r=>r.bombona.charAt(0)+r.bombona.slice(1).toLowerCase(), gris:true },
+    { t:'Vales',    w:CW*0.12, a:'right', k:r=>String(r.vales), gris:true },
+    { t:'Litros',   w:CW*0.14, a:'right', k:r=>miles(r.litros), bold:true },
+    { t:'Costo',    w:CW*0.14, a:'right', k:r=>plata(r.costo) },
+  ], R.petPorMaquina, 'Sin retiros de petróleo en el mes');
+
+  titulo('Consumo diario de petróleo');
+  tabla([
+    { t:'Máquina',  w:CW*0.44, a:'left',  k:r=>r.maquina },
+    { t:'Bombona',  w:CW*0.22, a:'left',  k:r=>r.bombona.charAt(0)+r.bombona.slice(1).toLowerCase(), gris:true },
+    { t:'Vales',    w:CW*0.14, a:'right', k:r=>String(r.vales), gris:true },
+    { t:'Litros',   w:CW*0.20, a:'right', k:r=>miles(r.litros), bold:true },
+  ], agruparPor(R.petPorDia,'fechaTxt'), 'Sin retiros de petróleo en el mes');
 
   titulo('Entradas de stock por producto');
   tabla([
