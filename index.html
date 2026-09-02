@@ -1616,6 +1616,77 @@ function renderMiStock(){
     </div>`).join('') : '<div class="card" style="text-align:center;padding:30px;color:var(--tx3)">Sin productos con ese nombre</div>'}`;
 }
 
+// ══════ EXCEL DE MIS ÓRDENES (dosificador) ══════
+// Una fila por producto de cada orden asignada al dosificador que está dentro.
+// Las pendientes van sin fecha de término, así ve de un vistazo qué le falta cerrar.
+function descargarMisOrdenesExcel(){
+  if(typeof XLSX==='undefined'){ showToast('La librería Excel no cargó. Recarga la página.','err'); return; }
+  const mias = ordenes.filter(o =>
+    String(o.dosificador).toLowerCase() === String(curUser.id).toLowerCase() &&
+    (o.detalle?.tipo)!=='consumo' &&
+    String(o.estado).toUpperCase()!=='ANULADA'
+  );
+  if(!mias.length){ showToast('No tienes órdenes para exportar','info'); return; }
+
+  // Fechas siempre en formato chileno DD-MM-AAAA, venga ISO o ya convertida
+  const fechaCL = v => {
+    const t = String(v||'').trim();
+    if(!t) return '';
+    const iso = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if(iso) return iso[3]+'-'+iso[2]+'-'+iso[1];
+    const cl = t.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/);
+    if(cl) return String(cl[1]).padStart(2,'0')+'-'+String(cl[2]).padStart(2,'0')+'-'+cl[3];
+    return t;
+  };
+  const nomTipo = t => t==='herbicida' ? 'Herbicida' : (t==='fertilizante' ? 'Fertilizante' : 'Fitosanitario');
+
+  const filas = [];
+  mias.sort((a,b)=>(b.idOrden||0)-(a.idOrden||0)).forEach(o=>{
+    const d  = o.detalle || {};
+    const ia = d.infoAplicacion || {};
+    const num = d.numeroOrden ? ('N°'+d.numeroOrden) : ('#'+o.idOrden);
+    // La fecha de creación de la orden, no la de inicio de la aplicación
+    const creada  = fechaCL(o.fecha);
+    const termino = fechaCL(ia.fechaTermino || o.fechaCierre || '');
+    const cuarts  = (d.destino==='general')
+      ? ('GENERAL '+(d.fundo||o.campo||''))
+      : ((d.cuartelesFinales||d.cuarteles||[]).map(c=>c.c).join(', '));
+    const real = {};
+    (ia.realAplicado||[]).forEach(ra=>{ real[ra.producto] = (real[ra.producto]||0) + (Number(ra.cantidad)||0); });
+
+    const prods = d.productos || [];
+    if(!prods.length){
+      filas.push({'N° ORDEN':num,'FECHA CREADA':creada,'FECHA TÉRMINO':termino,'ESTADO':o.estado||'',
+        'TIPO':nomTipo(d.tipo),'FUNDO':d.fundo||o.campo||'','CUARTELES':cuarts,
+        'PRODUCTO':o.productos||'','UNIDAD':'','PLANIFICADO':'','APLICACIÓN':''});
+      return;
+    }
+    prods.forEach(p=>{
+      filas.push({
+        'N° ORDEN':num,
+        'FECHA CREADA':creada,
+        'FECHA TÉRMINO':termino,
+        'ESTADO':o.estado||'',
+        'TIPO':nomTipo(d.tipo),
+        'FUNDO':d.fundo||o.campo||'',
+        'CUARTELES':cuarts,
+        'PRODUCTO':p.nombre||'',
+        'UNIDAD':p.unidad||'',
+        'PLANIFICADO':Number(p.totalProd||p.totalTeorico||0)||'',
+        'APLICACIÓN':(p.nombre in real) ? real[p.nombre] : ''
+      });
+    });
+  });
+
+  const ws = XLSX.utils.json_to_sheet(filas);
+  ws['!cols'] = [{wch:10},{wch:13},{wch:13},{wch:11},{wch:14},{wch:11},{wch:26},{wch:30},{wch:8},{wch:12},{wch:12}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Mis órdenes');
+  const quien = String((curUser&&curUser.name)||curUser.id||'').replace(/[^A-Za-z0-9]+/g,'_');
+  XLSX.writeFile(wb, 'Mis_ordenes_'+quien+'_'+isoLocal(new Date())+'.xlsx');
+  showToast('Excel descargado: '+filas.length+' líneas de '+mias.length+' órdenes');
+}
+
 // ══════ PEDIR PRODUCTOS AL BODEGUERO (aplicadores) ══════
 let _pedirSel = {}; // idOrden -> true si está marcada
 function togglePedir(idOrden){
@@ -3494,11 +3565,25 @@ async function guardarConsumo(){
   ['EN CURSO','INICIADA'].includes(String(o.estado).toUpperCase())
 );
 
+// Todas las órdenes del dosificador, incluidas las ya terminadas: es lo que
+// se lleva el Excel (las pendientes salen sin fecha de término).
+const misOrdenesTodas = ordenes.filter(o =>
+  String(o.dosificador).toLowerCase() === String(curUser.id).toLowerCase() &&
+  (o.detalle?.tipo)!=='consumo' &&
+  String(o.estado).toUpperCase()!=='ANULADA'
+);
+
 return `
 <div class="section-header">
   <div class="section-title">Mis Órdenes</div>
   <div class="section-sub">${misOrdenes.length} órdenes en curso asignadas</div>
 </div>
+
+<button onclick="descargarMisOrdenesExcel()" style="width:100%;margin-bottom:14px;padding:12px;border:1px solid var(--bd2);border-radius:12px;background:var(--surf);font-size:14px;font-weight:700;color:var(--tx1);display:flex;align-items:center;justify-content:center;gap:8px">
+  <i class="ti ti-file-spreadsheet" style="font-size:18px;color:#1D6F42"></i>
+  Descargar mis órdenes en Excel
+  <span style="font-weight:400;color:var(--tx3);font-size:12px">(${misOrdenesTodas.length})</span>
+</button>
 
 ${misOrdenes.length ? misOrdenes.map(o => {
   const d = o.detalle;
