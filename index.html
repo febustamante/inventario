@@ -406,6 +406,8 @@ const PRODUCTO_TOXICO = {"BELENUS 30 WG": true, "DELEGATE ( 0,3 KGS )": true, "I
 const TRACTORES = ['T4','T5','T6','T7','T8','T9','T10','T11','T12','T13','T14'];
 const tractorOpts = () => '<option value="">— Tractor —</option>' + TRACTORES.map(t=>`<option>${t}</option>`).join('');
 // Operadores autorizados para conducir (tractoristas)
+// Tractoristas de las órdenes de aplicación. Es una lista aparte de la de
+// petróleo a propósito: en los vales manda maq_operadores de Supabase.
 const OPERADORES = ['Jose Piñaleo','Osvaldo Serrano','Dagoberto Machuca','Carlos Nuñez','Hector Caballero','Eduardo Quilodran','Jose Rojas','Cristian Urra','Ruben Galvez','Oscar Marin','Jose Navarre','Jorge Contreras','Haroldo Zuñiga'];
 const operadorOpts = () => '<option value="">— Tractorista —</option>' + OPERADORES.map(t=>`<option>${t}</option>`).join('');
 // Implementos disponibles (los elige el dosificador al cerrar la orden)
@@ -484,12 +486,13 @@ const USERS = [
 // ══════ BOMBONAS DE PETRÓLEO ══════
 // Cada bombona lleva su propio saldo. En petroleo_movs la columna 'bombona'
 // dice a cuál pertenece cada vale; lo antiguo quedó marcado como CERRILLOS.
-const BOMBONAS = ['CERRILLOS','PAINE'];
+const BOMBONAS = ['CERRILLOS','PAINE','RULO'];
 // Qué bombona(s) puede operar cada usuario. Si no está en la lista, no ve la pestaña.
 const BOMBONAS_USUARIO = {
-  maestro: ['CERRILLOS','PAINE'],   // Felipe
-  bodeg:   ['CERRILLOS','PAINE'],   // Freddy
-  paine:   ['PAINE'],               // Hector
+  maestro: ['CERRILLOS','PAINE','RULO'],   // Felipe
+  bodeg:   ['CERRILLOS','PAINE','RULO'],   // Freddy
+  paine:   ['PAINE'],                      // Hector
+  rulo:    ['RULO'],                       // José (Pepe)
 };
 function bombonasDe(u){ return BOMBONAS_USUARIO[(u&&u.id)||''] || []; }
 // Bombona que se está mirando en la pestaña de petróleo
