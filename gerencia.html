@@ -956,7 +956,7 @@ function generarPDFOrden(idOrden){
     if(e.tractorista) doc.text(String(e.tractorista).substring(0,18),10+ew+1,y+3.4);
     if(e.tractor) doc.text(String(e.tractor).substring(0,12),10+ew*2+1,y+3.4);
     if(e.pistonero) doc.text(String(e.pistonero).substring(0,18),10+ew*3+1,y+3.4);
-    if(e.implemento) doc.text(String(e.implemento).substring(0,12),10+ew*4+1,y+3.4);
+    if(e.implemento) doc.text(String(e.implemento).substring(0,18),10+ew*4+1,y+3.4);
     doc.setDrawColor(220,220,220); doc.rect(10,y,W-20,6); y+=6;
   });
   y+=6;
@@ -1350,6 +1350,17 @@ async function guardarNueva(){
 }
 
 
+// Destino de UNA línea de un consumo directo. Un consumo puede tener varias
+// líneas, cada una a su cuartel; los consumos antiguos traen un solo destino
+// en el detalle y ese es el respaldo. Devuelve '' cuando va al general.
+function cuartelLineaConsumo(d, ra){
+  const cu = String((ra&&ra.cuartel)||'').trim();
+  const de = String((ra&&ra.destino)||'').trim();
+  if(de==='cuartel' && cu) return cu;
+  if(de==='general')       return '';
+  return (d && d.consumoDestino==='cuartel' && d.consumoCuartel) ? d.consumoCuartel : '';
+}
+
 // ══════ COSTOS POR CUARTEL ══════
 const CUARTEL_INFO={"C01": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 3.6, "estado": "PRODUCCIÓN"}, "C02": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 3.39, "estado": "PRODUCCIÓN"}, "C03": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 3.44, "estado": "PRODUCCIÓN"}, "C04": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 3.41, "estado": "FORMACIÓN"}, "C05": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 3.32, "estado": "FORMACIÓN"}, "C06": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 3.49, "estado": "FORMACIÓN"}, "C07": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 3.0, "estado": "PRODUCCIÓN"}, "C08": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 2.89, "estado": "PRODUCCIÓN"}, "C09": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 2.97, "estado": "PRODUCCIÓN"}, "C10": {"campo": "CERRILLOS", "variedad": "Sweet Globe", "ha": 4.29, "estado": "PRODUCCIÓN"}, "C11": {"campo": "CERRILLOS", "variedad": "Sweet Globe", "ha": 3.51, "estado": "PRODUCCIÓN"}, "C12": {"campo": "CERRILLOS", "variedad": "Sweet Globe", "ha": 4.37, "estado": "PRODUCCIÓN"}, "C13": {"campo": "CERRILLOS", "variedad": "Sweet Globe", "ha": 4.0, "estado": "PRODUCCIÓN"}, "C14": {"campo": "CERRILLOS", "variedad": "Sweet Celebration", "ha": 1.62, "estado": "PRODUCCIÓN"}, "C15": {"campo": "CERRILLOS", "variedad": "Sweet Celebration", "ha": 3.11, "estado": "PRODUCCIÓN"}, "C16": {"campo": "CERRILLOS", "variedad": "Sweet Celebration", "ha": 2.67, "estado": "PRODUCCIÓN"}, "C17": {"campo": "CERRILLOS", "variedad": "Cotton Candy", "ha": 3.92, "estado": "PRODUCCIÓN"}, "C18": {"campo": "CERRILLOS", "variedad": "Cotton Candy", "ha": 3.52, "estado": "PRODUCCIÓN"}, "C19": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 3.35, "estado": "PRODUCCIÓN"}, "C20": {"campo": "CERRILLOS", "variedad": "Moscatel", "ha": 1.22, "estado": "PRODUCCIÓN"}, "C21": {"campo": "CERRILLOS", "variedad": "Moscatel", "ha": 1.03, "estado": "PRODUCCIÓN"}, "C22": {"campo": "CERRILLOS", "variedad": "Moscatel", "ha": 1.71, "estado": "PRODUCCIÓN"}, "C23": {"campo": "CERRILLOS", "variedad": "Moscatel", "ha": 1.14, "estado": "PRODUCCIÓN"}, "C24": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 1.85, "estado": "PRODUCCIÓN"}, "C25": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 2.42, "estado": "PRODUCCIÓN"}, "C26": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 0.71, "estado": "PRODUCCIÓN"}, "C27": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 1.82, "estado": "PRODUCCIÓN"}, "C28": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 1.73, "estado": "PRODUCCIÓN"}, "C29": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 2.32, "estado": "PRODUCCIÓN"}, "C30": {"campo": "CERRILLOS", "variedad": "Bloomfresh", "ha": 0.6, "estado": "FORMACIÓN"}, "C37": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 3.53, "estado": "PRODUCCIÓN"}, "C38": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 3.45, "estado": "PRODUCCIÓN"}, "C39": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 2.46, "estado": "PRODUCCIÓN"}, "C40": {"campo": "CERRILLOS", "variedad": "Sable", "ha": 5.87, "estado": "PRODUCCIÓN"}, "C41": {"campo": "CERRILLOS", "variedad": "Sable", "ha": 2.64, "estado": "PRODUCCIÓN"}, "C42": {"campo": "CERRILLOS", "variedad": "Cotton Candy", "ha": 3.61, "estado": "PRODUCCIÓN"}, "C43": {"campo": "CERRILLOS", "variedad": "Cotton Candy", "ha": 0.21, "estado": "PRODUCCIÓN"}, "C44": {"campo": "CERRILLOS", "variedad": "Cotton Candy", "ha": 0.99, "estado": "PRODUCCIÓN"}, "C45": {"campo": "CERRILLOS", "variedad": "Cotton Candy", "ha": 1.59, "estado": "PRODUCCIÓN"}, "C46": {"campo": "CERRILLOS", "variedad": "Cotton Candy", "ha": 0.94, "estado": "PRODUCCIÓN"}, "C50": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 4.15, "estado": "PRODUCCIÓN"}, "C51": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 2.34, "estado": "PRODUCCIÓN"}, "C52": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 5.2, "estado": "PRODUCCIÓN"}, "C53": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 4.68, "estado": "PRODUCCIÓN"}, "C54": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 3.36, "estado": "PRODUCCIÓN"}, "C55": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 4.99, "estado": "PRODUCCIÓN"}, "C56": {"campo": "CERRILLOS", "variedad": "Autumn Crisp", "ha": 4.82, "estado": "PRODUCCIÓN"}, "A01": {"campo": "RULO", "variedad": "Moscatel", "ha": 2.19, "estado": "PRODUCCIÓN"}, "A02": {"campo": "RULO", "variedad": "Moscatel", "ha": 2.02, "estado": "PRODUCCIÓN"}, "A07": {"campo": "RULO", "variedad": "Thompson", "ha": 3.04, "estado": "PRODUCCIÓN"}, "A08": {"campo": "RULO", "variedad": "Thompson", "ha": 3.17, "estado": "PRODUCCIÓN"}, "A09": {"campo": "RULO", "variedad": "Moscatel", "ha": 2.68, "estado": "PRODUCCIÓN"}, "A10": {"campo": "RULO", "variedad": "Moscatel", "ha": 2.76, "estado": "PRODUCCIÓN"}, "A11": {"campo": "RULO", "variedad": "Moscatel", "ha": 1.53, "estado": "PRODUCCIÓN"}, "R01": {"campo": "RULO", "variedad": "Moscatel", "ha": 3.91, "estado": "PRODUCCIÓN"}, "R02": {"campo": "RULO", "variedad": "Moscatel", "ha": 3.91, "estado": "PRODUCCIÓN"}, "R03": {"campo": "RULO", "variedad": "Autumn Crisp", "ha": 2.76, "estado": "PRODUCCIÓN"}, "R04": {"campo": "RULO", "variedad": "Autumn Crisp", "ha": 2.59, "estado": "PRODUCCIÓN"}, "V01": {"campo": "RULO", "variedad": "Autumn Crisp", "ha": 3.37, "estado": "FORMACIÓN"}, "V02": {"campo": "RULO", "variedad": "Autumn Crisp", "ha": 3.43, "estado": "FORMACIÓN"}, "V03": {"campo": "RULO", "variedad": "Autumn Crisp", "ha": 3.59, "estado": "FORMACIÓN"}, "V04": {"campo": "RULO", "variedad": "Autumn Crisp", "ha": 3.23, "estado": "FORMACIÓN"}, "V05": {"campo": "RULO", "variedad": "Autumn Crisp", "ha": 4.07, "estado": "FORMACIÓN"}, "V06": {"campo": "RULO", "variedad": "Autumn Crisp", "ha": 3.93, "estado": "FORMACIÓN"}, "V07": {"campo": "RULO", "variedad": "Autumn Crisp", "ha": 3.97, "estado": "FORMACIÓN"}, "V08": {"campo": "RULO", "variedad": "Autumn Crisp", "ha": 3.56, "estado": "FORMACIÓN"}, "P01": {"campo": "PAINE", "variedad": "Cotton Candy", "ha": 3.27, "estado": "PRODUCCIÓN"}, "P02": {"campo": "PAINE", "variedad": "Cotton Candy", "ha": 5.07, "estado": "PRODUCCIÓN"}, "P03": {"campo": "PAINE", "variedad": "Autumn Crisp", "ha": 3.51, "estado": "PRODUCCIÓN"}, "P04": {"campo": "PAINE", "variedad": "Autumn Crisp", "ha": 4.19, "estado": "PRODUCCIÓN"}, "P05": {"campo": "PAINE", "variedad": "Thompson", "ha": 3.17, "estado": "PRODUCCIÓN"}, "P06": {"campo": "PAINE", "variedad": "—", "ha": 3.12, "estado": "PRODUCCIÓN"}, "P07": {"campo": "PAINE", "variedad": "Autumn Crisp", "ha": 1.63, "estado": "FORMACIÓN"}, "P11": {"campo": "PAINE", "variedad": "Autumn Crisp", "ha": 3.64, "estado": "PRODUCCIÓN"}, "P12": {"campo": "PAINE", "variedad": "Sweet Globe", "ha": 3.34, "estado": "PRODUCCIÓN"}, "P13": {"campo": "PAINE", "variedad": "Sweet Globe", "ha": 3.25, "estado": "PRODUCCIÓN"}, "P14": {"campo": "PAINE", "variedad": "Cotton Candy", "ha": 3.17, "estado": "PRODUCCIÓN"}, "P15": {"campo": "PAINE", "variedad": "Cotton Candy", "ha": 4.66, "estado": "PRODUCCIÓN"}, "P16": {"campo": "PAINE", "variedad": "Autumn Crisp", "ha": 2.4, "estado": "FORMACIÓN"}, "P17": {"campo": "PAINE", "variedad": "Autumn Crisp", "ha": 2.44, "estado": "FORMACIÓN"}, "P18": {"campo": "PAINE", "variedad": "Autumn Crisp", "ha": 2.41, "estado": "FORMACIÓN"}};
 
@@ -1384,9 +1395,22 @@ function renderCostos(){
     const cuarts=(d.cuartelesFinales||d.cuarteles||[]);
     const totHa=cuarts.reduce((s,c)=>s+(c.ha||0),0)||1;
     const fecha=(ia.fechaTermino||'');
+    const esConsumoC = (d.tipo==='consumo');
     ia.realAplicado.forEach(ra=>{
       const cantTotal=parseFloat(ra.cantidad)||0;
       const valorTotal=cantTotal*precio(ra.producto);
+      // Consumo directo: cada línea va completa a su propio cuartel (o al general)
+      if(esConsumoC){
+        const cu=cuartelLineaConsumo(d, ra);
+        const clave = cu || ('GENERAL '+(d.fundo||o.campo||''));
+        const info = cu ? (CUARTEL_INFO[cu]||{campo:(d.fundo||o.campo),variedad:'—',ha:0,estado:'—'})
+                        : {campo:(d.fundo||o.campo||''),variedad:'GENERAL',ha:0,estado:'—'};
+        if(!costoCuartel[clave])costoCuartel[clave]=nuevoC({ha:info.ha||0,campo:info.campo,variedad:info.variedad,estado:info.estado||'—'});
+        costoCuartel[clave].costo+=valorTotal;
+        costoCuartel[clave].ordenes.add(o.idOrden);
+        sumaProd(costoCuartel[clave], ra, cantTotal, valorTotal, o.idOrden, fecha);
+        return;
+      }
       // Orden general del fundo: se carga al general, no se reparte entre los cuarteles
       if(d.destino==='general'){
         const clave='GENERAL '+(d.fundo||o.campo||'');
@@ -2212,6 +2236,17 @@ function exportarVales(){
   const sinCodigo=new Set();
   const sinCcosto=new Set();
 
+  // Un consumo puede llevar varias líneas, cada una a su propio cuartel (o al
+  // general del fundo), y todas salen en el MISMO vale. Los consumos antiguos
+  // traen un solo destino en el detalle: ese es el respaldo.
+  const destinoLinea = (d, ra) => {
+    const cu = String((ra&&ra.cuartel)||'').trim();
+    const de = String((ra&&ra.destino)||'').trim();
+    if(de==='cuartel' && cu) return cu;
+    if(de==='general')       return '';
+    return (d.consumoDestino==='cuartel' && d.consumoCuartel) ? d.consumoCuartel : '';
+  };
+
   term.forEach(o=>{
     const d=o.detalle||{};
     const ia=d.infoAplicacion||{};
@@ -2278,19 +2313,45 @@ function exportarVales(){
         return; // no se reparte entre los cuarteles
       }
 
+      // ── CONSUMO DIRECTO: una fila por línea, cantidad completa, con el centro
+      //    de costo del cuartel de esa línea. Todas van en el mismo vale. ──
+      if(esConsumo){
+        const cant = +(Number(ra.cantidad)||0).toFixed(2);
+        if(cant>0){
+          const cu = destinoLinea(d, ra);
+          const ccostoCons = cu ? (CCOSTO_CUARTEL[cu] || d.ccostoGeneral || '') : (d.ccostoGeneral||'');
+          if(!ccostoCons) sinCcosto.add(cu ? cu : ('GENERAL '+fundo));
+          filas.push({
+            'NUMERO VALE':valeDeEstaOrden,
+            'FECHA VALE':fechaTermino,
+            'MOVIMIENTO':'SALIDA',
+            'TIPO VALE':'',
+            'SUCURSAL':1,
+            'GLOSAS':glosaFila,
+            'CODIGOS':codigo,
+            'CANTIDAD':cant,
+            'BODEGA':bodega,
+            'COSTO':'',
+            'NUMERO OT':'',
+            'NUMERO OP':'',
+            'NUMERO LOTE':'',
+            'VENCIMIENTO':'',
+            'NUMERO SERIE':'',
+            'CTA CONTABLE':ctaContable,
+            'CENTRO COSTO':ccostoCons,
+            'BODEGA TRASPASO':'',
+            'PRODUCTO (verificación)':ra.producto
+          });
+          huboFila=true;
+        }
+        return; // el consumo no se reparte entre cuarteles
+      }
+
       cuartsF.forEach(c=>{
         const val = +((ra.cantidad||0)*(c.ha||0)/totHa).toFixed(2);
         if(val<=0) return;
-        // Centro de costo del consumo: si es de cuartel específico usa el del cuartel; si es general usa el general
-        let ccosto;
-        if(esConsumo){
-          ccosto = (d.consumoDestino==='cuartel' && d.consumoCuartel)
-            ? (CCOSTO_CUARTEL[d.consumoCuartel] || d.ccostoGeneral || '')
-            : (d.ccostoGeneral||'');
-        } else {
-          ccosto = CCOSTO_CUARTEL[c.c] || '';
-        }
-        if(!ccosto && !esConsumo) sinCcosto.add(c.c);
+        const ccosto = CCOSTO_CUARTEL[c.c] || '';
+        if(!ccosto) sinCcosto.add(c.c);
         filas.push({
           'NUMERO VALE':valeDeEstaOrden,
           'FECHA VALE':fechaTermino,
@@ -2470,8 +2531,19 @@ function datosReporteMensual(mesStr){
     if(!ia||!ia.realAplicado) return;
     const cuarts=(d.cuartelesFinales||d.cuarteles||[]);
     const totHa=cuarts.reduce((s,c)=>s+(c.ha||0),0)||1;
+    const esConsumoC = (d.tipo==='consumo');
     ia.realAplicado.forEach(ra=>{
       const valorTotal=(Number(ra.cantidad)||0)*precio(ra.producto);
+      // Consumo directo: cada línea completa a su cuartel, sin prorratear
+      if(esConsumoC){
+        const cu=cuartelLineaConsumo(d, ra);
+        const clave = cu || ('GENERAL '+(d.fundo||o.campo||''));
+        const info = cu ? (CUARTEL_INFO[cu]||{campo:(d.fundo||o.campo),variedad:'—',ha:0,estado:'—'})
+                        : {campo:(d.fundo||o.campo||''),variedad:'GENERAL',ha:0,estado:'—'};
+        if(!costoCuartel[clave])costoCuartel[clave]={costo:0,ha:info.ha||0,campo:info.campo,variedad:info.variedad,estado:info.estado||'—'};
+        costoCuartel[clave].costo+=valorTotal;
+        return;
+      }
       if(d.destino==='general'){
         const clave='GENERAL '+(d.fundo||o.campo||'');
         if(!costoCuartel[clave])costoCuartel[clave]={costo:0,ha:(d.hectareas||totHa||0),campo:(d.fundo||o.campo||''),variedad:'GENERAL',estado:'—'};
