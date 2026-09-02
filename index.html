@@ -3087,7 +3087,14 @@ function textoCuarteles(d){
   if(d.destino==='general') return 'GENERAL '+(d.fundo||'')+' · '+lista.length+' cuarteles';
   return lista.length ? lista.map(c=>c.c).join(', ') : '—';
 }
-let _consProds = []; // [{nombre, cantidad, bodega}]
+// Líneas del consumo que se está armando. Cada una lleva SU cuartel: se puede
+// cargar UREA al V01 y MCPA al V03 en el mismo consumo, y sale un solo vale.
+let _consProds = []; // [{nombre, cantidad, bodega, destino, cuartel}]
+let _consFundo = '';  // el fundo se fija con la primera línea: un vale es de un solo fundo
+// Etiqueta del destino de una línea, para pantallas y para porCuartel
+function etiquetaLinea(l, fundo){
+  return (l.destino==='cuartel' && l.cuartel) ? l.cuartel : ('GENERAL '+(fundo||_consFundo||''));
+}
 let coDesde='', coHasta='';   // filtro de fechas del historial de consumos
 function coFechas(){
   const d=document.getElementById('co-desde'), h=document.getElementById('co-hasta');
@@ -3173,7 +3180,12 @@ function renderConsumo(){
   <div class="card">${consumos.length?consumos.map(o=>{
     const d=o.detalle||{}; const ps=(d.productos||[]).map(x=>x.nombre).join(', ');
     const anulado = String(o.estado||'').toUpperCase()==='ANULADA';
-    const destino = (d.consumoDestino==='cuartel' && d.consumoCuartel) ? d.consumoCuartel : ('General '+(d.fundo||''));
+    // Un consumo puede tener varias líneas, cada una a su cuartel. Los consumos
+    // antiguos traen un solo destino en el detalle: ese es el respaldo.
+    const dests = (d.lineas&&d.lineas.length)
+      ? [...new Set(d.lineas.map(l=>(l.destino==='cuartel'&&l.cuartel)?l.cuartel:('General '+(d.fundo||''))))]
+      : [(d.consumoDestino==='cuartel' && d.consumoCuartel) ? d.consumoCuartel : ('General '+(d.fundo||''))];
+    const destino = dests.join(' · ');
     return `<div class="move-item" style="${anulado?'opacity:.5':''}">
       <div class="move-dot" style="background:${anulado?'#999':'var(--acc)'}"></div>
       <div class="move-body" style="flex:1">
@@ -3203,50 +3215,97 @@ function doConsumo(){
   const gEl=document.getElementById('cons-general');
   const general=gEl.value;
   if(!general) return showToast('Elige el general (fundo)','err');
+  // Un consumo = un vale = un solo fundo. El primero que se agrega lo fija.
+  if(_consProds.length && _consFundo && general!==_consFundo){
+    return showToast('Este consumo es de '+_consFundo+'. Registra ese primero y después empieza el de '+general+'.','err');
+  }
+  const destino=document.getElementById('cons-destino')?.value||'general';
+  const cuartel=document.getElementById('cons-cuartel')?.value||'';
+  if(destino==='cuartel' && !cuartel) return showToast('Elige el cuartel de esta línea','err');
   const pid=parseInt(document.getElementById('cons-prod').value);
   const cant=parseFloat(document.getElementById('cons-cant').value)||0;
   const bodega=document.getElementById('cons-bodega').value;
   if(cant<=0) return showToast('Ingresa una cantidad válida','err');
   const p=products.find(x=>x.id===pid);
-  const disp=stockAt(pid,bodega);
-  if(cant>disp) return showToast('Insuficiente en '+bodega+': '+fmt(disp)+' disp.','err');
-  _consProds.push({nombre:p.nombre, cantidad:cant, bodega:bodega});
+  if(!p) return showToast('Elige el producto','err');
+  // El stock disponible se mide descontando lo que ya está en la lista pendiente
+  // de este mismo producto y bodega, para no comprometer dos veces lo mismo.
+  const yaPedido=_consProds.filter(x=>x.nombre===p.nombre && x.bodega===bodega)
+    .reduce((t,x)=>t+x.cantidad,0);
+  const disp=stockAt(pid,bodega)-yaPedido;
+  if(cant>disp) return showToast('Insuficiente en '+bodega+': '+fmt(disp)+' disp.'+(yaPedido?' (ya tienes '+fmt(yaPedido)+' en la lista)':''),'err');
+  _consProds.push({nombre:p.nombre, cantidad:cant, bodega:bodega, destino:destino, cuartel:(destino==='cuartel'?cuartel:'')});
+  _consFundo = general;
   document.getElementById('cons-cant').value='';
   pintarConsumoLista();
 }
 function pintarConsumoLista(){
   const cont=document.getElementById('cons-lista');
   const btn=document.getElementById('cons-guardar');
-  if(!_consProds.length){ cont.innerHTML=''; if(btn) btn.style.display='none'; return; }
-  cont.innerHTML = _consProds.map((x,i)=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;background:var(--surf2);border-radius:6px;margin-bottom:4px"><span style="font-size:13px">${x.nombre} · ${fmt(x.cantidad)} · ${x.bodega}</span><span onclick="quitarConsumo(${i})" style="color:var(--red);cursor:pointer;font-weight:700">✕</span></div>`).join('');
+  if(!_consProds.length){ _consFundo=''; cont.innerHTML=''; if(btn) btn.style.display='none'; return; }
+  const dest = _consProds.map(x=>etiquetaLinea(x)).filter((v,i,a)=>a.indexOf(v)===i);
+  cont.innerHTML =
+    `<div style="font-size:11px;color:var(--tx3);margin-bottom:5px">${_consProds.length} línea${_consProds.length>1?'s':''} · ${dest.length} destino${dest.length>1?'s':''} · sale como UN vale</div>`
+    + _consProds.map((x,i)=>{
+      const et = etiquetaLinea(x);
+      const esCu = (x.destino==='cuartel' && x.cuartel);
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;background:var(--surf2);border-radius:6px;margin-bottom:4px">
+        <span style="font-size:13px">
+          <b style="display:inline-block;min-width:52px;color:${esCu?'var(--vino)':'var(--tx2)'}">${et}</b>
+          ${x.nombre} · ${fmt(x.cantidad)} · ${x.bodega}
+        </span>
+        <span onclick="quitarConsumo(${i})" style="color:var(--red);cursor:pointer;font-weight:700">✕</span></div>`;
+    }).join('');
   if(btn) btn.style.display='block';
 }
 function quitarConsumo(i){ _consProds.splice(i,1); pintarConsumoLista(); }
 async function guardarConsumo(){
   if(!bloquearAccion('consumo')){ return; }
-  const general=document.getElementById('cons-general').value;
-  const destino=document.getElementById('cons-destino').value;
-  const cuartelSel=document.getElementById('cons-cuartel')?.value||'';
+  // El fundo del consumo es el que se fijó al agregar la primera línea
+  const general=_consFundo||document.getElementById('cons-general').value;
   const fecha=document.getElementById('cons-fecha').value||isoLocal(new Date());
   if(!general || !_consProds.length){ liberarAccion('consumo'); return showToast('Faltan datos','err'); }
-  if(destino==='cuartel' && !cuartelSel){ liberarAccion('consumo'); return showToast('Elige el cuartel','err'); }
+  // Cada línea trae su destino desde que se agregó; las viejas sin destino van al general
+  const lineas=_consProds.map(x=>({
+    producto:x.nombre, cantidad:x.cantidad, bodega:x.bodega,
+    destino:(x.destino==='cuartel' && x.cuartel) ? 'cuartel' : 'general',
+    cuartel:(x.destino==='cuartel' && x.cuartel) ? x.cuartel : ''
+  }));
+  const etiquetaDe = l => (l.destino==='cuartel' && l.cuartel) ? l.cuartel : ('GENERAL '+general);
 
-  const esCuartel = (destino==='cuartel' && cuartelSel);
-  const etiqueta = esCuartel ? cuartelSel : ('GENERAL '+general);
+  // Un vale puede llevar un centro de costo por fila, pero una sola bodega de
+  // salida. Si el dosificador mezcló bodegas, mejor avisar antes de registrar.
+  const bodegas=[...new Set(lineas.map(l=>l.bodega))];
+  if(bodegas.length>1 && !confirm('Este consumo saca producto de '+bodegas.length+' bodegas distintas ('+bodegas.join(', ')+').\n\nEl vale del ERP lleva una sola bodega de salida. ¿Registrarlo de todas formas?')){
+    liberarAccion('consumo'); return;
+  }
+
+  // Destinos distintos que quedaron en el consumo (para pantallas y reportes)
+  const etiquetas=[...new Set(lineas.map(etiquetaDe))];
+  const cuartelesUnicos=[...new Set(lineas.filter(l=>l.destino==='cuartel').map(l=>l.cuartel))];
+  const todasCuartel = lineas.every(l=>l.destino==='cuartel');
 
   // 1) Crear PRIMERO la orden tipo consumo (para tener su id y asociar los movimientos)
   const detalle = {
     fundo: general, fecha, tipo:'consumo',
-    consumoDestino: esCuartel ? 'cuartel' : 'general',
-    consumoCuartel: esCuartel ? cuartelSel : '',
-    cuarteles: [{c:etiqueta, ha:1}],
-    cuartelesFinales: [{c:etiqueta, ha:1}],
+    // consumoDestino/consumoCuartel se mantienen para los consumos de una sola
+    // línea (así los reportes viejos siguen leyéndolos igual). Con varios
+    // destinos queda 'mixto' y la verdad está en cada línea.
+    consumoDestino: todasCuartel ? (cuartelesUnicos.length===1 ? 'cuartel' : 'mixto') : (cuartelesUnicos.length ? 'mixto' : 'general'),
+    consumoCuartel: (todasCuartel && cuartelesUnicos.length===1) ? cuartelesUnicos[0] : '',
+    lineas,
+    cuarteles: etiquetas.map(c=>({c, ha:1})),
+    cuartelesFinales: etiquetas.map(c=>({c, ha:1})),
     ccostoGeneral: GENERAL_CCOSTO[general]||'',
     bodegaVale: GENERAL_BODEGA[general]||'',
-    productos: _consProds.map(x=>({nombre:x.nombre, dosis100:0, objetivo:'Consumo directo', porCuartel:[{c:etiqueta, val:x.cantidad}], totalTeorico:x.cantidad})),
+    productos: lineas.map(l=>({nombre:l.producto, dosis100:0, objetivo:'Consumo directo',
+      destino:l.destino, cuartel:l.cuartel,
+      porCuartel:[{c:etiquetaDe(l), val:l.cantidad}], totalTeorico:l.cantidad})),
     infoAplicacion: {
       fechaTermino: fecha, horaTermino:'',
-      realAplicado: _consProds.map(x=>({producto:x.nombre, cantidad:x.cantidad}))
+      // Una entrada por línea, con su cuartel: es lo que leen el vale y los reportes
+      realAplicado: lineas.map(l=>({producto:l.producto, cantidad:l.cantidad,
+        destino:l.destino, cuartel:l.cuartel, bodega:l.bodega}))
     }
   };
   showToast('Registrando...','info');
@@ -3259,15 +3318,15 @@ async function guardarConsumo(){
   const ordenId = (typeof nuevaId==='number') ? nuevaId : null;
 
   // 2) Descontar stock de cada producto, asociado a la orden del consumo (para poder revertir al anular)
-  for(const it of _consProds){
-    const ok=await postSheets({action:'consumo', fecha, producto:it.nombre, cantidad:it.cantidad, origen:it.bodega, usuario:curUser.id, motivo:'Consumo directo · '+etiqueta, ordenId});
-    if(!ok){ liberarAccion('consumo'); showToast('Consumo creado pero no se pudo descontar '+it.nombre+'. Anula el consumo y reinténtalo.','err'); await syncData(); return; }
-    const pid=pidPorNombre(it.nombre); if(pid) addStock(pid,it.bodega,-it.cantidad);
+  for(const l of lineas){
+    const ok=await postSheets({action:'consumo', fecha, producto:l.producto, cantidad:l.cantidad, origen:l.bodega, usuario:curUser.id, motivo:'Consumo directo · '+etiquetaDe(l), ordenId});
+    if(!ok){ liberarAccion('consumo'); showToast('Consumo creado pero no se pudo descontar '+l.producto+'. Anula el consumo y reinténtalo.','err'); await syncData(); return; }
+    const pid=pidPorNombre(l.producto); if(pid) addStock(pid,l.bodega,-l.cantidad);
   }
 
   liberarAccion('consumo');
-  showToast('Consumo registrado y descontado');
-  _consProds=[];
+  showToast('Consumo registrado: '+lineas.length+' línea'+(lineas.length>1?'s':'')+' en un vale');
+  _consProds=[]; _consFundo='';
   await syncData();
 }
 
@@ -4290,13 +4349,17 @@ function exportarRespaldo(){
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(ordRows), 'ORDENES');
 
     // Hoja CONSUMOS (consumos directos sin orden, a general o cuartel)
-    const consRows = [['FECHA','FUNDO','DESTINO','PRODUCTO','CANTIDAD','CENTRO_COSTO','BODEGA_VALE']];
+    const consRows = [['FECHA','FUNDO','DESTINO','PRODUCTO','CANTIDAD','CENTRO_COSTO','BODEGA_VALE','BODEGA_SALIDA']];
     (ordenes||[]).filter(o=>(o.detalle?.tipo)==='consumo').forEach(o=>{
       const d=o.detalle||{};
-      const destino = (d.consumoDestino==='cuartel' && d.consumoCuartel) ? d.consumoCuartel : ('GENERAL '+(d.fundo||''));
-      (d.productos||[]).forEach(p=>{
-        consRows.push([d.fecha||'', d.fundo||'', destino, p.nombre||'', p.totalTeorico||0,
-          d.ccostoGeneral||'', d.bodegaVale||'']);
+      const respaldo = (d.consumoDestino==='cuartel' && d.consumoCuartel) ? d.consumoCuartel : ('GENERAL '+(d.fundo||''));
+      // Cada línea con su propio destino; los consumos antiguos usan el único del detalle
+      const lins = (d.lineas&&d.lineas.length) ? d.lineas
+        : (d.productos||[]).map(p=>({producto:p.nombre, cantidad:p.totalTeorico, destino:'', cuartel:'', bodega:''}));
+      lins.forEach(l=>{
+        const destino = (l.destino==='cuartel' && l.cuartel) ? l.cuartel : respaldo;
+        consRows.push([d.fecha||'', d.fundo||'', destino, l.producto||'', l.cantidad||0,
+          d.ccostoGeneral||'', d.bodegaVale||'', l.bodega||'']);
       });
     });
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(consRows), 'CONSUMOS');
