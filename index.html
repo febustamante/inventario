@@ -415,8 +415,17 @@ const tractorOpts = () => '<option value="">— Tractor —</option>' + TRACTORE
 const OPERADORES = ['Jose Piñaleo','Osvaldo Serrano','Dagoberto Machuca','Carlos Nuñez','Hector Caballero','Eduardo Quilodran','Jose Rojas','Cristian Urra','Ruben Galvez','Oscar Marin','Jose Navarre','Jorge Contreras','Haroldo Zuñiga'];
 const operadorOpts = () => '<option value="">— Tractorista —</option>' + OPERADORES.map(t=>`<option>${t}</option>`).join('');
 // Implementos disponibles (los elige el dosificador al cerrar la orden)
-const IMPLEMENTOS = ['LEVERA N1','LEVERA N2','ATASA N3','ATASA N4','ATASA N5','ATASA N6','CAFINI N7','CAFINI N8','VENTIS N9','LERPAIN N10','ELECTROSTATIC ESS1','ELECTROSTATIC ESS2','JACTO CERRILLOS','JACTO RULO','BARRA 1','BARRA 2'];
-const implementoOpts = () => '<option value="">— Implemento —</option>' + IMPLEMENTOS.map(t=>`<option>${t}</option>`).join('');
+// Lista de respaldo: solo se usa si la tabla maq_implementos no cargó todavía
+// (primer arranque sin señal, o error de red). La lista de verdad vive en Supabase.
+const IMPLEMENTOS = ['LEVERA N1','LEVERA N2','ATASA N3','ATASA N4','ATASA N5','ATASA N6','CAFINI N7','CAFINI N8','VENTIS N9','LERPAIN N10','ELECTROSTATIC ESS1','ELECTROSTATIC ESS2','JACTO CERRILLOS','JACTO RULO','BARRA 1','BARRA 2','MAQUINA EXTERNA'];
+// Implementos: se leen en vivo desde maq_implementos (solo los activo=true).
+// Para agregar o quitar uno basta un insert/update en Supabase, sin tocar el código.
+function implementosActivos(){
+  const act = (maqImplementos||[]).filter(i=>i.activo!==false)
+    .map(i=>String(i.nombre||'').trim()).filter(Boolean);
+  return act.length ? act : IMPLEMENTOS;
+}
+const implementoOpts = () => '<option value="">— Implemento —</option>' + implementosActivos().map(t=>`<option>${t}</option>`).join('');
 
 // Vehículos que retiran petróleo de la bombona: se leen en vivo desde maq_maquinas
 // (tabla real de Supabase, compartida con el otro proyecto de maquinaria) — tipo TRACTOR o Vehiculo.
@@ -514,7 +523,7 @@ function bombonaDe(mv){ return String((mv&&mv.bombona)||'CERRILLOS').toUpperCase
 // Estado
 let stockByLoc = {};
 let products = [];
-let movimientos = [], ordenes = [], compras = [], materiales = [], materialesMov = [], petroleoMovs = [], maqMaquinas = [], maqOperadores = [];
+let movimientos = [], ordenes = [], compras = [], materiales = [], materialesMov = [], petroleoMovs = [], maqMaquinas = [], maqOperadores = [], maqImplementos = [];
 // Captura de firma vectorial (trazo, no imagen) para vales de petróleo
 let _firmaStrokes = [], _firmaActual = null, _firmaDrawing = false;
 let nextMov = 1, nextOrden = 1;
@@ -713,13 +722,19 @@ async function syncData() {
     }catch(_){ petMovs=[]; }
 
     // 6c) Maquinaria y operadores (tablas del proyecto de maquinaria, mismo Supabase)
-    let maqs=[], opers=[];
+    let maqs=[], opers=[], imps=[];
     try{
       const { data: maqData, error: e9 } = await sb.from('maq_maquinas').select('*');
       if(!e9) maqs = maqData||[];
       const { data: operData, error: e10 } = await sb.from('maq_operadores').select('*').order('nombre');
       if(!e10) opers = operData||[];
     }catch(_){ maqs=[]; opers=[]; }
+    // Implementos (tabla nueva; si aún no existe, la app sigue con la lista de respaldo)
+    try{
+      const { data: impData, error: e11 } = await sb.from('maq_implementos')
+        .select('*').order('orden').order('nombre');
+      if(!e11) imps = impData||[];
+    }catch(_){ imps=[]; }
 
     // ── Armar products y stockByLoc con el formato que usa la app ──
     const nuevosProducts = [];
@@ -792,6 +807,7 @@ async function syncData() {
     petroleoMovs = petMovs;
     maqMaquinas = maqs;
     maqOperadores = opers;
+    maqImplementos = imps;
 
     sheetsConnected = true;
     setSyncStatus('on', 'Conectado · ' + products.length + ' productos');
@@ -4437,7 +4453,7 @@ function generarPDFOrden(idOrden, modo){
     if(e.tractorista) doc.text(String(e.tractorista).substring(0,18),10+ew+1,y+3.4);
     if(e.tractor) doc.text(String(e.tractor).substring(0,12),10+ew*2+1,y+3.4);
     if(e.pistonero) doc.text(String(e.pistonero).substring(0,18),10+ew*3+1,y+3.4);
-    if(e.implemento) doc.text(String(e.implemento).substring(0,12),10+ew*4+1,y+3.4);
+    if(e.implemento) doc.text(String(e.implemento).substring(0,18),10+ew*4+1,y+3.4);
     doc.setDrawColor(220,220,220); doc.rect(10,y,W-20,6); y+=6;
   });
   y+=6;
