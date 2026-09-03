@@ -37,20 +37,20 @@ body.login-activo{overflow:hidden;position:fixed;width:100%;height:100%}
 
 /* LOGIN */
 #sl{height:100vh;height:100dvh;overflow:hidden;background:#f3eee9;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:calc(var(--safe-t) + 1rem) 1.25rem 1rem}
-.login-box{background:var(--surf);border:1px solid #e8e0d8;border-radius:18px;padding:1.1rem 1.25rem;width:100%;max-width:400px;box-shadow:0 4px 24px rgba(110,40,40,.08)}
-.login-logo{display:block;width:120px;max-width:48%;margin:0 auto .5rem}
-.login-welcome{font-size:18px;font-weight:600;color:var(--tx);text-align:center}
-.login-sub{font-size:12.5px;color:var(--tx3);text-align:center;margin-bottom:.7rem}
-.user-btn{display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:11px;border:1px solid #e8e0d8;background:var(--surf);cursor:pointer;width:100%;margin-bottom:7px;text-align:left;transition:all .15s;min-height:52px}
+.login-box{background:var(--surf);border:1px solid #e8e0d8;border-radius:18px;padding:.8rem 1rem;width:100%;max-width:400px;box-shadow:0 4px 24px rgba(110,40,40,.08)}
+.login-logo{display:block;width:96px;max-width:40%;margin:0 auto .35rem}
+.login-welcome{font-size:16px;font-weight:600;color:var(--tx);text-align:center}
+.login-sub{font-size:11.5px;color:var(--tx3);text-align:center;margin-bottom:.5rem}
+.user-btn{display:flex;align-items:center;gap:10px;padding:7px 12px;border-radius:9px;border:1px solid #e8e0d8;background:var(--surf);cursor:pointer;width:100%;margin-bottom:5px;text-align:left;transition:all .15s;min-height:42px}
 .user-btn:active,.user-btn:hover{border-color:var(--vino);background:var(--vino-glow)}
-.av{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;flex-shrink:0;color:#fff}
+.av{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11.5px;font-weight:700;flex-shrink:0;color:#fff}
 .av-m{background:var(--vino)}
 .av-b{background:#3d5a80}
 .av-d{background:#2d6b3a}
 .av-g{background:var(--gold)}
-.user-name{font-size:14px;font-weight:600;color:var(--tx)}
-.user-desc{font-size:12px;color:var(--tx3);margin-top:1px}
-.user-arrow{margin-left:auto;color:#cbbfb5;font-size:18px}
+.user-name{font-size:13.5px;font-weight:600;color:var(--tx);line-height:1.2}
+.user-desc{font-size:11px;color:var(--tx3);line-height:1.2}
+.user-arrow{margin-left:auto;color:#cbbfb5;font-size:15px}
 .pin-header{text-align:center;margin-bottom:.6rem}
 .pin-avatar{width:40px;height:40px;border-radius:50%;background:var(--vino);color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;margin:0 auto 4px}
 .pin-username{font-size:15px;font-weight:600;color:var(--tx)}
@@ -411,6 +411,13 @@ function aplicarUbicaciones(rows){
 }
 // Fila de stock en cero para todas las bodegas que existan
 function stockVacio(){ const o={}; LOCS.forEach(l=>o[l]=0); return o; }
+// Nombre corto de una bodega, para las listas y las tarjetas. Antes era un mapa
+// fijo de cuatro y las bodegas nuevas salían como "undefined".
+function abrev(l){
+  const fijas = {'Bodega Central':'Bodega','Caseta Cerrillos':'Cerrillos'};
+  if(fijas[l]) return fijas[l];
+  return String(l||'').replace(/^Fertilizantes\s+/i,'Fert. ');
+}
 const CUARTELES = {"CERRILLOS": [{"c": "C01", "ha": 3.6, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C02", "ha": 3.39, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C03", "ha": 3.44, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C04", "ha": 3.41, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C05", "ha": 3.32, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C06", "ha": 3.49, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C07", "ha": 3.0, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C08", "ha": 2.89, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C09", "ha": 2.97, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C10", "ha": 4.29, "var": "SWEET GLOBE", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C11", "ha": 3.51, "var": "SWEET GLOBE", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C12", "ha": 4.37, "var": "SWEET GLOBE", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C13", "ha": 4.0, "var": "SWEET GLOBE", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C14", "ha": 1.62, "var": "SWEET CELEBRATION", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C15", "ha": 3.11, "var": "SWEET CELEBRATION", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C16", "ha": 2.67, "var": "SWEET CELEBRATION", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C17", "ha": 3.92, "var": "COTTON CANDY", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C18", "ha": 3.52, "var": "COTTON CANDY", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C19", "ha": 3.35, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C20", "ha": 1.22, "var": "MOSCATEL", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C21", "ha": 1.03, "var": "MOSCATEL", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C22", "ha": 1.71, "var": "MOSCATEL", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C23", "ha": 1.14, "var": "MOSCATEL", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C24", "ha": 1.85, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C25", "ha": 2.42, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C26", "ha": 0.71, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C27", "ha": 1.82, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C28", "ha": 1.73, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C29", "ha": 2.32, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C30", "ha": 0.6, "var": "BLOOMFRESH", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C37", "ha": 3.53, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C38", "ha": 3.45, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C39", "ha": 2.46, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C40", "ha": 5.87, "var": "SABLE", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C41", "ha": 2.64, "var": "SABLE", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C42", "ha": 3.61, "var": "COTTON CANDY", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C43", "ha": 0.21, "var": "COTTON CANDY", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C44", "ha": 0.99, "var": "COTTON CANDY", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C45", "ha": 1.59, "var": "COTTON CANDY", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C46", "ha": 0.94, "var": "COTTON CANDY", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C50", "ha": 4.15, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C51", "ha": 2.34, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C52", "ha": 5.2, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C53", "ha": 4.68, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C54", "ha": 3.36, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C55", "ha": 4.99, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C56", "ha": 4.82, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}], "RULO": [{"c": "A01", "ha": 2.19, "var": "MOSCATEL", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "A02", "ha": 2.02, "var": "MOSCATEL", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "A07", "ha": 3.04, "var": "THOMPSON", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "A08", "ha": 3.17, "var": "THOMPSON", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "A09", "ha": 2.68, "var": "MOSCATEL", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "A10", "ha": 2.76, "var": "MOSCATEL", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "A11", "ha": 1.53, "var": "MOSCATEL", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "R01", "ha": 3.91, "var": "MOSCATEL", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "R02", "ha": 3.91, "var": "MOSCATEL", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "R03", "ha": 2.76, "var": "AUTUMN CRISP", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "R04", "ha": 2.59, "var": "AUTUMN CRISP", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "V01", "ha": 3.37, "var": "AUTUMN CRISP", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "V02", "ha": 3.43, "var": "AUTUMN CRISP", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "V03", "ha": 3.59, "var": "AUTUMN CRISP", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "V04", "ha": 3.23, "var": "AUTUMN CRISP", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "V05", "ha": 4.07, "var": "AUTUMN CRISP", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "V06", "ha": 3.93, "var": "AUTUMN CRISP", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "V07", "ha": 3.97, "var": "AUTUMN CRISP", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "V08", "ha": 3.56, "var": "AUTUMN CRISP", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}], "PAINE": [{"c": "P01", "ha": 3.27, "var": "COTTON CANDY", "dir": "PARCELA 23 Y 24 NUEVO SENDERO - PAINE"}, {"c": "P02", "ha": 5.07, "var": "COTTON CANDY", "dir": "PARCELA 23 Y 24 NUEVO SENDERO - PAINE"}, {"c": "P03", "ha": 3.51, "var": "AUTUMN CRISP", "dir": "PARCELA 23 Y 24 NUEVO SENDERO - PAINE"}, {"c": "P04", "ha": 4.19, "var": "AUTUMN CRISP", "dir": "PARCELA 23 Y 24 NUEVO SENDERO - PAINE"}, {"c": "P05", "ha": 3.17, "var": "THOMPSON", "dir": "PARCELA 23 Y 24 NUEVO SENDERO - PAINE"}, {"c": "P06", "ha": 3.12, "var": "", "dir": "PARCELA 23 Y 24 NUEVO SENDERO - PAINE"}, {"c": "P07", "ha": 1.63, "var": "AUTUMN CRISP", "dir": "PARCELA 23 Y 24 NUEVO SENDERO - PAINE"}, {"c": "P11", "ha": 3.64, "var": "AUTUMN CRISP", "dir": "PARCELA 23 Y 24 NUEVO SENDERO - PAINE"}, {"c": "P12", "ha": 3.34, "var": "SWEET GLOBE", "dir": "PARCELA 23 Y 24 NUEVO SENDERO - PAINE"}, {"c": "P13", "ha": 3.25, "var": "SWEET GLOBE", "dir": "PARCELA 23 Y 24 NUEVO SENDERO - PAINE"}, {"c": "P14", "ha": 3.17, "var": "COTTON CANDY", "dir": "PARCELA 23 Y 24 NUEVO SENDERO - PAINE"}, {"c": "P15", "ha": 4.66, "var": "COTTON CANDY", "dir": "PARCELA 23 Y 24 NUEVO SENDERO - PAINE"}, {"c": "P16", "ha": 2.4, "var": "AUTUMN CRISP", "dir": "PARCELA 23 Y 24 NUEVO SENDERO - PAINE"}, {"c": "P17", "ha": 2.44, "var": "AUTUMN CRISP", "dir": "PARCELA 23 Y 24 NUEVO SENDERO - PAINE"}, {"c": "P18", "ha": 2.41, "var": "AUTUMN CRISP", "dir": "PARCELA 23 Y 24 NUEVO SENDERO - PAINE"}], "LO VALDES": [{"c": "V01", "ha": 3.37, "var": "AUTUMN CRISP", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "V02", "ha": 3.43, "var": "AUTUMN CRISP", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "V03", "ha": 3.59, "var": "AUTUMN CRISP", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "V04", "ha": 3.23, "var": "AUTUMN CRISP", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "V05", "ha": 4.07, "var": "AUTUMN CRISP", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "V06", "ha": 3.93, "var": "AUTUMN CRISP", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "V07", "ha": 3.97, "var": "AUTUMN CRISP", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "V08", "ha": 3.56, "var": "AUTUMN CRISP", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}]};
 // Mapeo fundo de cuarteles -> ubicacion de stock
 const FUNDO_UBIC = {'CERRILLOS':'Caseta Cerrillos','RULO':'Rulo','PAINE':'Paine','LO VALDES':'Rulo'};
@@ -868,7 +875,9 @@ async function syncData() {
     console.error(e);
     if (products.length) {
       setSyncStatus('off', 'Sin conexion · usando datos ' + edadCacheTexto());
-      showToast('No se pudo sincronizar. Mostrando datos guardados.', 'info');
+      // El mensaje del error importa: sin él no hay forma de saber qué tabla falló
+      showToast('No se pudo sincronizar: ' + (e.message || e.code || 'error desconocido') +
+                '. Mostrando datos guardados.', 'err');
     } else {
       setSyncStatus('off', 'Error de conexion');
       showToast((e.message || 'No se pudo conectar con la base de datos.'), 'err');
@@ -1447,7 +1456,7 @@ const ordenesTerminadas=ordenes.filter(o=>String(o.estado||'').trim().toUpperCas
   const fams=[...new Set(products.map(p=>p.familia))].sort();
   const locsVista=esBodeguero()?['Bodega Central']:LOCS;
   return `
-  <div class="section-header"><div class="section-title">Inventario</div><div class="section-sub">${products.length} productos · ${esBodeguero()?'Bodega Central':'4 bodegas'}</div></div>
+  <div class="section-header"><div class="section-title">Inventario</div><div class="section-sub">${products.length} productos · ${esBodeguero()?'Bodega Central':locsVista.length+' bodegas'}</div></div>
 
   <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">
     <div class="card" style="margin:0;padding:14px 8px;text-align:center;box-shadow:none">
@@ -1467,10 +1476,13 @@ const ordenesTerminadas=ordenes.filter(o=>String(o.estado||'').trim().toUpperCas
     </div>
   </div>
 
-  <div style="display:grid;grid-template-columns:repeat(${locsVista.length},1fr);gap:8px;margin-bottom:16px">${locsVista.map(l=>{
+  <div style="display:flex;gap:8px;margin-bottom:16px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px">${locsVista.map(l=>{
     const t=products.reduce((s,p)=>s+stockAt(p.id,l),0);
-    const ic={'Bodega Central':'ti-building-warehouse','Caseta Cerrillos':'ti-home','Rulo':'ti-plant','Paine':'ti-plant-2'}[l]||'ti-map-pin';
-    return`<div class="card" style="margin:0;padding:12px 6px;text-align:center;box-shadow:none"><i class="ti ${ic}" style="font-size:18px;color:var(--vino)"></i><div style="font-size:10px;color:var(--tx3);margin-top:3px">${l.replace('Bodega Central','Bodega').replace('Caseta Cerrillos','Cerrillos')}</div><div style="font-size:15px;font-weight:700;margin-top:2px">${fmt(t)}</div></div>`;
+    const ic={'Bodega Central':'ti-building-warehouse','Caseta Cerrillos':'ti-home','Rulo':'ti-plant','Paine':'ti-plant-2'}[l]||'ti-package';
+    return`<div class="card" style="margin:0;padding:10px 8px;text-align:center;box-shadow:none;flex:0 0 auto;min-width:84px">
+      <i class="ti ${ic}" style="font-size:17px;color:var(--vino)"></i>
+      <div style="font-size:9.5px;color:var(--tx3);margin-top:3px;line-height:1.15;white-space:nowrap">${abrev(l)}</div>
+      <div style="font-size:15px;font-weight:700;margin-top:2px">${fmt(t)}</div></div>`;
   }).join('')}</div>
 
   <div class="search-wrap">
@@ -1501,13 +1513,12 @@ function filtStock(){
 function stockList(list){
   if(!list.length) return`<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-text">Sin resultados</div></div>`;
   const colores={'b-ok':'#3B6D11','b-low':'#a87514','b-out':'#A32D2D'};
-  const abrev={'Bodega Central':'Bodega','Caseta Cerrillos':'Cerrillos','Rulo':'Rulo','Paine':'Paine'};
   return list.map(p=>{
     const[st,bc]=statusOf(p.id);
     const col=colores[bc]||'#999';
     // Bodeguero: solo Bodega Central. Resto: las 4 ubicaciones siempre (aunque sea 0)
     const locsDet=esBodeguero()?['Bodega Central']:LOCS;
-    const detalle = locsDet.map(l=>`${abrev[l]} ${fmt(stockAt(p.id,l))}`).join(' · ');
+    const detalle = locsDet.map(l=>`${abrev(l)} ${fmt(stockAt(p.id,l))}`).join(' · ');
     return`<div class="v2item">
       <div style="min-width:0;flex:1">
         <div class="v2name">${p.nombre}${p.vencido?' <i class="ti ti-clock-hour-4" style="color:#a87514"></i>':''}</div>
