@@ -387,16 +387,30 @@ const SUPABASE_URL = 'https://cmfvnluppvqyqwpfjrbs.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_TvfWNvrb2AitDfwvW5YNww_QsR_gjD1';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// IDs de ubicacion en la base de datos (deben coincidir con la tabla ubicaciones)
-const UBIC_ID = {
-  'Bodega Central': 1,
-  'Caseta Cerrillos': 2,
-  'Rulo': 3,
-  'Paine': 4
-};
-const ID_UBIC = { 1:'Bodega Central', 2:'Caseta Cerrillos', 3:'Rulo', 4:'Paine' };
-
-const LOCS = ['Bodega Central','Caseta Cerrillos','Rulo','Paine'];
+// ══════ BODEGAS ══════
+// Se leen de la tabla ubicaciones de Supabase. Estos valores son solo el
+// respaldo para el primer arranque sin señal: en cuanto la app sincroniza,
+// la lista es la de la base. Agregar una bodega nueva es un insert allá,
+// no un cambio acá.
+let UBIC_ID = { 'Bodega Central':1, 'Caseta Cerrillos':2, 'Rulo':3, 'Paine':4 };
+let ID_UBIC = { 1:'Bodega Central', 2:'Caseta Cerrillos', 3:'Rulo', 4:'Paine' };
+let LOCS    = ['Bodega Central','Caseta Cerrillos','Rulo','Paine'];
+// Bodega Central primero, el resto en el orden en que estén en la tabla
+function aplicarUbicaciones(rows){
+  const lim = (rows||[]).map(r=>({id:Number(r.id), nombre:String(r.nombre||'').trim()}))
+    .filter(r=>r.id && r.nombre);
+  if(!lim.length) return;              // sin datos, se queda el respaldo
+  lim.sort((a,b)=>{
+    const ca = /BODEGA CENTRAL/.test(a.nombre.toUpperCase()) ? 0 : 1;
+    const cb = /BODEGA CENTRAL/.test(b.nombre.toUpperCase()) ? 0 : 1;
+    return ca!==cb ? ca-cb : a.id-b.id;
+  });
+  UBIC_ID = {}; ID_UBIC = {};
+  lim.forEach(r=>{ UBIC_ID[r.nombre] = r.id; ID_UBIC[r.id] = r.nombre; });
+  LOCS = lim.map(r=>r.nombre);
+}
+// Fila de stock en cero para todas las bodegas que existan
+function stockVacio(){ const o={}; LOCS.forEach(l=>o[l]=0); return o; }
 const CUARTELES = {"CERRILLOS": [{"c": "C01", "ha": 3.6, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C02", "ha": 3.39, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C03", "ha": 3.44, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C04", "ha": 3.41, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C05", "ha": 3.32, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C06", "ha": 3.49, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C07", "ha": 3.0, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C08", "ha": 2.89, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C09", "ha": 2.97, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C10", "ha": 4.29, "var": "SWEET GLOBE", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C11", "ha": 3.51, "var": "SWEET GLOBE", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C12", "ha": 4.37, "var": "SWEET GLOBE", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C13", "ha": 4.0, "var": "SWEET GLOBE", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C14", "ha": 1.62, "var": "SWEET CELEBRATION", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C15", "ha": 3.11, "var": "SWEET CELEBRATION", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C16", "ha": 2.67, "var": "SWEET CELEBRATION", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C17", "ha": 3.92, "var": "COTTON CANDY", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C18", "ha": 3.52, "var": "COTTON CANDY", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C19", "ha": 3.35, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C20", "ha": 1.22, "var": "MOSCATEL", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C21", "ha": 1.03, "var": "MOSCATEL", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C22", "ha": 1.71, "var": "MOSCATEL", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C23", "ha": 1.14, "var": "MOSCATEL", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C24", "ha": 1.85, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C25", "ha": 2.42, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C26", "ha": 0.71, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C27", "ha": 1.82, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C28", "ha": 1.73, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C29", "ha": 2.32, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C30", "ha": 0.6, "var": "BLOOMFRESH", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C37", "ha": 3.53, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C38", "ha": 3.45, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C39", "ha": 2.46, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C40", "ha": 5.87, "var": "SABLE", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C41", "ha": 2.64, "var": "SABLE", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C42", "ha": 3.61, "var": "COTTON CANDY", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C43", "ha": 0.21, "var": "COTTON CANDY", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C44", "ha": 0.99, "var": "COTTON CANDY", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C45", "ha": 1.59, "var": "COTTON CANDY", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C46", "ha": 0.94, "var": "COTTON CANDY", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C50", "ha": 4.15, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C51", "ha": 2.34, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C52", "ha": 5.2, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C53", "ha": 4.68, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C54", "ha": 3.36, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C55", "ha": 4.99, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C56", "ha": 4.82, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}], "RULO": [{"c": "A01", "ha": 2.19, "var": "MOSCATEL", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "A02", "ha": 2.02, "var": "MOSCATEL", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "A07", "ha": 3.04, "var": "THOMPSON", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "A08", "ha": 3.17, "var": "THOMPSON", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "A09", "ha": 2.68, "var": "MOSCATEL", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "A10", "ha": 2.76, "var": "MOSCATEL", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "A11", "ha": 1.53, "var": "MOSCATEL", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "R01", "ha": 3.91, "var": "MOSCATEL", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "R02", "ha": 3.91, "var": "MOSCATEL", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "R03", "ha": 2.76, "var": "AUTUMN CRISP", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "R04", "ha": 2.59, "var": "AUTUMN CRISP", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "V01", "ha": 3.37, "var": "AUTUMN CRISP", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "V02", "ha": 3.43, "var": "AUTUMN CRISP", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "V03", "ha": 3.59, "var": "AUTUMN CRISP", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "V04", "ha": 3.23, "var": "AUTUMN CRISP", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "V05", "ha": 4.07, "var": "AUTUMN CRISP", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "V06", "ha": 3.93, "var": "AUTUMN CRISP", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "V07", "ha": 3.97, "var": "AUTUMN CRISP", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "V08", "ha": 3.56, "var": "AUTUMN CRISP", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}], "PAINE": [{"c": "P01", "ha": 3.27, "var": "COTTON CANDY", "dir": "PARCELA 23 Y 24 NUEVO SENDERO - PAINE"}, {"c": "P02", "ha": 5.07, "var": "COTTON CANDY", "dir": "PARCELA 23 Y 24 NUEVO SENDERO - PAINE"}, {"c": "P03", "ha": 3.51, "var": "AUTUMN CRISP", "dir": "PARCELA 23 Y 24 NUEVO SENDERO - PAINE"}, {"c": "P04", "ha": 4.19, "var": "AUTUMN CRISP", "dir": "PARCELA 23 Y 24 NUEVO SENDERO - PAINE"}, {"c": "P05", "ha": 3.17, "var": "THOMPSON", "dir": "PARCELA 23 Y 24 NUEVO SENDERO - PAINE"}, {"c": "P06", "ha": 3.12, "var": "", "dir": "PARCELA 23 Y 24 NUEVO SENDERO - PAINE"}, {"c": "P07", "ha": 1.63, "var": "AUTUMN CRISP", "dir": "PARCELA 23 Y 24 NUEVO SENDERO - PAINE"}, {"c": "P11", "ha": 3.64, "var": "AUTUMN CRISP", "dir": "PARCELA 23 Y 24 NUEVO SENDERO - PAINE"}, {"c": "P12", "ha": 3.34, "var": "SWEET GLOBE", "dir": "PARCELA 23 Y 24 NUEVO SENDERO - PAINE"}, {"c": "P13", "ha": 3.25, "var": "SWEET GLOBE", "dir": "PARCELA 23 Y 24 NUEVO SENDERO - PAINE"}, {"c": "P14", "ha": 3.17, "var": "COTTON CANDY", "dir": "PARCELA 23 Y 24 NUEVO SENDERO - PAINE"}, {"c": "P15", "ha": 4.66, "var": "COTTON CANDY", "dir": "PARCELA 23 Y 24 NUEVO SENDERO - PAINE"}, {"c": "P16", "ha": 2.4, "var": "AUTUMN CRISP", "dir": "PARCELA 23 Y 24 NUEVO SENDERO - PAINE"}, {"c": "P17", "ha": 2.44, "var": "AUTUMN CRISP", "dir": "PARCELA 23 Y 24 NUEVO SENDERO - PAINE"}, {"c": "P18", "ha": 2.41, "var": "AUTUMN CRISP", "dir": "PARCELA 23 Y 24 NUEVO SENDERO - PAINE"}], "LO VALDES": [{"c": "V01", "ha": 3.37, "var": "AUTUMN CRISP", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "V02", "ha": 3.43, "var": "AUTUMN CRISP", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "V03", "ha": 3.59, "var": "AUTUMN CRISP", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "V04", "ha": 3.23, "var": "AUTUMN CRISP", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "V05", "ha": 4.07, "var": "AUTUMN CRISP", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "V06", "ha": 3.93, "var": "AUTUMN CRISP", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "V07", "ha": 3.97, "var": "AUTUMN CRISP", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "V08", "ha": 3.56, "var": "AUTUMN CRISP", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}]};
 // Mapeo fundo de cuarteles -> ubicacion de stock
 const FUNDO_UBIC = {'CERRILLOS':'Caseta Cerrillos','RULO':'Rulo','PAINE':'Paine','LO VALDES':'Rulo'};
@@ -488,8 +502,12 @@ function toggleOrdenDosif(id){
     if(ch) ch.style.transform = 'rotate(180deg)';
   }
 }
-const LOC_ICONS = {'Bodega Central':'🏭','Caseta Cerrillos':'🏠','Rulo':'🌿','Paine':'🌾'};
-const LOC_COLORS = {'Bodega Central':'#7B2D2D','Caseta Cerrillos':'#3d5a80','Rulo':'#2d6b3a','Paine':'#8a5e00'};
+// Icono y color de cada bodega. Las que no estén en la lista usan el genérico,
+// así una bodega nueva se ve bien sin tocar el archivo.
+const LOC_ICONOS_FIJOS = {'Bodega Central':'🏭','Caseta Cerrillos':'🏠','Rulo':'🌿','Paine':'🌾'};
+const LOC_COLORES_FIJOS = {'Bodega Central':'#7B2D2D','Caseta Cerrillos':'#3d5a80','Rulo':'#2d6b3a','Paine':'#8a5e00'};
+const LOC_ICONS = new Proxy({}, { get:(_,k)=> LOC_ICONOS_FIJOS[k] || '📦' });
+const LOC_COLORS = new Proxy({}, { get:(_,k)=> LOC_COLORES_FIJOS[k] || '#5f6672' });
 
 const USERS = [
   {id:'maestro',name:'Felipe',     full:'FELIPE · Maestro',  role:'maestro',    pin:'2511',av:'av-m',desc:'Acceso total'},
@@ -744,6 +762,11 @@ async function syncData() {
         .select('*').order('orden').order('nombre');
       if(!e11) imps = impData||[];
     }catch(_){ imps=[]; }
+    // Bodegas: la lista viene de la base, no del archivo
+    try{
+      const { data: uData, error: e15 } = await sb.from('ubicaciones').select('*');
+      if(!e15 && uData && uData.length) aplicarUbicaciones(uData);
+    }catch(_){}
     // Fertilizantes: sectores de riego y la lista de productos que se usan, con su ley. Si las tablas aún no
     // existen la pestaña queda vacía pero la app sigue funcionando igual.
     let fSec=[], fSecCu=[], fFue=[];
@@ -773,9 +796,7 @@ async function syncData() {
         minimo: parseFloat(row.minimo_alerta) || 5,
         precio: parseFloat(row.precio_unitario) || 0
       });
-      nuevoStockByLoc[row.id] = {
-        'Bodega Central':0,'Caseta Cerrillos':0,'Rulo':0,'Paine':0
-      };
+      nuevoStockByLoc[row.id] = stockVacio();
     });
 
     stk.forEach(s => {
@@ -1621,8 +1642,16 @@ let matCatFiltro = '';
 
 // ══════ MI STOCK (dosificador ve solo su bodega, solo lo que tiene) ══════
 function bodegaDeDosificador(){
-  const m = {rulo:'Rulo', paine:'Paine', cerrillos:'Caseta Cerrillos'};
-  return m[curUser.id] || '';
+  // Cada dosificador ve una sola bodega. Los de fertilizantes tienen la suya.
+  const m = { rulo:'Rulo', paine:'Paine', cerrillos:'Caseta Cerrillos',
+              omar:'Fertilizantes Cerrillos', gerardo:'Fertilizantes Rulo', juan:'Fertilizantes Paine' };
+  const buscado = m[curUser.id] || '';
+  if(!buscado) return '';
+  // Si en la base la bodega quedó con otro nombre, se busca sin distinguir mayúsculas
+  const exacta = LOCS.find(l=>l===buscado);
+  if(exacta) return exacta;
+  const u = buscado.toUpperCase();
+  return LOCS.find(l=>l.toUpperCase()===u) || '';
 }
 function renderMiStock(){
   const loc = bodegaDeDosificador();
