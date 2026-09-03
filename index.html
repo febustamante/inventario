@@ -1236,6 +1236,10 @@ function getTabs(role) {
     if(t.k==='petroleo') return bombonasDe(curUser).length>0;
     // Fertilizantes: gerencia y el maestro la crean; Omar, Gerardo y Juan la cierran
     if(t.k==='fert') return curUser.role==='maestro' || curUser.role==='gerencia' || esDosifFert();
+    // Omar, Gerardo y Juan NO hacen aplicaciones: su cierre es el checklist de
+    // Fertiliz. La pantalla de Aplicar pide mojamiento, tractorista y clima, que
+    // no aplican, y descontaría de la bodega del campo en vez de la suya.
+    if(t.k==='orden' && esDosifFert() && curUser.role!=='maestro' && curUser.role!=='gerencia') return false;
     return t.roles.includes(role);
   });
 }
@@ -3444,9 +3448,22 @@ function renderFertChecklist(){
             <div style="font-size:15px;font-weight:800;white-space:nowrap">${fmt(p.kgSector)}</div>
           </div>`;
         }).join('')}
-        <button class="btn-primary" onclick="cerrarFertilizante('${o.idOrden}')"
-          style="width:100%;margin-top:8px;${nMarc?'':'opacity:.5'}">
-          Cerrar orden y descontar ${nMarc?'('+nMarc+')':''}</button>
+        ${(()=>{
+          // Aviso antes de apretar: qué producto marcado no alcanza
+          const sinStock = prods.filter(p=>{
+            if(!marcas[p.nombre]) return false;
+            const pid = pidPorNombre(p.nombre);
+            return !pid || p.kgSector > stockAt(pid, bod);
+          });
+          const puede = nMarc>0 && !sinStock.length;
+          return `
+          ${sinStock.length ? `<div style="background:#fdecec;border:1px solid var(--red);border-radius:8px;padding:9px 11px;margin-bottom:8px;font-size:12px;color:var(--red)">
+            No alcanza el stock de ${sinStock.map(p=>p.nombre).join(', ')}. Pide despacho a Bodega Central o desmárcalo.</div>` : ''}
+          <button class="btn-primary" onclick="cerrarFertilizante('${o.idOrden}')"
+            ${puede?'':'disabled'}
+            style="width:100%;margin-top:0;${puede?'':'opacity:.45;cursor:not-allowed'}">
+            Cerrar orden y descontar ${nMarc?'('+nMarc+')':''}</button>`;
+        })()}
       </div>`}
     </div>`;
   }).join('')}`;
@@ -3464,7 +3481,8 @@ async function cerrarFertilizante(idOrden){
     .map(p=>({producto:p.nombre, cantidad:Number(p.kgSector)||0}));
   if(!lineas.length) return showToast('Marca al menos un producto','err');
 
-  // Stock: se descuenta de SU bodega, con la cantidad planificada
+  // Stock: se descuenta de SU bodega, con la cantidad planificada.
+  // Si falta, NO se deja cerrar: el stock no puede quedar negativo.
   const faltan = lineas.filter(l=>{
     const pid = pidPorNombre(l.producto);
     return !pid || l.cantidad > stockAt(pid, bod);
@@ -3472,9 +3490,12 @@ async function cerrarFertilizante(idOrden){
   if(faltan.length){
     const txt = faltan.map(l=>{
       const pid = pidPorNombre(l.producto);
-      return '• '+l.producto+': necesita '+fmt(l.cantidad)+', hay '+fmt(pid?stockAt(pid,bod):0);
+      if(!pid) return '• '+l.producto+': no está en el inventario';
+      return '• '+l.producto+': necesita '+fmt(l.cantidad)+', hay '+fmt(stockAt(pid,bod));
     }).join('\n');
-    if(!confirm('Falta stock en '+bod+':\n\n'+txt+'\n\n¿Cerrar de todas formas? El stock puede quedar negativo y Supabase lo va a rechazar.')) return;
+    alert('No se puede cerrar: falta stock en '+bod+'.\n\n'+txt+
+          '\n\nPide el despacho a Bodega Central, o desmarca ese producto si no lo aplicaste.');
+    return;
   }
 
   const noMarcados = (d.productos||[]).filter(p=>!marcas[p.nombre]).map(p=>p.nombre);
@@ -3685,19 +3706,37 @@ async function guardarFertilizante(){
     creadaPor: curUser ? curUser.id : ''
   };
 
-  if(!bloquearAccion('crearFert')) return;
+  if(!bloquearAccion('crearFertNueva')) return;
   poner('<span style="color:var(--tx3)">Creando la orden...</span>');
-  const ok = await postSheets({
-    action:'crearOrden', fecha: desde, numeroOrden: num,
-    campo: FUNDO_UBIC[sec.campo] || sec.campo,
-    dosificador: dosifFert(sec.campo),
-    productos: productos.map(p=>p.nombre),
-    detalle, usuario: curUser?curUser.id:'',
-    obs: `FERTILIZANTES · Sector ${sec.nombre} · semana ${sem} · ${has.toFixed(2)} ha`
-  });
-  liberarAccion('crearFert');
-  if(!ok) return poner('<span style="color:var(--red)">No se pudo crear. Revisa tu conexión y reintenta.</span>');
-  const u = USERS.find(x=>x.id===dosifFert(sec.campo));
+
+  // Se inserta acá y no por postSheets para poder mostrar el error EXACTO de
+  // Supabase en pantalla: un "no se pudo" no dice nada y el toast se va solo.
+  const campoNom = FUNDO_UBIC[sec.campo] || sec.campo;
+  const campoId  = UBIC_ID[campoNom] || null;
+  const quien    = dosifFert(sec.campo);
+  try{
+    if(!campoId) throw new Error('El campo "'+campoNom+'" no existe en la tabla ubicaciones. Bodegas cargadas: '+LOCS.join(', '));
+    if(!quien)   throw new Error('El sector es del campo "'+sec.campo+'" y no tiene dosificador de fertilizantes asignado.');
+    const { error } = await sb.from('ordenes').insert({
+      campo_id: campoId,
+      dosificador: quien,
+      productos_txt: productos.map(p=>p.nombre).join(', '),
+      estado: 'EN CURSO',
+      usuario_crea: curUser ? curUser.id : '',
+      observaciones: 'FERTILIZANTES · Sector '+sec.nombre+' · semana '+sem+' · '+has.toFixed(2)+' ha',
+      detalle
+    });
+    if(error) throw error;
+  }catch(e){
+    liberarAccion('crearFertNueva');
+    console.error('crear fertilizante:', e);
+    return poner('<span style="color:var(--red)"><b>No se pudo crear.</b><br>'+
+      (e.message||'error desconocido')+
+      (e.hint?'<br><span style="font-size:11px">'+e.hint+'</span>':'')+
+      (e.code?'<br><span style="font-size:11px;color:var(--tx3)">código '+e.code+'</span>':'')+'</span>');
+  }
+  liberarAccion('crearFertNueva');
+  const u = USERS.find(x=>x.id===quien);
   showToast('Orden de fertilizantes N°'+num+' creada');
   poner('<span style="color:var(--ok);font-weight:700">✓ Orden N°'+num+' creada. Le llega a '+(u?u.name:'—')+'.</span>');
   _fertKg = {};
