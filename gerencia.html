@@ -2192,7 +2192,7 @@ function renderVales(){
   <div class="panel" style="max-width:700px">
     <div style="font-size:14px;margin-bottom:6px"><b>${term.length}</b> órdenes terminadas en el rango</div>
     <div style="font-size:12.5px;color:#80868b;margin-bottom:16px">
-      Genera el XLS para el ERP + un CSV de verificación: una fila por producto por cuartel. N° de vale desde el que indiques, glosa FITO-N°/HER-N°, movimiento SALIDA, sucursal 1, bodega según el fundo (B1 Cerrillos · B2 Paine · B3 Rulo).
+      Genera el XLS para el ERP + un CSV de verificación: una fila por producto por cuartel. N° de vale desde el que indiques, glosa en palabras (Orden herbicidas N° · Orden fitosanitario N° · Consumo · Combustibles), movimiento SALIDA, sucursal 1, bodega según el fundo (B1 Cerrillos · B2 Paine · B3 Rulo).
     </div>
     <div class="fbox" style="max-width:220px;margin-bottom:14px">
       <label>N° de vale inicial</label>
@@ -2265,7 +2265,11 @@ function exportarVales(){
     const fundo=(d.fundo||o.campo||'').toUpperCase();
     const bodega= esConsumo ? (d.bodegaVale||'') : (d.bodegaVale || BOD_FUNDO[fundo] || '');
     const numO = d.numeroOrden||o.idOrden;
-    const glosa = esConsumo ? '' : ((d.tipo==='herbicida' ? 'HER-' : 'FITO-') + numO);
+    // Glosa del vale en palabras. Antes iba como código (HER-20 / FITO-37) y el
+    // consumo llevaba el nombre del producto, que ya viene en su propia columna.
+    const glosa = esConsumo
+      ? 'Consumo'
+      : ((d.tipo==='herbicida' ? 'Orden herbicidas ' : 'Orden fitosanitario ') + numO);
     const valeDeEstaOrden = numVale;
 
     // Reparto REAL por cuartel (misma fórmula que el PDF): real_total * ha_cuartel / ha_total
@@ -2279,7 +2283,7 @@ function exportarVales(){
       const ctaContable = prodObj ? (CTA_POR_ID[String(prodObj.id)] || '') : '';
       if(!codigo) sinCodigo.add(ra.producto);
       // Glosa del consumo = nombre del producto
-      const glosaFila = esConsumo ? ra.producto : glosa;
+      const glosaFila = glosa;
 
       // ── GENERAL DEL FUNDO: una fila por producto, cantidad completa, centro de costo general ──
       if(esGeneral){
@@ -2417,7 +2421,7 @@ function exportarVales(){
       'MOVIMIENTO':'SALIDA',
       'TIPO VALE':'',
       'SUCURSAL':1,
-      'GLOSAS':'COMBUSTIBLE',
+      'GLOSAS':'Combustibles',
       'CODIGOS':PETROLEO_CODIGO,
       'CANTIDAD':cant,
       'BODEGA':g.bod,
