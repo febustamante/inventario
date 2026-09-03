@@ -1222,6 +1222,7 @@ function doLogout() {
 
 // ── TABS ──
 function getTabs(role) {
+  if(!curUser) return [];
   const all = [
     {k:'stock',    icon:'ti-box',            label:'Stock',    roles:['maestro','bodeguero','gerencia'], render:renderStock,       prim:true},
     {k:'recibir',  icon:'ti-package-import', label:'Recepción',  roles:['maestro','bodeguero'],            render:renderRecibir,     prim:false},
@@ -1244,11 +1245,11 @@ function getTabs(role) {
     // de Paine) entra, pero los demás dosificadores no.
     if(t.k==='petroleo') return bombonasDe(curUser).length>0;
     // Fertilizantes: gerencia y el maestro la crean; Omar, Gerardo y Juan la cierran
-    if(t.k==='fert') return curUser.role==='maestro' || curUser.role==='gerencia' || esDosifFert();
+    if(t.k==='fert') return role==='maestro' || role==='gerencia' || esDosifFert();
     // Omar, Gerardo y Juan NO hacen aplicaciones: su cierre es el checklist de
     // Fertiliz. La pantalla de Aplicar pide mojamiento, tractorista y clima, que
     // no aplican, y descontaría de la bodega del campo en vez de la suya.
-    if(t.k==='orden' && esDosifFert() && curUser.role!=='maestro' && curUser.role!=='gerencia') return false;
+    if(t.k==='orden' && esDosifFert() && role!=='maestro' && role!=='gerencia') return false;
     return t.roles.includes(role);
   });
 }
@@ -1343,6 +1344,7 @@ function switchTab(i) {
 }
 
 function renderPanel(i) {
+  if(!curUser) return;
   const tabs=getTabs(curUser.role);
   if(!tabs[i]) return;
   const el=document.getElementById('p-'+i);
@@ -1394,11 +1396,16 @@ function onTipoOrdenChange(){
 }
 function marcarNumEditado(){ const e=document.getElementById('ord-num'); if(e) e.dataset.editado='1'; }
 
-function refresh(){ 
+function refresh(){
+  // Sin usuario dentro no hay nada que pintar. Pasa cuando la sincronización
+  // corre en la pantalla de entrada o justo después de salir: antes reventaba
+  // con "Cannot read properties of null (reading 'role')" y el error se veía
+  // como si no hubiera conexión.
+  if(!curUser) return;
   renderPanel(curTab);
   // Actualizar el numerito rojo de órdenes pendientes del dosificador
   const b=document.getElementById('badge-ordenes');
-  if(b && curUser && curUser.role==='dosificador'){
+  if(b && curUser.role==='dosificador'){
     const n=ordenes.filter(o=>String(o.dosificador).toLowerCase()===String(curUser.id).toLowerCase()&&['EN CURSO','INICIADA'].includes(String(o.estado).toUpperCase())).length;
     b.textContent=n; b.style.display=n?'block':'none';
   }
@@ -3285,7 +3292,7 @@ function fertSemana(){ return parseInt(document.getElementById('fe-sem')?.value)
 
 function renderFertilizante(){
   // Omar, Gerardo y Juan no crean órdenes: las cierran con checklist
-  if(esDosifFert() && curUser.role!=='maestro' && curUser.role!=='gerencia') return renderFertChecklist();
+  if(esDosifFert() && (curUser||{}).role!=='maestro' && (curUser||{}).role!=='gerencia') return renderFertChecklist();
   const hay = (fertSectores||[]).length;
   const porCampo = {};
   (fertSectores||[]).filter(s=>s.activo!==false).forEach(s=>{
