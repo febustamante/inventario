@@ -304,6 +304,7 @@ body.login-activo{overflow:hidden;position:fixed;width:100%;height:100%}
       <div class="login-welcome">Bienvenido</div>
       <div class="login-sub">Selecciona tu usuario para continuar</div>
       <div id="user-list"></div>
+      <div style="text-align:center;font-size:10px;color:#c9bfb5;margin-top:6px" id="app-version"></div>
     </div>
 
     <div class="login-paso" id="paso-pin" style="display:none">
@@ -413,6 +414,10 @@ function aplicarUbicaciones(rows){
 function stockVacio(){ const o={}; LOCS.forEach(l=>o[l]=0); return o; }
 // Nombre corto de una bodega, para las listas y las tarjetas. Antes era un mapa
 // fijo de cuatro y las bodegas nuevas salían como "undefined".
+// Versión visible en la pantalla de entrada. Sirve para saber de un vistazo si
+// el teléfono tiene el archivo nuevo o quedó con uno viejo en caché.
+const APP_VERSION = 'v15 · 03-09-2026';
+
 function abrev(l){
   const fijas = {'Bodega Central':'Bodega','Caseta Cerrillos':'Cerrillos'};
   if(fijas[l]) return fijas[l];
@@ -1101,6 +1106,7 @@ function inicialesDe(u){
 
 function initLogin() {
   document.body.classList.add('login-activo');
+  const _v=document.getElementById('app-version'); if(_v) _v.textContent=APP_VERSION;
   document.getElementById('user-list').innerHTML = USERS.map(u=>`
     <button class="user-btn" onclick="selectUser('${u.id}')" id="ub-${u.id}">
       <div class="av ${u.av}">${inicialesDe(u)}</div>
@@ -4986,6 +4992,8 @@ function cerrarModalCompra(){
 
 // ── EXPORTAR RESPALDO COMPLETO (Stock + Movimientos + Órdenes) ──
 function exportarRespaldo(){
+  // Solo el maestro: el respaldo lleva TODO — precios, stock, movimientos y órdenes
+  if(!curUser || curUser.role!=='maestro'){ showToast('El respaldo Excel es solo para el maestro','err'); return; }
   if(typeof XLSX === 'undefined'){ showToast('La librería de Excel no cargó. Recarga la página.','err'); return; }
   try{
     showToast('Generando respaldo...');
@@ -5945,8 +5953,8 @@ function renderGerencia(){
   return`
   <div class="section-header"><div class="section-title">Dashboard Gerencial</div><div class="section-sub">Vista ejecutiva · ${hoy()}</div></div>
 
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
-    <button onclick="exportarRespaldo()" style="padding:11px;border:1px solid #1d6b3a;border-radius:10px;background:#1d6b3a;color:#fff;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-download"></i> Respaldo Excel</button>
+  <div style="display:grid;grid-template-columns:${curUser.role==='maestro'?'1fr 1fr':'1fr'};gap:10px;margin-bottom:14px">
+    ${curUser.role==='maestro' ? `<button onclick="exportarRespaldo()" style="padding:11px;border:1px solid #1d6b3a;border-radius:10px;background:#1d6b3a;color:#fff;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-download"></i> Respaldo Excel</button>` : ''}
     <a href="gerencia.html" style="padding:11px;border:1px solid var(--vino);border-radius:10px;background:var(--vino);color:#fff;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:6px;text-decoration:none"><i class="ti ti-device-desktop"></i> Panel escritorio</a>
   </div>
 
