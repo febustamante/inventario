@@ -156,7 +156,20 @@
 const SUPABASE_URL='https://cmfvnluppvqyqwpfjrbs.supabase.co';
 const SUPABASE_KEY='sb_publishable_TvfWNvrb2AitDfwvW5YNww_QsR_gjD1';
 const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
-const ID_UBIC={1:'Bodega Central',2:'Caseta Cerrillos',3:'Rulo',4:'Paine'};
+// Las bodegas se leen de la tabla ubicaciones. Esto es el respaldo.
+let ID_UBIC={1:'Bodega Central',2:'Caseta Cerrillos',3:'Rulo',4:'Paine'};
+let LOCS_G=['Bodega Central','Caseta Cerrillos','Rulo','Paine'];
+function aplicarUbicacionesG(rows){
+  const lim=(rows||[]).map(r=>({id:Number(r.id),nombre:String(r.nombre||'').trim()})).filter(r=>r.id&&r.nombre);
+  if(!lim.length) return;
+  lim.sort((a,b)=>{
+    const ca=/BODEGA CENTRAL/.test(a.nombre.toUpperCase())?0:1, cb=/BODEGA CENTRAL/.test(b.nombre.toUpperCase())?0:1;
+    return ca!==cb?ca-cb:a.id-b.id;
+  });
+  ID_UBIC={}; lim.forEach(r=>{ID_UBIC[r.id]=r.nombre;});
+  LOCS_G=lim.map(r=>r.nombre);
+}
+function stockVacioG(){ const o={}; LOCS_G.forEach(l=>o[l]=0); return o; }
 const PINS={'2511':'Felipe','5555':'Gerencia','3232':'Yanet','7777':'Gerencia'};
 const ROL_USER={'2511':'admin','5555':'admin','3232':'compras','7777':'consulta'}; // compras=solo Compras; consulta=solo Órdenes/Por aplicar/Real aplicado
 let rolActual='admin';
@@ -193,6 +206,11 @@ function entrar(){
 async function cargar(){
   document.getElementById('contenido').innerHTML='<div class="loading">Cargando datos...</div>';
   try{
+    // Las bodegas primero: el resto se arma con esa lista
+    try{
+      const {data:ubis,error:eU}=await sb.from('ubicaciones').select('*');
+      if(!eU && ubis && ubis.length) aplicarUbicacionesG(ubis);
+    }catch(_){}
     const [{data:prods},{data:stk},{data:movs},{data:ords}]=await Promise.all([
       sb.from('productos').select('*').order('nombre'),
       sb.from('stock').select('*'),
@@ -201,7 +219,7 @@ async function cargar(){
     ]);
     products=(prods||[]).map(r=>({id:r.id,nombre:String(r.nombre||'').trim(),familia:String(r.familia||'SIN FAMILIA').trim(),codigo:String(r.codigo||'').trim(),ingActivo:String(r.ingrediente_activo||'').trim(),minimo:parseFloat(r.minimo_alerta)||5,precio:parseFloat(r.precio_unitario)||0}));
     stockByLoc={};
-    products.forEach(p=>stockByLoc[p.id]={'Bodega Central':0,'Caseta Cerrillos':0,'Rulo':0,'Paine':0});
+    products.forEach(p=>stockByLoc[p.id]=stockVacioG());
     (stk||[]).forEach(s=>{const l=ID_UBIC[s.ubicacion_id];if(stockByLoc[s.producto_id]&&l)stockByLoc[s.producto_id][l]=parseFloat(s.cantidad)||0;});
     movimientos=(movs||[]).map(m=>{const pr=(prods||[]).find(p=>p.id===m.producto_id);return{tipo:String(m.tipo||'').toLowerCase(),producto:pr?String(pr.nombre).trim():'',cantidad:parseFloat(m.cantidad)||0,origen:ID_UBIC[m.origen_id]||'',destino:ID_UBIC[m.destino_id]||'',usuario:m.usuario||'',ordenNum:m.orden_id||'',obs:m.observaciones||'',fechaRaw:m.fecha,fecha:m.fecha?new Date(m.fecha).toLocaleDateString('es-CL'):''};});
     ordenes=(ords||[]).map(o=>({idOrden:o.id,fecha:o.creado_en?new Date(o.creado_en).toLocaleDateString('es-CL'):'',campo:ID_UBIC[o.campo_id]||'',dosificador:o.dosificador||'',estado:String(o.estado||'EN CURSO').toUpperCase(),detalle:o.detalle||{}}));
@@ -1142,7 +1160,12 @@ function vistaMaq(D){
 
 // ══════ CREAR NUEVA ORDEN (guarda en Supabase, llega al dosificador) ══════
 const CUARTELES = {"CERRILLOS": [{"c": "C01", "ha": 3.6, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C02", "ha": 3.39, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C03", "ha": 3.44, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C04", "ha": 3.41, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C05", "ha": 3.32, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C06", "ha": 3.49, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C07", "ha": 3.0, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C08", "ha": 2.89, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C09", "ha": 2.97, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C10", "ha": 4.29, "var": "SWEET GLOBE", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C11", "ha": 3.51, "var": "SWEET GLOBE", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C12", "ha": 4.37, "var": "SWEET GLOBE", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C13", "ha": 4.0, "var": "SWEET GLOBE", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C14", "ha": 1.62, "var": "SWEET CELEBRATION", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C15", "ha": 3.11, "var": "SWEET CELEBRATION", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C16", "ha": 2.67, "var": "SWEET CELEBRATION", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C17", "ha": 3.92, "var": "COTTON CANDY", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C18", "ha": 3.52, "var": "COTTON CANDY", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C19", "ha": 3.35, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C20", "ha": 1.22, "var": "MOSCATEL", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C21", "ha": 1.03, "var": "MOSCATEL", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C22", "ha": 1.71, "var": "MOSCATEL", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C23", "ha": 1.14, "var": "MOSCATEL", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C24", "ha": 1.85, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C25", "ha": 2.42, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C26", "ha": 0.71, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C27", "ha": 1.82, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C28", "ha": 1.73, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C29", "ha": 2.32, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C30", "ha": 0.6, "var": "BLOOMFRESH", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C37", "ha": 3.53, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C38", "ha": 3.45, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C39", "ha": 2.46, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C40", "ha": 5.87, "var": "SABLE", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C41", "ha": 2.64, "var": "SABLE", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C42", "ha": 3.61, "var": "COTTON CANDY", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C43", "ha": 0.21, "var": "COTTON CANDY", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C44", "ha": 0.99, "var": "COTTON CANDY", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C45", "ha": 1.59, "var": "COTTON CANDY", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C46", "ha": 0.94, "var": "COTTON CANDY", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C50", "ha": 4.15, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C51", "ha": 2.34, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C52", "ha": 5.2, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C53", "ha": 4.68, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C54", "ha": 3.36, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C55", "ha": 4.99, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}, {"c": "C56", "ha": 4.82, "var": "AUTUMN CRISP", "dir": "FUNDO EL CERRILLO S/N - BUIN"}], "RULO": [{"c": "A01", "ha": 2.19, "var": "MOSCATEL", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "A02", "ha": 2.02, "var": "MOSCATEL", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "A07", "ha": 3.04, "var": "THOMPSON", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "A08", "ha": 3.17, "var": "THOMPSON", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "A09", "ha": 2.68, "var": "MOSCATEL", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "A10", "ha": 2.76, "var": "MOSCATEL", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "A11", "ha": 1.53, "var": "MOSCATEL", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "R01", "ha": 3.91, "var": "MOSCATEL", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "R02", "ha": 3.91, "var": "MOSCATEL", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "R03", "ha": 2.76, "var": "AUTUMN CRISP", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "R04", "ha": 2.59, "var": "AUTUMN CRISP", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "V01", "ha": 3.37, "var": "AUTUMN CRISP", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "V02", "ha": 3.43, "var": "AUTUMN CRISP", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "V03", "ha": 3.59, "var": "AUTUMN CRISP", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "V04", "ha": 3.23, "var": "AUTUMN CRISP", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "V05", "ha": 4.07, "var": "AUTUMN CRISP", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "V06", "ha": 3.93, "var": "AUTUMN CRISP", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "V07", "ha": 3.97, "var": "AUTUMN CRISP", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}, {"c": "V08", "ha": 3.56, "var": "AUTUMN CRISP", "dir": "CAMINO PADRE HURTADO 5758 - BUIN"}], "PAINE": [{"c": "P01", "ha": 3.27, "var": "COTTON CANDY", "dir": "PARCELA 23 Y 24 NUEVO SENDERO - PAINE"}, {"c": "P02", "ha": 5.07, "var": "COTTON CANDY", "dir": "PARCELA 23 Y 24 NUEVO SENDERO - PAINE"}, {"c": "P03", "ha": 3.51, "var": "AUTUMN CRISP", "dir": "PARCELA 23 Y 24 NUEVO SENDERO - PAINE"}, {"c": "P04", "ha": 4.19, "var": "AUTUMN CRISP", "dir": "PARCELA 23 Y 24 NUEVO SENDERO - PAINE"}, {"c": "P05", "ha": 3.17, "var": "THOMPSON", "dir": "PARCELA 23 Y 24 NUEVO SENDERO - PAINE"}, {"c": "P06", "ha": 3.12, "var": "", "dir": "PARCELA 23 Y 24 NUEVO SENDERO - PAINE"}, {"c": "P07", "ha": 1.63, "var": "AUTUMN CRISP", "dir": "PARCELA 23 Y 24 NUEVO SENDERO - PAINE"}, {"c": "P11", "ha": 3.64, "var": "AUTUMN CRISP", "dir": "PARCELA 23 Y 24 NUEVO SENDERO - PAINE"}, {"c": "P12", "ha": 3.34, "var": "SWEET GLOBE", "dir": "PARCELA 23 Y 24 NUEVO SENDERO - PAINE"}, {"c": "P13", "ha": 3.25, "var": "SWEET GLOBE", "dir": "PARCELA 23 Y 24 NUEVO SENDERO - PAINE"}, {"c": "P14", "ha": 3.17, "var": "COTTON CANDY", "dir": "PARCELA 23 Y 24 NUEVO SENDERO - PAINE"}, {"c": "P15", "ha": 4.66, "var": "COTTON CANDY", "dir": "PARCELA 23 Y 24 NUEVO SENDERO - PAINE"}, {"c": "P16", "ha": 2.4, "var": "AUTUMN CRISP", "dir": "PARCELA 23 Y 24 NUEVO SENDERO - PAINE"}, {"c": "P17", "ha": 2.44, "var": "AUTUMN CRISP", "dir": "PARCELA 23 Y 24 NUEVO SENDERO - PAINE"}, {"c": "P18", "ha": 2.41, "var": "AUTUMN CRISP", "dir": "PARCELA 23 Y 24 NUEVO SENDERO - PAINE"}]};
-const UBIC_ID_N={'Bodega Central':1,'Caseta Cerrillos':2,'Rulo':3,'Paine':4};
+// Se arma al revés desde ID_UBIC, que viene de la tabla
+function ubicIdN(nombre){
+  const n=String(nombre||'').toUpperCase();
+  for(const id in ID_UBIC){ if(String(ID_UBIC[id]).toUpperCase()===n) return Number(id); }
+  return null;
+}
 const FUNDO_UBIC_N={CERRILLOS:'Caseta Cerrillos',RULO:'Rulo',PAINE:'Paine','LO VALDES':'Rulo'};
 let nProds=[], nSeq=0;
 
@@ -1323,7 +1346,7 @@ async function guardarNueva(){
   if(btnCrear){ btnCrear.disabled=true; btnCrear.style.opacity='0.5'; btnCrear.style.pointerEvents='none'; }
   try{
     const { error } = await sb.from('ordenes').insert({
-      campo_id: UBIC_ID_N[FUNDO_UBIC_N[fundo]]||null,
+      campo_id: ubicIdN(FUNDO_UBIC_N[fundo]),
       dosificador: (fundo||'').toLowerCase(),
       productos_txt: detalleProds.map(p=>p.nombre).join(', '),
       estado:'EN CURSO',
@@ -2192,7 +2215,7 @@ function renderVales(){
   <div class="panel" style="max-width:700px">
     <div style="font-size:14px;margin-bottom:6px"><b>${term.length}</b> órdenes terminadas en el rango</div>
     <div style="font-size:12.5px;color:#80868b;margin-bottom:16px">
-      Genera el XLS para el ERP + un CSV de verificación: una fila por producto por cuartel. N° de vale desde el que indiques, glosa en palabras (Orden herbicidas N° · Orden fitosanitario N° · Consumo · Combustibles), movimiento SALIDA, sucursal 1, bodega según el fundo (B1 Cerrillos · B2 Paine · B3 Rulo).
+      Genera el XLS para el ERP + un CSV de verificación: una fila por producto por cuartel. N° de vale desde el que indiques, glosa en palabras (Orden herbicidas N° · Orden fitosanitario N° · Consumo · Combustibles), movimiento SALIDA, sucursal 1, bodega según el fundo (B1 Cerrillos · B2 Paine · B3 Rulo). Los consumos del mismo día van en un solo vale, y el petróleo también: una fila por bombona dentro del mismo número.
     </div>
     <div class="fbox" style="max-width:220px;margin-bottom:14px">
       <label>N° de vale inicial</label>
@@ -2247,6 +2270,12 @@ function exportarVales(){
     return (d.consumoDestino==='cuartel' && d.consumoCuartel) ? d.consumoCuartel : '';
   };
 
+  // Los consumos del MISMO DÍA salen en UN solo vale, aunque toquen bodegas y
+  // centros de costo distintos: el ERP reconoce la bodega y el centro de costo
+  // línea por línea. Las órdenes de aplicación siguen con un vale cada una,
+  // porque cada una es un documento con su propio número de orden.
+  const valeConsumoDia = {};   // AAAA-MM-DD -> número de vale ya asignado
+
   term.forEach(o=>{
     const d=o.detalle||{};
     const ia=d.infoAplicacion||{};
@@ -2270,7 +2299,11 @@ function exportarVales(){
     const glosa = esConsumo
       ? 'Consumo'
       : ((d.tipo==='herbicida' ? 'Orden herbicidas ' : 'Orden fitosanitario ') + numO);
-    const valeDeEstaOrden = numVale;
+    // Día del consumo, para que todos los del mismo día compartan vale
+    const diaCons = esConsumo ? String(fechaISO||'').slice(0,10) : '';
+    const valeDeEstaOrden = (esConsumo && valeConsumoDia[diaCons]!==undefined)
+      ? valeConsumoDia[diaCons]
+      : numVale;
 
     // Reparto REAL por cuartel (misma fórmula que el PDF): real_total * ha_cuartel / ha_total
     const cuartsF = (d.cuartelesFinales||d.cuarteles||[]);
@@ -2380,7 +2413,14 @@ function exportarVales(){
         huboFila=true;
       });
     });
-    if(huboFila) numVale++;
+    if(huboFila){
+      if(esConsumo){
+        // El primer consumo del día se queda con el número; los siguientes lo comparten
+        if(valeConsumoDia[diaCons]===undefined){ valeConsumoDia[diaCons] = numVale; numVale++; }
+      } else {
+        numVale++;
+      }
+    }
   });
 
   // ── PETRÓLEO: UNA sola fila por día × bodega, con la CANTIDAD ya sumada
@@ -2414,12 +2454,19 @@ function exportarVales(){
     porDiaBodega[key].total += Number(mv.litros)||0;
   });
 
-  Object.keys(porDiaBodega).sort().forEach(key=>{
-    const g = porDiaBodega[key];
-    const cant = +g.total.toFixed(2);
-    if(cant<=0) return;
-    const [y,m,d] = g.dia.split('-');
+  // UN vale por día, con una fila por bombona: si el mismo día cargaron en
+  // Cerrillos y en Rulo, las dos filas van en el mismo vale, cada una con su
+  // bodega. El ERP descuenta por línea.
+  const diasPet = [...new Set(Object.values(porDiaBodega).map(g=>g.dia))].sort();
+  diasPet.forEach(dia=>{
+    const grupos = Object.values(porDiaBodega)
+      .filter(g=>g.dia===dia && +g.total.toFixed(2)>0)
+      .sort((a,b)=>String(a.bod).localeCompare(String(b.bod)));
+    if(!grupos.length) return;
+    const [y,m,d] = dia.split('-');
     const fechaVale = d+'-'+m+'-'+y;
+    grupos.forEach(g=>{
+    const cant = +g.total.toFixed(2);
     filas.push({
       'NUMERO VALE':numVale,
       'FECHA VALE':fechaVale,
@@ -2439,9 +2486,10 @@ function exportarVales(){
       'CTA CONTABLE':PETROLEO_CTA_CONTABLE,
       'CENTRO COSTO':PETROLEO_CCOSTO,
       'BODEGA TRASPASO':'',
-      'PRODUCTO (verificación)':'PETRÓLEO/DIÉSEL'
+      'PRODUCTO (verificación)':'PETRÓLEO/DIÉSEL · '+g.bomb
     });
-    numVale++;
+    });
+    numVale++;   // el número avanza una vez por DÍA, no por bombona
   });
 
   if(!filas.length){ alert('No hay filas para exportar en este rango (¿las órdenes tienen real aplicado y cuarteles?)'); return; }
@@ -2761,7 +2809,7 @@ function renderReporteMensual(){
       <div>
         <label style="font-size:11px;color:#80868b;font-weight:700;text-transform:uppercase;display:block;margin-bottom:4px">Campo</label>
         <select onchange="ccSetCampo(this.value)" style="padding:9px 11px;border:1px solid #dadce0;border-radius:9px;font-size:13.5px;min-width:190px">
-          ${CC_CAMPOS.map(c=>`<option value="${c}" ${c===ccCampo?'selected':''}>${c}</option>`).join('')}
+          ${ccCampos().map(c=>`<option value="${c}" ${c===ccCampo?'selected':''}>${c}</option>`).join('')}
         </select>
       </div>
       <div>
@@ -2802,7 +2850,8 @@ function descargarReporteMensual(){
 // El stock que guarda el sistema es el de HOY: la fecha que se escribe es la del
 // cierre que se está certificando, no reconstruye el stock de una fecha pasada.
 let ccFecha = null, ccCampo = 'Caseta Cerrillos';
-const CC_CAMPOS = ['Bodega Central','Caseta Cerrillos','Rulo','Paine'];
+// Los campos del comprobante son todas las bodegas que existan
+function ccCampos(){ return LOCS_G.slice(); }
 // Qué bombona de petróleo le corresponde a cada campo (las que tienen)
 const CC_BOMBONA = { 'Caseta Cerrillos':'CERRILLOS', 'Paine':'PAINE', 'Rulo':'RULO' };
 
