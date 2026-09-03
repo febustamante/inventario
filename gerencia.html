@@ -2388,10 +2388,10 @@ function exportarVales(){
   const PETROLEO_CODIGO = 'PET-1';
   const PETROLEO_CTA_CONTABLE = '4103101';
   const PETROLEO_CCOSTO = '10022-1'; // Maquinaria — fijo para Cerrillos/Rulo/Paine (no varía por fundo como Generales)
-  // La bodega del vale de petróleo la define QUIÉN lo crea (no el vehículo/tractorista).
-  // Por ahora solo Freddy (bodeg) y el maestro registran, y ambos caen en Cerrillos (B1).
-  // Cuando se sume un bodeguero en otro fundo (ej. Hector → B2), agrega su usuario aquí.
-  const PETROLEO_BODEGA_POR_USUARIO = { 'BODEG':'B1', 'MAESTRO':'B1' };
+  // La bodega del vale de petróleo la define la BOMBONA de la que se sacó, que es
+  // donde está el estanque: Cerrillos B1, Paine B2, Rulo B3. Antes se deducía de
+  // quién registraba el vale y todo caía en B1, con lo que Rulo y Paine se sumaban
+  // a Cerrillos en la misma fila.
   const PETROLEO_BODEGA_DEFAULT = 'B1';
 
   const valesPet = (petroleoMovs||[]).filter(mv=>{
@@ -2400,12 +2400,17 @@ function exportarVales(){
     return dia && dia>=vDesde && dia<=vHasta;
   });
 
+  // Una fila por día Y por bombona: si el mismo día cargaron en Cerrillos y en
+  // Rulo, salen dos filas, cada una con su bodega.
   const porDiaBodega = {};
+  const sinBodegaBomb = new Set();
   valesPet.forEach(mv=>{
     const dia = String(mv.fecha).slice(0,10);
-    const bod = PETROLEO_BODEGA_POR_USUARIO[String(mv.usuario||'').trim().toUpperCase()] || PETROLEO_BODEGA_DEFAULT;
-    const key = dia+'|'+bod;
-    if(!porDiaBodega[key]) porDiaBodega[key] = { dia, bod, total:0 };
+    const bomb = bombonaDeG(mv);
+    const bod = BODEGA_BOMBONA[bomb] || PETROLEO_BODEGA_DEFAULT;
+    if(!BODEGA_BOMBONA[bomb]) sinBodegaBomb.add(bomb);
+    const key = dia+'|'+bomb;
+    if(!porDiaBodega[key]) porDiaBodega[key] = { dia, bomb, bod, total:0 };
     porDiaBodega[key].total += Number(mv.litros)||0;
   });
 
@@ -2454,6 +2459,7 @@ function exportarVales(){
   let aviso='Excel generado con '+filas.length+' filas.\n\nRevisa la última columna (nombre del producto) para verificar que está todo. Luego copia las columnas A a R (sin la de verificación) y pégalas en el importador oficial (clave 2026).';
   if(sinCodigo.size) aviso+='\n\n⚠️ Productos SIN código:\n'+[...sinCodigo].join('\n');
   if(sinCcosto.size) aviso+='\n\n⚠️ Cuarteles SIN centro de costo:\n'+[...sinCcosto].join(', ');
+  if(sinBodegaBomb.size) aviso+='\n\n⚠️ Bombonas sin bodega asignada (quedaron en '+PETROLEO_BODEGA_DEFAULT+'):\n'+[...sinBodegaBomb].join(', ');
   alert(aviso);
 }
 
@@ -2464,6 +2470,11 @@ let rmMes=null;
 const PRECIO_PETROLEO_L = 1200;
 // Bombonas de petróleo. Cada una lleva su saldo aparte (columna 'bombona' en petroleo_movs).
 const BOMBONAS_G = ['CERRILLOS','PAINE','RULO'];
+// De qué bombona salió un vale. Los movimientos antiguos, de cuando había una
+// sola bombona, no traen el campo y son de Cerrillos.
+function bombonaDeG(mv){ return String((mv&&mv.bombona)||'CERRILLOS').toUpperCase(); }
+// Bodega del ERP de cada bombona: es la del campo donde está el estanque.
+const BODEGA_BOMBONA = { 'CERRILLOS':'B1', 'PAINE':'B2', 'RULO':'B3' };
 // El precio de cada material sale de materiales.precio_unitario en Supabase
 // (columna agregada con precios_materiales.sql). Para cambiar un precio se
 // edita en Supabase, no acá.
@@ -2592,7 +2603,6 @@ function datosReporteMensual(mesStr){
 
   // Petróleo: gasto del mes + saldo actual, abierto por bombona.
   // Lo registrado antes de separar las bombonas no trae el dato y era todo de Cerrillos.
-  const bombonaDeG = mv => String((mv&&mv.bombona)||'CERRILLOS').toUpperCase();
   const petMovsMes = (petroleoMovs||[]).filter(mv=>mv.tipo==='salida' && mv.estado!=='ANULADO' && String(mv.fecha||'').slice(0,7)===mesStr);
   const litrosMes = petMovsMes.reduce((s,mv)=>s+(Number(mv.litros)||0),0);
   const diasConRetiroMes = new Set(petMovsMes.map(mv=>String(mv.fecha).slice(0,10))).size;
