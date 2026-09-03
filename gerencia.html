@@ -2241,6 +2241,12 @@ function exportarVales(){
   let numVale = parseInt(document.getElementById('v-vale').value)||1026;
   // Lo Valdés retira de la misma bodega del Rulo (B3); solo cambia el centro de costo
   const BOD_FUNDO = { 'CERRILLOS':'B1', 'PAINE':'B2', 'RULO':'B3', 'LO VALDES':'B3' };
+  // ⚠ PENDIENTE: los códigos de bodega del ERP de las tres bodegas nuevas.
+  // Mientras estén en blanco, las filas de fertilizante salen sin bodega y la
+  // exportación te avisa al final en vez de mandarlas a una bodega equivocada.
+  const BOD_FERT = { 'FERTILIZANTES CERRILLOS':'', 'FERTILIZANTES RULO':'', 'FERTILIZANTES PAINE':'' };
+  // ⚠ PENDIENTE: la cuenta contable de los fertilizantes.
+  const CTA_FERTILIZANTES = '';
   // Centro de costo general de cada fundo (respaldo si la orden no lo trae guardado)
   const CCOSTO_GENERAL = { 'CERRILLOS':'10020-1', 'PAINE':'10019-1', 'RULO':'10017-1', 'LO VALDES':'10018-1' };
   // Centro de costo por cuartel (código del ERP)
@@ -2292,13 +2298,20 @@ function exportarVales(){
     // va una sola fila por producto al centro de costo general.
     const esGeneral = (!esConsumo && d.destino==='general');
     const fundo=(d.fundo||o.campo||'').toUpperCase();
-    const bodega= esConsumo ? (d.bodegaVale||'') : (d.bodegaVale || BOD_FUNDO[fundo] || '');
+    // Un fertilizante sale de la bodega del dosificador que lo cerró, no del fundo
+    const esFert = (d.tipo==='fertilizante');
+    const bodegaFert = esFert ? (BOD_FERT[String((d.infoAplicacion||{}).bodega||'').toUpperCase()] || '') : '';
+    const bodega= esConsumo ? (d.bodegaVale||'')
+                : esFert    ? (bodegaFert || d.bodegaVale || '')
+                :             (d.bodegaVale || BOD_FUNDO[fundo] || '');
     const numO = d.numeroOrden||o.idOrden;
     // Glosa del vale en palabras. Antes iba como código (HER-20 / FITO-37) y el
     // consumo llevaba el nombre del producto, que ya viene en su propia columna.
     const glosa = esConsumo
       ? 'Consumo'
-      : ((d.tipo==='herbicida' ? 'Orden herbicidas ' : 'Orden fitosanitario ') + numO);
+      : ((d.tipo==='herbicida'    ? 'Orden herbicidas '
+        : d.tipo==='fertilizante' ? 'Orden fertilizantes '
+        :                           'Orden fitosanitario ') + numO);
     // Día del consumo, para que todos los del mismo día compartan vale
     const diaCons = esConsumo ? String(fechaISO||'').slice(0,10) : '';
     const valeDeEstaOrden = (esConsumo && valeConsumoDia[diaCons]!==undefined)
@@ -2313,7 +2326,9 @@ function exportarVales(){
     ia.realAplicado.forEach(ra=>{
       const prodObj = products.find(x=>x.nombre===ra.producto);
       const codigo = prodObj?.codigo || '';
-      const ctaContable = prodObj ? (CTA_POR_ID[String(prodObj.id)] || '') : '';
+      const ctaContable = (d.tipo==='fertilizante')
+        ? (CTA_FERTILIZANTES || (prodObj ? (CTA_POR_ID[String(prodObj.id)] || '') : ''))
+        : (prodObj ? (CTA_POR_ID[String(prodObj.id)] || '') : '');
       if(!codigo) sinCodigo.add(ra.producto);
       // Glosa del consumo = nombre del producto
       const glosaFila = glosa;
@@ -2508,6 +2523,10 @@ function exportarVales(){
   if(sinCodigo.size) aviso+='\n\n⚠️ Productos SIN código:\n'+[...sinCodigo].join('\n');
   if(sinCcosto.size) aviso+='\n\n⚠️ Cuarteles SIN centro de costo:\n'+[...sinCcosto].join(', ');
   if(sinBodegaBomb.size) aviso+='\n\n⚠️ Bombonas sin bodega asignada (quedaron en '+PETROLEO_BODEGA_DEFAULT+'):\n'+[...sinBodegaBomb].join(', ');
+  const fertSinBodega = filas.filter(f=>String(f['GLOSAS']||'').indexOf('Orden fertilizantes')===0 && !f['BODEGA']).length;
+  if(fertSinBodega) aviso+='\n\n\u26a0\ufe0f '+fertSinBodega+' fila(s) de fertilizante SIN bodega: falta el codigo del ERP de las bodegas nuevas. No las subas asi.';
+  const fertSinCta = filas.filter(f=>String(f['GLOSAS']||'').indexOf('Orden fertilizantes')===0 && !f['CTA CONTABLE']).length;
+  if(fertSinCta) aviso+='\n\n\u26a0\ufe0f '+fertSinCta+' fila(s) de fertilizante SIN cuenta contable.';
   alert(aviso);
 }
 
@@ -2558,12 +2577,16 @@ function datosReporteMensual(mesStr){
   // todo lo demás (incluidas las que quedaron sin tipo) es fitosanitario.
   const tipoOrden = o => {
     const t = String(o.detalle?.tipo||'').toLowerCase();
-    return t==='consumo' ? 'consumo' : (t==='herbicida' ? 'herbicida' : 'fito');
+    if(t==='consumo') return 'consumo';
+    if(t==='herbicida') return 'herbicida';
+    if(t==='fertilizante') return 'fertilizante';
+    return 'fito';
   };
   const ordenesAplicacion = ordenesDelMes.filter(o=>tipoOrden(o)!=='consumo');
   const ordenesConsumoMes  = ordenesDelMes.filter(o=>tipoOrden(o)==='consumo');
   const numHerbicida   = ordenesDelMes.filter(o=>tipoOrden(o)==='herbicida').length;
   const numFito        = ordenesDelMes.filter(o=>tipoOrden(o)==='fito').length;
+  const numFertilizante= ordenesDelMes.filter(o=>tipoOrden(o)==='fertilizante').length;
   const numAplicaciones= ordenesAplicacion.length;
   const numConsumos    = ordenesConsumoMes.length;
 
@@ -2752,7 +2775,7 @@ function datosReporteMensual(mesStr){
   return {
     mesStr, mesLabel:mesLabelG(mesStr), mesCorto:mesCortoG(mesStr),
     numOrdenesTerminadas: ordenesDelMes.length,
-    numHerbicida, numFito, numAplicaciones, numConsumos,
+    numHerbicida, numFito, numFertilizante, numAplicaciones, numConsumos,
     gastoAplicaciones, gastoConsumos,
     ordenesPendientes, ordenesTerminadasMes,
     productosAplicados, top5, gastoMensual,
@@ -3497,9 +3520,12 @@ function exportarTraza(){
     const metodo = d.metodo || '';
     // Código maquinaria y tractorista: del primer equipo registrado
     const eq0 = (ia.equipos&&ia.equipos[0]) || {};
-    const codMaq = eq0.tractor || '';
-    const implemento = eq0.implemento || '';
-    const tractorista = eq0.tractorista || '';
+    // La fertilización va sin tractorista ni código de maquinaria: el implemento
+    // es el equipo de riego (goteo, manual, aspersión...).
+    const esFertT = (d.tipo==='fertilizante');
+    const codMaq = esFertT ? '' : (eq0.tractor || '');
+    const implemento = esFertT ? (d.equipo || eq0.implemento || '') : (eq0.implemento || '');
+    const tractorista = esFertT ? '' : (eq0.tractorista || '');
     const objetivoOrden = d.objetivo || '';
 
     // Una fila por PRODUCTO (real aplicado; si no hay, usa los planificados)
