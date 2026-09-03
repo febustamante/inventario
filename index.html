@@ -532,7 +532,7 @@ function bombonaDe(mv){ return String((mv&&mv.bombona)||'CERRILLOS').toUpperCase
 let stockByLoc = {};
 let products = [];
 let movimientos = [], ordenes = [], compras = [], materiales = [], materialesMov = [], petroleoMovs = [], maqMaquinas = [], maqOperadores = [], maqImplementos = [],
-    fertSectores = [], fertSectorCuarteles = [], fertFuentes = [];
+    fertSectores = [], fertSectorCuarteles = [], fertProductos = [];
 // Captura de firma vectorial (trazo, no imagen) para vales de petróleo
 let _firmaStrokes = [], _firmaActual = null, _firmaDrawing = false;
 let nextMov = 1, nextOrden = 1;
@@ -744,7 +744,7 @@ async function syncData() {
         .select('*').order('orden').order('nombre');
       if(!e11) imps = impData||[];
     }catch(_){ imps=[]; }
-    // Fertilizantes: sectores de riego y fuentes con su ley. Si las tablas aún no
+    // Fertilizantes: sectores de riego y la lista de productos que se usan, con su ley. Si las tablas aún no
     // existen la pestaña queda vacía pero la app sigue funcionando igual.
     let fSec=[], fSecCu=[], fFue=[];
     try{
@@ -754,7 +754,7 @@ async function syncData() {
       const { data: scData, error: e13 } = await sb.from('fert_sector_cuarteles')
         .select('*').order('orden');
       if(!e13) fSecCu = scData||[];
-      const { data: fData, error: e14 } = await sb.from('fert_fuentes')
+      const { data: fData, error: e14 } = await sb.from('fert_productos')
         .select('*').order('orden');
       if(!e14) fFue = fData||[];
     }catch(_){ fSec=[]; fSecCu=[]; fFue=[]; }
@@ -833,7 +833,7 @@ async function syncData() {
     maqImplementos = imps;
     fertSectores = fSec;
     fertSectorCuarteles = fSecCu;
-    fertFuentes = fFue;
+    fertProductos = fFue;
 
     sheetsConnected = true;
     setSyncStatus('on', 'Conectado · ' + products.length + ' productos');
@@ -3186,6 +3186,8 @@ async function doPerdida(){
 const FERT_EQUIPOS = ['RIEGO POR GOTEO','MANUAL','ASPERSION','TROMPO','AVION','PULVERIZADORA','BOMBA ESPALDA'];
 const FERT_FENOLOGIA = ['Brotes de 30-40 cm a inic. flor','Floración - Término de shatter','Cuaja - Pinta',
   'Pinta - Cosecha','Post cosecha','Plantacion','Calendario'];
+// Responsables de la fertilización: son estos dos, no la lista de tractoristas
+const FERT_RESPONSABLES = ['Sergio Rojas','Rodrigo Salinas'];
 let _fertKg = {};        // id de fuente -> kilos por sector escritos a mano
 
 // Ficha de un cuartel por su código, sacada del catastro que ya tiene la app
@@ -3216,13 +3218,20 @@ function semanaISO(anio, sem){
 const fechaCLu = d => String(d.getUTCDate()).padStart(2,'0')+'-'+String(d.getUTCMonth()+1).padStart(2,'0')+'-'+d.getUTCFullYear();
 const isoUTC   = d => d.toISOString().slice(0,10);
 // Nombre a mostrar de una fuente: manda NUESTRO producto; el alias es respaldo
-function fertNombre(f){
-  if(f.producto_id){
-    const p = products.find(x=>String(x.id)===String(f.producto_id));
-    if(p) return p.nombre;
-  }
-  return f.alias_planilla || '';
+// La lista de fertilización son los productos que están en fert_productos, con
+// el nombre y el id de TU inventario. No es toda la familia FERTILIZANTE: es la
+// lista de los que efectivamente se usan en las órdenes de riego.
+function fertListaProductos(){
+  return (fertProductos||[])
+    .filter(f=>f.activo!==false)
+    .map(f=>{
+      const p = (products||[]).find(x=>String(x.id)===String(f.producto_id));
+      return p ? Object.assign({}, p, {_ley:f}) : null;
+    })
+    .filter(Boolean)
+    .sort((a,b)=>String(a.nombre).localeCompare(String(b.nombre),'es'));
 }
+function leyDe(p){ return (p && p._ley) || null; }
 function fertSectorSel(){ return document.getElementById('fe-sector')?.value || ''; }
 function fertSemana(){ return parseInt(document.getElementById('fe-sem')?.value)||0; }
 
@@ -3279,16 +3288,7 @@ function renderFertilizante(){
     <div class="form-group"><label class="form-label">Estado fenológico</label>
       <select class="form-control" id="fe-feno">${FERT_FENOLOGIA.map(e=>`<option>${e}</option>`).join('')}</select></div>
     <div class="form-group"><label class="form-label">Responsable de la aplicación</label>
-      <select class="form-control" id="fe-resp">${tractoristaPetroleoOpts()}</select></div>
-
-    <div class="form-row">
-      <div class="form-group"><label class="form-label">Sobre hilera (m)</label>
-        <input type="number" step="0.1" class="form-control" id="fe-sh" value="2" oninput="fertCalc()"></div>
-      <div class="form-group"><label class="form-label">Entre hilera (m)</label>
-        <input type="number" step="0.1" class="form-control" id="fe-eh" value="3.3" oninput="fertCalc()"></div>
-    </div>
-    <div style="background:var(--surf2);border:1px solid var(--bd);border-radius:10px;padding:9px 12px;margin-bottom:14px;font-size:12.5px;display:flex;justify-content:space-between">
-      <span style="color:var(--tx3)">Plantas por hectárea</span><b id="fe-plha" style="color:var(--vino)">—</b></div>
+      <select class="form-control" id="fe-resp">${FERT_RESPONSABLES.map(r=>`<option>${r}</option>`).join('')}</select></div>
 
     <div class="form-row">
       <div class="form-group"><label class="form-label">Fecha del riego</label>
@@ -3314,8 +3314,6 @@ function renderFertilizante(){
           <th style="padding:5px 4px;font-size:9.5px;color:var(--tx3)">K₂O</th>
           <th style="padding:5px 4px;font-size:9.5px;color:var(--tx3)">CaO</th>
           <th style="padding:5px 4px;font-size:9.5px;color:var(--tx3)">MgO</th>
-          <th style="padding:5px 4px;font-size:9.5px;color:var(--tx3)">G/PLANTA</th>
-          <th style="padding:5px 4px;font-size:9.5px;color:var(--tx3)">G/LADO</th>
         </tr></thead>
         <tbody id="fe-prods"></tbody>
         <tfoot id="fe-tot"></tfoot>
@@ -3385,48 +3383,40 @@ function fertHas(){
   if(!sec) return 0;
   return +fertCuartelesDe(sec.id).reduce((t,c)=>t+c.ha,0).toFixed(2);
 }
-function fertPlantasHa(){
-  const sh = parseFloat(document.getElementById('fe-sh')?.value)||0;
-  const eh = parseFloat(document.getElementById('fe-eh')?.value)||0;
-  return (sh>0&&eh>0) ? 10000/(sh*eh) : 0;
-}
-// Lo que aporta una fuente, ya calculado. Es la cadena completa de la planilla.
-function fertLinea(f, has, plha){
-  const kg = parseFloat(_fertKg[f.id])||0;
+// Lo que aporta un producto por hectárea, a partir de los kilos del sector.
+function fertLinea(p, has){
+  const kg = parseFloat(_fertKg[p.id])||0;
   const kgha = has>0 ? kg/has : 0;
-  const gpl = plha>0 ? kgha*1000/plha : 0;
-  return { kg, kgha, gpl, glado: gpl/2,
-    n: (Number(f.n)||0)*kgha/100, p: (Number(f.p2o5)||0)*kgha/100, k: (Number(f.k2o)||0)*kgha/100,
-    ca:(Number(f.cao)||0)*kgha/100, mg:(Number(f.mgo)||0)*kgha/100 };
+  const L = leyDe(p) || {};
+  return { kg, kgha, ley:L,
+    n: (Number(L.n)||0)*kgha/100, p: (Number(L.p2o5)||0)*kgha/100, k: (Number(L.k2o)||0)*kgha/100,
+    ca:(Number(L.cao)||0)*kgha/100, mg:(Number(L.mgo)||0)*kgha/100 };
 }
 
 function fertCalc(){
   const cuerpo = document.getElementById('fe-prods');
   if(!cuerpo) return;
-  const has = fertHas(), plha = fertPlantasHa();
-  const pl = document.getElementById('fe-plha');
-  if(pl) pl.textContent = plha ? fmt(Math.round(plha)) : '—';
+  const has = fertHas();
 
-  const fs = (fertFuentes||[]).filter(f=>f.activo!==false);
+  const fs = fertListaProductos();
   const cel = (v, usa) => `<td style="padding:4px;text-align:right;color:${usa?'#1450b0':'#c9cbd0'};font-weight:${usa?'700':'400'}">${usa?fmt(+v.toFixed(2)):'—'}</td>`;
   let tot={n:0,p:0,k:0,ca:0,mg:0}, dudosas=0;
   cuerpo.innerHTML = fs.map(f=>{
-    const L = fertLinea(f, has, plha);
+    const L = fertLinea(f, has);
     ['n','p','k','ca','mg'].forEach(x=>{ tot[x]+=L[x]; });
-    const sinLey = f.ley_validada===false;
+    const sinLey = L.ley.ley_validada===false;
     if(sinLey && L.kg>0) dudosas++;
     return `<tr style="border-bottom:1px solid var(--bd)">
       <td style="padding:4px;text-align:left;white-space:nowrap">
-        <div style="font-weight:600">${fertNombre(f)}${sinLey?' <span style="color:#b8860b" title="Ley por validar">⚠</span>':''}</div>
-        ${f.producto_id?'':'<div style="font-size:9.5px;color:var(--tx3)">sin producto asociado</div>'}</td>
+        <div style="font-weight:600">${f.nombre}${sinLey?' <span style="color:#b8860b" title="Ley sin cargar o por validar">⚠</span>':''}</div></td>
       <td style="padding:4px;text-align:right">
         <input type="number" step="0.1" min="0" value="${_fertKg[f.id]||''}" placeholder="0"
           oninput="_fertKg[${f.id}]=this.value; fertCalc()"
           style="width:66px;text-align:right;font-size:11.5px;font-weight:700;border:1px solid var(--bd2);border-radius:5px;padding:3px 5px"></td>
       ${cel(L.kgha, L.kg>0)}
-      ${cel(L.n, L.kg>0 && Number(f.n)>0)}${cel(L.p, L.kg>0 && Number(f.p2o5)>0)}${cel(L.k, L.kg>0 && Number(f.k2o)>0)}
-      ${cel(L.ca, L.kg>0 && Number(f.cao)>0)}${cel(L.mg, L.kg>0 && Number(f.mgo)>0)}
-      ${cel(L.gpl, L.kg>0)}${cel(L.glado, L.kg>0)}</tr>`;
+      ${cel(L.n, L.kg>0 && Number(L.ley.n)>0)}${cel(L.p, L.kg>0 && Number(L.ley.p2o5)>0)}${cel(L.k, L.kg>0 && Number(L.ley.k2o)>0)}
+      ${cel(L.ca, L.kg>0 && Number(L.ley.cao)>0)}${cel(L.mg, L.kg>0 && Number(L.ley.mgo)>0)}
+      </tr>`;
   }).join('');
   const t = document.getElementById('fe-tot');
   if(t) t.innerHTML = `<tr style="border-top:1.5px solid var(--tx1)">
@@ -3436,11 +3426,15 @@ function fertCalc(){
     <td style="padding:6px 4px;text-align:right;font-weight:800">${fmt(+tot.k.toFixed(2))}</td>
     <td style="padding:6px 4px;text-align:right;font-weight:800">${fmt(+tot.ca.toFixed(2))}</td>
     <td style="padding:6px 4px;text-align:right;font-weight:800">${fmt(+tot.mg.toFixed(2))}</td>
-    <td colspan="2"></td></tr>`;
+    </tr>`;
   const av = document.getElementById('fe-avisoley');
+  if(av && !fs.length){
+    av.innerHTML = 'Todavía no está cargada la lista de fertilizantes. Corre <b>fertilizantes_lista.sql</b> en Supabase.';
+    return;
+  }
   if(av) av.innerHTML = dudosas
-    ? `⚠ ${dudosas} producto${dudosas>1?'s':''} con la ley sin validar: las unidades de N-P-K pueden estar mal. La orden se puede crear igual.`
-    : 'Las unidades salen de la ley de cada fuente. Los kilos son lo único que se escribe.';
+    ? `⚠ ${dudosas} producto${dudosas>1?'s':''} sin la ley cargada o sin validar: sus unidades de N-P-K no son confiables. La orden se puede crear igual.`
+    : `${fs.length} fertilizantes del inventario. Los kilos por sector son lo único que se escribe.`;
 }
 
 async function guardarFertilizante(){
@@ -3455,10 +3449,10 @@ async function guardarFertilizante(){
   if(!num)  return poner('<span style="color:var(--red)">Falta el N° de orden.</span>');
   if(!sem || !desde) return poner('<span style="color:var(--red)">Falta el N° de semana.</span>');
 
-  const has = fertHas(), plha = fertPlantasHa();
+  const has = fertHas();
   if(has<=0) return poner('<span style="color:var(--red)">El sector no tiene hectáreas: revisa sus cuarteles.</span>');
 
-  const usados = (fertFuentes||[]).filter(f=>f.activo!==false && (parseFloat(_fertKg[f.id])||0)>0);
+  const usados = fertListaProductos().filter(p=>(parseFloat(_fertKg[p.id])||0)>0);
   if(!usados.length) return poner('<span style="color:var(--red)">Escribe los kilos de al menos un producto.</span>');
 
   const dup = ordenes.find(o=>o.detalle && o.detalle.tipo==='fertilizante'
@@ -3467,11 +3461,11 @@ async function guardarFertilizante(){
 
   const cs = fertCuartelesDe(sec.id);
   const productos = usados.map(f=>{
-    const L = fertLinea(f, has, plha);
-    return { nombre: fertNombre(f), fuenteId: f.id, productoId: f.producto_id||null,
-      kgSector:+L.kg.toFixed(2), kgHa:+L.kgha.toFixed(3), gPlanta:+L.gpl.toFixed(2), gLado:+L.glado.toFixed(2),
+    const L = fertLinea(f, has);
+    return { nombre: f.nombre, productoId: f.id,
+      kgSector:+L.kg.toFixed(2), kgHa:+L.kgha.toFixed(3),
       unidades:{ n:+L.n.toFixed(2), p2o5:+L.p.toFixed(2), k2o:+L.k.toFixed(2), cao:+L.ca.toFixed(2), mgo:+L.mg.toFixed(2) },
-      leyValidada: f.ley_validada!==false,
+      leyValidada: L.ley.ley_validada!==false,
       totalTeorico:+L.kg.toFixed(2),
       porCuartel: cs.map(c=>({c:c.c, val:+(L.kg*c.ha/has).toFixed(2)})) };
   });
@@ -3490,9 +3484,6 @@ async function guardarFertilizante(){
     equipo: document.getElementById('fe-equipo').value||'',
     estadoFenologico: document.getElementById('fe-feno').value||'',
     responsable: document.getElementById('fe-resp').value||'',
-    sobreHilera: parseFloat(document.getElementById('fe-sh').value)||0,
-    entreHilera: parseFloat(document.getElementById('fe-eh').value)||0,
-    plantasHa: Math.round(plha),
     fechaRiego: document.getElementById('fe-friego').value||'',
     horasRiego: parseFloat(document.getElementById('fe-hriego').value)||0,
     horasFertilizacion: parseFloat(document.getElementById('fe-hfert').value)||0,
