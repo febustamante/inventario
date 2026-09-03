@@ -3408,7 +3408,7 @@ function fertCalc(){
     if(sinLey && L.kg>0) dudosas++;
     return `<tr style="border-bottom:1px solid var(--bd)">
       <td style="padding:4px;text-align:left;white-space:nowrap">
-        <div style="font-weight:600">${f.nombre}${sinLey?' <span style="color:#b8860b" title="Ley sin cargar o por validar">⚠</span>':''}</div></td>
+        <div style="font-weight:600">${f.nombre}</div></td>
       <td style="padding:4px;text-align:right">
         <input type="number" step="0.1" min="0" value="${_fertKg[f.id]||''}" placeholder="0"
           oninput="_fertKg[${f.id}]=this.value; fertCalc()"
@@ -3432,9 +3432,7 @@ function fertCalc(){
     av.innerHTML = 'Todavía no está cargada la lista de fertilizantes. Corre <b>fertilizantes_lista.sql</b> en Supabase.';
     return;
   }
-  if(av) av.innerHTML = dudosas
-    ? `⚠ ${dudosas} producto${dudosas>1?'s':''} sin la ley cargada o sin validar: sus unidades de N-P-K no son confiables. La orden se puede crear igual.`
-    : `${fs.length} fertilizantes del inventario. Los kilos por sector son lo único que se escribe.`;
+  if(av) av.innerHTML = `${fs.length} fertilizantes · los kilos por sector son lo único que se escribe.`;
 }
 
 async function guardarFertilizante(){
