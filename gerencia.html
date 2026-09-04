@@ -1794,6 +1794,45 @@ function tagOC(e){
 }
 let cpDesde=null, cpHasta=null;
 let ocProds=[], ocSeq=0;
+// Una orden de compra es de PRODUCTOS o de MATERIALES. La clase se guarda en
+// cada línea del detalle (clase:'producto'|'material'), así que las OC antiguas
+// —que no traen el campo— siguen leyéndose como productos sin tocar Supabase.
+let ocClase='producto';
+let cpClase='todos';            // filtro de los listados
+let ocProv='', ocNum='', ocFecha='';   // se conservan al cambiar de pestaña
+
+// De qué clase es una OC completa, mirando sus líneas.
+function claseOC(oc){
+  const items=oc.detalle||[];
+  if(!items.length) return 'producto';
+  const nMat=items.filter(i=>String(i.clase||'producto')==='material').length;
+  if(nMat===items.length) return 'material';
+  if(nMat===0) return 'producto';
+  return 'mixta';
+}
+function tagClaseOC(c){
+  const m={'producto':['#6E2430','#f4e9eb','Productos'],
+           'material':['#1a4a8a','#e8f0fb','Materiales'],
+           'mixta':['#8a5e00','#fdf3dc','Mixta']};
+  const [col,bg,txt]=m[c]||m.producto;
+  return `<span style="font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:10px;color:${col};background:${bg};margin-left:6px">${txt}</span>`;
+}
+// Cambiar de Productos a Materiales limpia las líneas: un material no existe en
+// la lista de productos ni al revés. Lo escrito arriba (proveedor, N°, fecha) se
+// conserva.
+function setClaseOC(v){
+  if(v===ocClase) return;
+  guardarCabeceraOC();
+  ocClase=v; ocProds=[]; ocSeq=0;
+  render();
+}
+function guardarCabeceraOC(){
+  const g=id=>document.getElementById(id)?.value;
+  const p=g('oc-prov'); if(p!==undefined) ocProv=p;
+  const n=g('oc-num');  if(n!==undefined) ocNum=n;
+  const f=g('oc-fecha');if(f!==undefined) ocFecha=f;
+}
+function setCpClase(v){ cpClase=v; render(); }
 
 function renderCompras(){
   const puedeCrear = rolActual==='compras' || rolActual==='admin';
@@ -1802,24 +1841,39 @@ function renderCompras(){
   if(cpDesde===null)cpDesde=isoLocalG(hace15);
   if(cpHasta===null)cpHasta=isoLocalG(hoyD);
 
-  const pend = compras.filter(o=>estadoOC(o)!=='COMPLETA');
+  // El filtro de clase se aplica a los dos listados por igual. Una OC mixta
+  // aparece en ambas pestañas: tiene líneas de las dos clases.
+  const pasaClase = oc => {
+    if(cpClase==='todos') return true;
+    const c=claseOC(oc);
+    return c===cpClase || c==='mixta';
+  };
+  const pend = compras.filter(o=>estadoOC(o)!=='COMPLETA' && pasaClase(o));
   const hist = compras.filter(o=>{
     const f=o.fecha||(o.creado_en?isoLocalG(new Date(o.creado_en)):'');
-    return f>=cpDesde && f<=cpHasta;
+    return f>=cpDesde && f<=cpHasta && pasaClase(o);
   });
+
+  const chip = (v,txt) => `<button class="btn line" onclick="setCpClase('${v}')" style="font-size:12px;padding:6px 12px;${cpClase===v?'background:#6E2430;color:#fff;border-color:#6E2430':''}">${txt}</button>`;
+  const segmentador = `<div style="display:flex;gap:6px;align-items:center;margin-bottom:10px">
+    <span style="font-size:12px;color:#80868b">Ver:</span>
+    ${chip('todos','Todos')}${chip('producto','Productos')}${chip('material','Materiales')}
+    <span style="font-size:11.5px;color:#80868b">filtra los dos listados</span>
+  </div>`;
 
   const filaOC = oc => {
     const e=estadoOC(oc);
     const items=oc.detalle||[];
+    const cls=claseOC(oc);
     const tp=items.reduce((s,i)=>s+(+i.pedido||0),0), tr=items.reduce((s,i)=>s+(+i.recibido||0),0);
     const valor=items.reduce((s,i)=>s+(+i.pedido||0)*(+i.precio||0),0);
     return `<div class="panel" style="margin-bottom:10px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-        <b>OC ${oc.numero_oc?('N°'+oc.numero_oc):('#'+oc.id)} · ${oc.proveedor}</b>${tagOC(e)}
+        <b>OC ${oc.numero_oc?('N°'+oc.numero_oc):('#'+oc.id)} · ${oc.proveedor}</b><span>${tagClaseOC(cls)}${tagOC(e)}</span>
       </div>
-      <div style="font-size:12px;color:#80868b;margin-bottom:8px">${(oc.fecha||'').split('-').reverse().join('/')} · ${items.length} productos · recibido ${tr}/${tp} · ${plata(valor)}</div>
+      <div style="font-size:12px;color:#80868b;margin-bottom:8px">${(oc.fecha||'').split('-').reverse().join('/')} · ${items.length} ${cls==='material'?'materiales':'ítems'} · recibido ${tr}/${tp} · ${plata(valor)}</div>
       ${items.map(it=>{const falta=(+it.pedido||0)-(+it.recibido||0);return `<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px dashed #eee;font-size:13px">
-        <span>${it.producto}</span>
+        <span>${it.producto}${String(it.clase||'producto')==='material'?' <span style="font-size:10.5px;color:#1a4a8a">· material</span>':''}</span>
         <span>${it.recibido>=it.pedido?`<b style="color:#27ae60">✓ ${it.recibido}/${it.pedido}</b>`:`<b style="color:#d64545">${it.recibido||0}/${it.pedido}</b> <span style="color:#80868b;font-size:11px">(faltan ${falta})</span>`}</span>
       </div>`}).join('')}
     </div>`;
@@ -1829,16 +1883,25 @@ function renderCompras(){
   ${puedeCrear?`
   <div class="panel" style="max-width:900px;margin-bottom:16px">
     <h3>Nueva orden de compra</h3>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin:10px 0">
-      <div class="fbox"><label>Proveedor</label><input id="oc-prov" style="border:none;width:100%;font-size:13.5px" placeholder="Anasac, Coagra..."></div>
-      <div class="fbox"><label>N° orden de compra</label><input id="oc-num" style="border:none;width:100%;font-size:13.5px" placeholder="OC-1234"></div>
-      <div class="fbox"><label>Fecha</label><input type="date" id="oc-fecha" value="${isoLocalG(new Date())}" style="border:none;width:100%;font-size:13px"></div>
+    <div style="display:inline-flex;border:1px solid #e6e6e6;border-radius:9px;overflow:hidden;margin-bottom:4px">
+      <button onclick="setClaseOC('producto')" style="border:none;cursor:pointer;padding:8px 18px;font-size:13px;font-weight:700;${ocClase==='producto'?'background:#6E2430;color:#fff':'background:#fff;color:#80868b'}">Productos</button>
+      <button onclick="setClaseOC('material')" style="border:none;cursor:pointer;padding:8px 18px;font-size:13px;font-weight:700;${ocClase==='material'?'background:#1a4a8a;color:#fff':'background:#fff;color:#80868b'}">Materiales</button>
     </div>
-    <div style="font-weight:700;font-size:13px;margin-bottom:6px">Productos</div>
+    <div style="font-size:12px;color:#80868b;margin-bottom:6px">
+      ${ocClase==='material'
+        ? 'Materiales de campo (alambres, clavos, protectores, herramientas, aseo). Al recibirlos suman al stock de materiales.'
+        : 'Productos de bodega (fitosanitarios, fertilizantes). Al recibirlos suman a Bodega Central.'}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin:10px 0">
+      <div class="fbox"><label>Proveedor</label><input id="oc-prov" value="${(ocProv||'').replace(/"/g,'&quot;')}" style="border:none;width:100%;font-size:13.5px" placeholder="Anasac, Coagra..."></div>
+      <div class="fbox"><label>N° orden de compra</label><input id="oc-num" value="${(ocNum||'').replace(/"/g,'&quot;')}" style="border:none;width:100%;font-size:13.5px" placeholder="OC-1234"></div>
+      <div class="fbox"><label>Fecha</label><input type="date" id="oc-fecha" value="${ocFecha||isoLocalG(new Date())}" style="border:none;width:100%;font-size:13px"></div>
+    </div>
+    <div style="font-weight:700;font-size:13px;margin-bottom:6px">${ocClase==='material'?'Materiales':'Productos'}</div>
     <table style="font-size:12.5px;margin-bottom:8px"><thead><tr>
-      <th style="text-align:left">Producto</th><th>Cantidad</th><th>Precio unitario</th><th>Subtotal</th><th></th>
+      <th style="text-align:left">${ocClase==='material'?'Material':'Producto'}</th><th>Cantidad</th><th>Precio unitario</th><th>Subtotal</th><th></th>
     </tr></thead><tbody id="oc-prods"></tbody></table>
-    <button class="btn line" onclick="addProdOC()" style="font-size:12px;padding:6px 12px">+ Agregar producto</button>
+    <button class="btn line" onclick="addProdOC()" style="font-size:12px;padding:6px 12px">+ Agregar ${ocClase==='material'?'material':'producto'}</button>
     <div id="oc-msg" style="font-size:13px;margin:10px 0"></div>
     <div style="display:flex;gap:10px;justify-content:flex-end">
       <button class="btn green" onclick="guardarOC()"><i class="ti ti-device-floppy"></i> Crear orden de compra</button>
@@ -1847,6 +1910,7 @@ function renderCompras(){
 
   <div class="eyebrow">Por recibir (${pend.length})</div>
   <div style="font-size:12px;color:#80868b;margin-bottom:10px">Las compras pendientes o parciales se mantienen aquí hasta que llegue todo. No se borran.</div>
+  ${segmentador}
   ${pend.length?pend.map(filaOC).join(''):'<div class="panel" style="text-align:center;color:#27ae60;font-weight:600">✓ No hay compras pendientes de recibir</div>'}
 
   <div class="eyebrow">Historial de compras</div>
@@ -1872,10 +1936,19 @@ function cpRango(dias){
   cpDesde=isoLocalG(desde);cpHasta=isoLocalG(hoyD);render();
 }
 function prodOptsOC(){return '<option value="">— Producto —</option>'+products.map(p=>`<option value="${p.nombre.replace(/"/g,'&quot;')}">${p.nombre}</option>`).join('');}
+// Los materiales van con su unidad a la vista, para no pedir 3 cuando son metros.
+function matOptsOC(){
+  const lista=(materiales||[]).slice().sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||'')));
+  if(!lista.length) return '<option value="">— No hay materiales cargados —</option>';
+  return '<option value="">— Material —</option>'+lista.map(m=>{
+    const n=String(m.nombre||'').trim();
+    return `<option value="${n.replace(/"/g,'&quot;')}">${n}${m.unidad?' ('+m.unidad+')':''}${m.categoria?' · '+m.categoria:''}</option>`;
+  }).join('');
+}
 function addProdOC(){
   const id=++ocSeq; ocProds.push(id);
   const tr=document.createElement('tr'); tr.id='ocrow-'+id;
-  tr.innerHTML=`<td><select id="ocp-nom-${id}" style="border:1px solid #eee;border-radius:4px;padding:5px;width:100%;font-size:12px">${prodOptsOC()}</select></td>
+  tr.innerHTML=`<td><select id="ocp-nom-${id}" style="border:1px solid #eee;border-radius:4px;padding:5px;width:100%;font-size:12px">${ocClase==='material'?matOptsOC():prodOptsOC()}</select></td>
     <td><input type="number" min="0" step="0.01" id="ocp-cant-${id}" oninput="calcOC()" style="border:1px solid #eee;border-radius:4px;padding:5px;width:75px;text-align:center"></td>
     <td><input type="number" min="0" step="1" id="ocp-precio-${id}" oninput="calcOC()" style="border:1px solid #eee;border-radius:4px;padding:5px;width:95px;text-align:center" placeholder="$"></td>
     <td id="ocp-sub-${id}" style="font-weight:700;color:#6E2430">—</td>
@@ -1904,13 +1977,27 @@ async function guardarOC(){
     if(!nomEl||!cantEl) return null; // fila ya no existe, ignorar
     return {
       producto:nomEl.value,
+      clase:ocClase,          // 'producto' | 'material' — define a qué stock suma al recibir
       pedido:parseFloat(cantEl.value)||0,
       recibido:0,
       precio:precioEl?(parseFloat(precioEl.value)||0):0
     };
   }).filter(x=>x&&x.producto&&x.pedido>0);
 
-  if(!prov||!fecha||!items.length){ msg.innerHTML='<span style="color:#d64545">Faltan datos: proveedor, fecha y al menos un producto con cantidad.</span>'; return; }
+  if(!prov||!fecha||!items.length){ msg.innerHTML='<span style="color:#d64545">Faltan datos: proveedor, fecha y al menos un '+(ocClase==='material'?'material':'producto')+' con cantidad.</span>'; return; }
+
+  // Que el nombre exista de verdad en la lista que corresponde: si no, al
+  // recibirla el bodeguero no la va a poder cargar a ningún stock.
+  const desconocidos = items.filter(it=>{
+    const n=String(it.producto).trim().toUpperCase();
+    return ocClase==='material'
+      ? !(materiales||[]).some(m=>String(m.nombre||'').trim().toUpperCase()===n)
+      : !(products||[]).some(p=>String(p.nombre||'').trim().toUpperCase()===n);
+  }).map(it=>it.producto);
+  if(desconocidos.length){
+    msg.innerHTML='<span style="color:#d64545">No están en la lista de '+(ocClase==='material'?'materiales':'productos')+': '+desconocidos.join(', ')+'</span>';
+    return;
+  }
 
   // ¿Ya existe una OC con este número? (evita el duplicado aunque se recargue la página)
   if(num){
@@ -1931,8 +2018,9 @@ async function guardarOC(){
       creada_por:(document.getElementById('u-nm')?.textContent||'yanet'), detalle:items
     });
     if(error)throw error;
-    msg.innerHTML='<span style="color:#27ae60;font-weight:700">✓ Orden de compra creada. Le aparecerá a Freddy en la app.</span>';
+    msg.innerHTML='<span style="color:#27ae60;font-weight:700">✓ Orden de compra de '+(ocClase==='material'?'materiales':'productos')+' creada. Le aparecerá a Freddy en la app.</span>';
     ocProds=[];ocSeq=0;
+    ocProv='';ocNum='';ocFecha='';
     await cargar();
   }catch(e){
     msg.innerHTML='<span style="color:#d64545">Error: '+(e.message||'')+'. ¿Existe la tabla ordenes_compra en Supabase?</span>';
@@ -1949,7 +2037,9 @@ function exportarComprasExcel(){
     (oc.detalle||[]).forEach(it=>{
       filas.push({
         'N° OC':oc.numero_oc||oc.id, 'Proveedor':oc.proveedor, 'Fecha':oc.fecha,
-        'Estado':estadoOC(oc), 'Producto':it.producto, 'Pedido':it.pedido,
+        'Estado':estadoOC(oc),
+        'Tipo':(String(it.clase||'producto')==='material'?'Material':'Producto'),
+        'Producto':it.producto, 'Pedido':it.pedido,
         'Recibido':it.recibido||0, 'Falta':(+it.pedido||0)-(+it.recibido||0),
         'Precio unitario':it.precio||0, 'Subtotal':(+it.pedido||0)*(+it.precio||0)
       });
