@@ -416,7 +416,7 @@ function stockVacio(){ const o={}; LOCS.forEach(l=>o[l]=0); return o; }
 // fijo de cuatro y las bodegas nuevas salían como "undefined".
 // Versión visible en la pantalla de entrada. Sirve para saber de un vistazo si
 // el teléfono tiene el archivo nuevo o quedó con uno viejo en caché.
-const APP_VERSION = 'v15 · 03-09-2026';
+const APP_VERSION = 'v16 · 04-09-2026';
 
 function abrev(l){
   const fijas = {'Bodega Central':'Bodega','Caseta Cerrillos':'Cerrillos'};
@@ -1555,31 +1555,59 @@ function estadoOCb(oc){
   if(tr<=0)return 'PENDIENTE'; if(tr>=tp)return 'COMPLETA'; return 'PARCIAL';
 }
 let cbDesde=null, cbHasta=null;
+// Clase de una OC según sus líneas. Las OC antiguas no traen el campo: productos.
+function claseOCb(oc){
+  const items=oc.detalle||[];
+  if(!items.length) return 'producto';
+  const nMat=items.filter(i=>String(i.clase||'producto')==='material').length;
+  if(nMat===items.length) return 'material';
+  if(nMat===0) return 'producto';
+  return 'mixta';
+}
+function tagClaseOCb(c){
+  const m={'producto':['#6E2430','#f4e9eb','Productos'],
+           'material':['#1a4a8a','#e8f0fb','Materiales'],
+           'mixta':['#8a5e00','#fdf3dc','Mixta']};
+  const [col,bg,txt]=m[c]||m.producto;
+  return `<span style="font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:10px;color:${col};background:${bg};margin-right:5px">${txt}</span>`;
+}
+let cbClase='todos';
+function setCbClase(v){ cbClase=v; refresh(); }
+
 function renderComprasBodega(){
   const hoyD=new Date(), hace15=new Date(); hace15.setDate(hace15.getDate()-14);
   if(cbDesde===null)cbDesde=isoLocal(hace15);
   if(cbHasta===null)cbHasta=isoLocal(hoyD);
 
-  const pend=compras.filter(o=>estadoOCb(o)!=='COMPLETA');
+  const pasaClase=o=>{
+    if(cbClase==='todos') return true;
+    const c=claseOCb(o);
+    return c===cbClase || c==='mixta';
+  };
+  const pend=compras.filter(o=>estadoOCb(o)!=='COMPLETA' && pasaClase(o));
   const hist=compras.filter(o=>{
     const f=o.fecha||(o.creado_en?isoLocal(new Date(o.creado_en)):'');
-    return f>=cbDesde && f<=cbHasta;
+    return f>=cbDesde && f<=cbHasta && pasaClase(o);
   });
+  const chipCb=(v,txt)=>`<button onclick="setCbClase('${v}')" style="padding:6px 12px;border:1px solid var(--bd2);border-radius:7px;font-size:12px;font-weight:600;${cbClase===v?'background:var(--vino);color:#fff;border-color:var(--vino)':'background:white;color:var(--tx3)'}">${txt}</button>`;
 
   const tag=e=>{const m={'PENDIENTE':['#8a5e00','#fdf3dc','Pendiente'],'PARCIAL':['#1a4a8a','#e8f0fb','Parcial'],'COMPLETA':['#2d6b2d','#e8f5ec','Completa']};const[c,b,t]=m[e]||['#555','#eee',e];return`<span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:11px;color:${c};background:${b}">${t}</span>`;};
 
   const card=(oc,editable)=>{
     const e=estadoOCb(oc); const items=oc.detalle||[];
+    const cls=claseOCb(oc);
     return `<div class="card" style="margin-bottom:10px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-        <b style="font-size:14px">OC ${oc.numero_oc?('N°'+oc.numero_oc):('#'+oc.id)} · ${oc.proveedor}</b>${tag(e)}
+        <b style="font-size:14px">OC ${oc.numero_oc?('N°'+oc.numero_oc):('#'+oc.id)} · ${oc.proveedor}</b><span>${tagClaseOCb(cls)}${tag(e)}</span>
       </div>
-      <div style="font-size:11.5px;color:var(--tx3);margin-bottom:8px">${(oc.fecha||'').split('-').reverse().join('/')}</div>
+      <div style="font-size:11.5px;color:var(--tx3);margin-bottom:8px">${(oc.fecha||'').split('-').reverse().join('/')} · ${cls==='material'?'suma al stock de materiales':cls==='mixta'?'productos y materiales':'suma a Bodega Central'}</div>
       ${items.map((it,idx)=>{
         const falta=(+it.pedido||0)-(+it.recibido||0);
+        const esMat=String(it.clase||'producto')==='material';
+        const uni=esMat?(materiales.find(m=>String(m.nombre||'').trim().toUpperCase()===String(it.producto).trim().toUpperCase())?.unidad||''):'';
         return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px dashed var(--bd)">
           <div style="flex:1;min-width:0">
-            <div style="font-size:13px;font-weight:600">${it.producto}</div>
+            <div style="font-size:13px;font-weight:600">${it.producto}${esMat?` <span style="font-size:10.5px;color:#1a4a8a;font-weight:700">material${uni?' · '+uni:''}</span>`:''}</div>
             <div style="font-size:11px;color:var(--tx3)">Pedido ${it.pedido} · recibido ${it.recibido||0}${falta>0?` · <b style="color:var(--red)">faltan ${falta}</b>`:' · <b style="color:var(--green)">completo</b>'}</div>
           </div>
           ${editable&&falta>0?`<input type="number" min="0" max="${falta}" id="rc-${oc.id}-${idx}" placeholder="0" style="width:70px;text-align:center;padding:6px;border:1px solid var(--bd2);border-radius:7px" inputmode="decimal">`:''}
@@ -1590,7 +1618,8 @@ function renderComprasBodega(){
   };
 
   return `
-  <div class="section-header"><div class="section-title">Compras por recibir</div><div class="section-sub">Suma directo a Bodega Central</div></div>
+  <div class="section-header"><div class="section-title">Compras por recibir</div><div class="section-sub">Los productos suman a Bodega Central · los materiales, al stock de materiales</div></div>
+  <div style="display:flex;gap:6px;margin-bottom:12px">${chipCb('todos','Todos')}${chipCb('producto','Productos')}${chipCb('material','Materiales')}</div>
   ${pend.length?pend.map(o=>card(o,true)).join(''):'<div class="card" style="text-align:center;color:var(--green);font-weight:600">✓ No hay compras pendientes</div>'}
 
   <div class="section-label">Historial de compras</div>
@@ -1613,22 +1642,58 @@ async function recibirOC(ocId){
   const oc=compras.find(o=>String(o.id)===String(ocId));
   if(!oc){showToast('Orden no encontrada','err');return;}
   const items=oc.detalle||[];
-  const recibidos=[]; // {idx, cant, producto}
+  const recibidos=[]; // {idx, cant, producto, clase}
   items.forEach((it,idx)=>{
     const el=document.getElementById('rc-'+ocId+'-'+idx);
     if(!el)return;
     let v=parseFloat(el.value)||0;
     const falta=(+it.pedido||0)-(+it.recibido||0);
-    if(v>0){ if(v>falta)v=falta; recibidos.push({idx,cant:v,producto:it.producto}); }
+    // Las OC antiguas no traen clase: son de productos.
+    if(v>0){ if(v>falta)v=falta; recibidos.push({idx,cant:v,producto:it.producto,clase:String(it.clase||'producto')}); }
   });
   if(!recibidos.length){showToast('Ingresa al menos una cantidad recibida','err');return;}
 
   showToast('Registrando recepción...','info');
+  const noEncontrados=[];
   try{
     // 1) Sumar stock a Bodega Central + registrar entrada + actualizar precio promedio ponderado
     for(const r of recibidos){
+
+      // ── MATERIALES: no tienen bodegas, suman al stock único de materiales y
+      //    su movimiento vive en materiales_mov, no en el historial de productos.
+      if(r.clase==='material'){
+        const mat=materiales.find(m=>String(m.nombre||'').trim().toUpperCase()===String(r.producto).trim().toUpperCase());
+        if(!mat){ noEncontrados.push(r.producto); continue; }
+
+        const lineaMat=(oc.detalle||[]).find(x=>String(x.producto).trim()===String(r.producto).trim());
+        const precioCompraM=lineaMat?(+lineaMat.precio||0):0;
+
+        const cantAntes=+mat.cantidad||0;
+        const precioAntesM=+mat.precio_unitario||0;
+        const upd={cantidad:cantAntes+r.cant};
+        if(precioCompraM>0){
+          // Mismo promedio ponderado que los productos
+          const desp=cantAntes+r.cant;
+          const prom=desp>0?((cantAntes*precioAntesM + r.cant*precioCompraM)/desp):precioCompraM;
+          upd.precio_unitario=Math.round(prom*100)/100;
+        }
+        const { error:eM } = await sb.from('materiales').update(upd).eq('id',mat.id);
+        if(eM) throw eM;
+        mat.cantidad=upd.cantidad;
+        if(upd.precio_unitario!=null) mat.precio_unitario=upd.precio_unitario;
+
+        const baseMov={ material_id:mat.id, material_nom:mat.nombre, tipo:'entrada',
+          cantidad:r.cant, usuario:curUser.id,
+          motivo:'Recepción OC '+(oc.numero_oc||oc.id)+(oc.proveedor?(' · '+oc.proveedor):'') };
+        const { error:eMM } = await sb.from('materiales_mov').insert(baseMov);
+        if(eMM) throw eMM;
+
+        oc.detalle[r.idx].recibido=(+oc.detalle[r.idx].recibido||0)+r.cant;
+        continue;
+      }
+
       const prod=products.find(p=>p.nombre===r.producto);
-      if(!prod)continue;
+      if(!prod){ noEncontrados.push(r.producto); continue; }
 
       // Precio de este producto en la OC
       const lineaOC=(oc.detalle||[]).find(x=>String(x.producto).trim()===String(r.producto).trim());
@@ -1658,7 +1723,13 @@ async function recibirOC(ocId){
     const nuevoEstado=estadoOCb(oc);
     const { error } = await sb.from('ordenes_compra').update({detalle:oc.detalle,estado:nuevoEstado}).eq('id',oc.id);
     if(error)throw error;
-    showToast(nuevoEstado==='COMPLETA'?'✓ Compra completa. Stock y precio actualizados.':'Recepción parcial guardada. Queda pendiente el resto.');
+    if(noEncontrados.length){
+      // No se marcan como recibidos: quedan pendientes hasta que el nombre exista.
+      showToast('No encontré en el inventario: '+noEncontrados.join(', ')+'. El resto quedó registrado.','err');
+    }else{
+      showToast(nuevoEstado==='COMPLETA'?'✓ Compra completa. Stock y precio actualizados.':'Recepción parcial guardada. Queda pendiente el resto.');
+    }
+    await syncData();
     refresh();
   }catch(e){
     console.error(e);
