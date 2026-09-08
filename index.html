@@ -416,7 +416,7 @@ function stockVacio(){ const o={}; LOCS.forEach(l=>o[l]=0); return o; }
 // fijo de cuatro y las bodegas nuevas salían como "undefined".
 // Versión visible en la pantalla de entrada. Sirve para saber de un vistazo si
 // el teléfono tiene el archivo nuevo o quedó con uno viejo en caché.
-const APP_VERSION = 'v17 · 08-09-2026';
+const APP_VERSION = 'v18 · 08-09-2026';
 
 function abrev(l){
   const fijas = {'Bodega Central':'Bodega','Caseta Cerrillos':'Cerrillos'};
@@ -2690,6 +2690,9 @@ function abrirExportarPetroleo(){
       <label style="${lbl}">Hasta</label>
       <input id="exp-pet-hasta" type="date" style="${inp}">
 
+      <button type="button" class="btn-sec" style="width:100%;font-size:12.5px;padding:9px;margin-bottom:8px;display:flex;align-items:center;justify-content:center;gap:6px" onclick="rangoDesdeUltimaRecepcion()"><i class="ti ti-gas-station"></i> Desde la última recepción</button>
+      <div id="exp-pet-info" style="font-size:11px;color:var(--tx3);margin:-4px 0 10px;text-align:center"></div>
+
       <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
         <button type="button" class="btn-sec" style="flex:1;min-width:100px;font-size:12px;padding:8px" onclick="rangoRapidoPetroleo(7)">Últimos 7 días</button>
         <button type="button" class="btn-sec" style="flex:1;min-width:100px;font-size:12px;padding:8px" onclick="rangoRapidoPetroleo(30)">Últimos 30 días</button>
@@ -2707,12 +2710,37 @@ function abrirExportarPetroleo(){
 function rangoRapidoPetroleo(dias){
   const desdeEl = document.getElementById('exp-pet-desde');
   const hastaEl = document.getElementById('exp-pet-hasta');
+  const infoEl = document.getElementById('exp-pet-info');
   if(!desdeEl || !hastaEl) return;
+  if(infoEl) infoEl.textContent = '';
   if(dias<=0){ desdeEl.value=''; hastaEl.value=''; return; }
   const hoyD = new Date();
   const desdeD = new Date(hoyD); desdeD.setDate(desdeD.getDate()-dias);
   desdeEl.value = isoLocal(desdeD);
   hastaEl.value = isoLocal(hoyD);
+}
+
+// La última vez que se recargó la bombona (una 'entrada' de petróleo) marca el
+// inicio natural del rango: todo lo que se sacó desde entonces es de esa carga.
+// Así no hay que acordarse de la fecha ni repetir vales ya exportados.
+function rangoDesdeUltimaRecepcion(){
+  const desdeEl = document.getElementById('exp-pet-desde');
+  const hastaEl = document.getElementById('exp-pet-hasta');
+  const infoEl = document.getElementById('exp-pet-info');
+  if(!desdeEl || !hastaEl) return;
+  const bExp = petBombonaActual();
+  const entradas = (petroleoMovs||[])
+    .filter(m=>m.tipo==='entrada' && m.estado!=='ANULADO' && bombonaDe(m)===bExp && m.fecha)
+    .sort((a,b)=> new Date(b.fecha) - new Date(a.fecha));
+  if(!entradas.length){
+    showToast('No hay ninguna recepción registrada en la bombona '+bExp+'. Elige un rango a mano.','err');
+    if(infoEl) infoEl.textContent = '';
+    return;
+  }
+  const ultima = new Date(entradas[0].fecha);
+  desdeEl.value = isoLocal(ultima);
+  hastaEl.value = isoLocal(new Date());
+  if(infoEl) infoEl.textContent = 'Última recepción en '+bExp+': '+ultima.toLocaleDateString('es-CL')+' · '+fmt(entradas[0].litros)+' L';
 }
 
 function confirmarExportarPetroleo(){
