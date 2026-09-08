@@ -222,7 +222,7 @@ async function cargar(){
     products.forEach(p=>stockByLoc[p.id]=stockVacioG());
     (stk||[]).forEach(s=>{const l=ID_UBIC[s.ubicacion_id];if(stockByLoc[s.producto_id]&&l)stockByLoc[s.producto_id][l]=parseFloat(s.cantidad)||0;});
     movimientos=(movs||[]).map(m=>{const pr=(prods||[]).find(p=>p.id===m.producto_id);return{tipo:String(m.tipo||'').toLowerCase(),producto:pr?String(pr.nombre).trim():'',cantidad:parseFloat(m.cantidad)||0,origen:ID_UBIC[m.origen_id]||'',destino:ID_UBIC[m.destino_id]||'',usuario:m.usuario||'',ordenNum:m.orden_id||'',obs:m.observaciones||'',fechaRaw:m.fecha,fecha:m.fecha?new Date(m.fecha).toLocaleDateString('es-CL'):''};});
-    ordenes=(ords||[]).map(o=>({idOrden:o.id,fecha:o.creado_en?new Date(o.creado_en).toLocaleDateString('es-CL'):'',campo:ID_UBIC[o.campo_id]||'',dosificador:o.dosificador||'',estado:String(o.estado||'EN CURSO').toUpperCase(),detalle:o.detalle||{}}));
+    ordenes=(ords||[]).map(o=>({idOrden:o.id,fecha:o.creado_en?new Date(o.creado_en).toLocaleDateString('es-CL'):'',fechaISO:o.creado_en?isoLocalG(new Date(o.creado_en)):'',campo:ID_UBIC[o.campo_id]||'',dosificador:o.dosificador||'',estado:String(o.estado||'EN CURSO').toUpperCase(),detalle:o.detalle||{}}));
     // Órdenes de compra (tabla nueva; si aún no existe, no rompe el resto)
     try{
       const {data:ocs,error:eOc}=await sb.from('ordenes_compra').select('*').order('creado_en',{ascending:false});
@@ -546,6 +546,7 @@ function buildCharts(){
   if(c2)charts.push(new Chart(c2,{type:'bar',data:{labels:mk.map(k=>nombres[k.slice(5)]+' '+k.slice(2,4)),datasets:[{data:mk.map(k=>meses[k]),backgroundColor:'#6E2430CC',borderRadius:5,barThickness:22}]},options:{plugins:{legend:{display:false},title:{display:true,text:'Consumo mensual en $',font:{size:11},color:'#8B867D'}},scales:{y:{ticks:{callback:v=>plata(v),font:{size:10}},grid:{color:'#F1EDE5'}},x:{grid:{display:false}}},responsive:true,maintainAspectRatio:false}}));
 }
 
+let ordDesde=null, ordHasta=null, ordSinRango=false;
 function renderOrdenes(){
   const ordenes=ordenesF();
   const ft=document.getElementById('f-tipo')?.value||'';
@@ -554,10 +555,22 @@ function renderOrdenes(){
   const chk=e=>document.getElementById(e)?document.getElementById(e).checked:true;
   const verCreadas=chk('ch-creadas'),verIni=chk('ch-ini'),verTerm=chk('ch-term'),verAnu=document.getElementById('ch-anu')?document.getElementById('ch-anu').checked:false;
 
+  // Por defecto, últimos 30 días: sin rango esto lista TODAS las órdenes
+  // (van camino a los miles) y la pantalla se vuelve inmanejable.
+  const hoyD=new Date(), hace30=new Date(); hace30.setDate(hace30.getDate()-29);
+  if(ordDesde===null) ordDesde=isoLocalG(hace30);
+  if(ordHasta===null) ordHasta=isoLocalG(hoyD);
+
   let lista=ordenes;
   if(ft)lista=lista.filter(o=>(o.detalle?.tipo||'fitosanitario')===ft);
   if(fca)lista=lista.filter(o=>String(o.detalle?.fundo||o.campo||'').toUpperCase()===fca);
   if(fcu)lista=lista.filter(o=>(o.detalle?.cuarteles||[]).some(c=>c.c===fcu));
+  if(!ordSinRango){
+    // Se filtra por la fecha de CREACIÓN de la orden. Una sin fecha real
+    // (dato antiguo sin creado_en) no se esconde: mejor mostrarla de más
+    // que perderla silenciosamente.
+    lista=lista.filter(o=>!o.fechaISO || (o.fechaISO>=ordDesde && o.fechaISO<=ordHasta));
+  }
   lista=lista.filter(o=>
     (o.estado==='EN CURSO'&&verCreadas)||(o.estado==='INICIADA'&&verIni)||
     (o.estado==='TERMINADA'&&verTerm)||(o.estado==='ANULADA'&&verAnu));
@@ -568,6 +581,11 @@ function renderOrdenes(){
 
   return `
   <div class="filters">
+    <div class="fbox"><label>Desde (creación)</label><input type="date" id="ord-desde" value="${ordDesde}" ${ordSinRango?'disabled':''} onchange="ordFechas()" style="border:none;font-size:13px"></div>
+    <div class="fbox"><label>Hasta</label><input type="date" id="ord-hasta" value="${ordHasta}" ${ordSinRango?'disabled':''} onchange="ordFechas()" style="border:none;font-size:13px"></div>
+    <button class="btn line" onclick="ordRango(7)">7 días</button>
+    <button class="btn line" onclick="ordRango(30)">30 días</button>
+    <button class="btn ${ordSinRango?'':'line'}" onclick="ordVerTodas()" ${ordSinRango?'style="background:#6E2430;color:#fff;border-color:#6E2430"':''}>Todas</button>
     <div class="fbox"><label>Tipo</label>
       <select id="f-tipo" onchange="render()">
         <option value="">todos</option>
@@ -584,7 +602,7 @@ function renderOrdenes(){
         <option value="">todos</option>
         ${cuartelesTodos.map(c=>`<option ${fcu===c?'selected':''}>${c}</option>`).join('')}
       </select></div>
-    <span style="font-size:12.5px;color:#80868b;padding-bottom:8px">${lista.length} órdenes</span>
+    <span style="font-size:12.5px;color:#80868b;padding-bottom:8px">${lista.length} órdenes${ordSinRango?' · sin filtro de fecha':''}</span>
   </div>
   <div class="chks">
     <b>Estado</b>
@@ -615,6 +633,19 @@ function toggleDet(i){
   const el=document.getElementById('det-'+i);
   if(el)el.classList.toggle('hide');
 }
+
+function ordFechas(){
+  const d=document.getElementById('ord-desde'),h=document.getElementById('ord-hasta');
+  if(d&&d.value)ordDesde=d.value; if(h&&h.value)ordHasta=h.value;
+  if(ordDesde>ordHasta){const t=ordDesde;ordDesde=ordHasta;ordHasta=t;}
+  ordSinRango=false;
+  render();
+}
+function ordRango(dias){
+  const hoyD=new Date(),desde=new Date();desde.setDate(desde.getDate()-(dias-1));
+  ordDesde=isoLocalG(desde);ordHasta=isoLocalG(hoyD);ordSinRango=false;render();
+}
+function ordVerTodas(){ ordSinRango=true; render(); }
 
 // Desglose completo de una orden
 function desglose(o){
