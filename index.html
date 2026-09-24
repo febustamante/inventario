@@ -388,6 +388,52 @@ const SUPABASE_URL = 'https://cmfvnluppvqyqwpfjrbs.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_TvfWNvrb2AitDfwvW5YNww_QsR_gjD1';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+// ═══════════════════════════════════════════════════════════════════
+// FRENO ANTI DOBLE-CLIC — aplica a TODOS los botones de la app.
+// Bloquea el botón apenas se hace clic y lo libera recién cuando la
+// accion termina (si es async, espera a que termine de verdad; si es
+// instantanea, lo libera rapido). Asi no importa si el guardado tarda
+// unos segundos por mala señal: el segundo tap no vuelve a disparar
+// la misma accion mientras la primera sigue en curso.
+// Nacio del error de la Orden #167 (quedo duplicada por doble tap).
+// ═══════════════════════════════════════════════════════════════════
+(function(){
+  function envolverConFreno(fnOriginal, btn){
+    return function(...args){
+      if(btn.dataset.frenoActivo === '1') return; // ya esta procesando, ignorar el tap extra
+      btn.dataset.frenoActivo = '1';
+      const prevOpacity = btn.style.opacity, prevCursor = btn.style.cursor;
+      btn.style.opacity = '0.55';
+      btn.style.cursor = 'not-allowed';
+      const liberar = ()=>{
+        btn.dataset.frenoActivo = '';
+        btn.style.opacity = prevOpacity;
+        btn.style.cursor = prevCursor;
+      };
+      let resultado;
+      try{
+        resultado = fnOriginal.apply(this, args);
+      }catch(err){
+        liberar();
+        throw err;
+      }
+      if(resultado && typeof resultado.then === 'function'){
+        resultado.then(liberar, liberar); // espera a que la promesa termine (ok o error)
+      }else{
+        setTimeout(liberar, 400); // accion instantanea: solo frena el doble-tap literal
+      }
+      return resultado;
+    };
+  }
+  document.addEventListener('click', function(e){
+    const btn = e.target.closest('button');
+    if(!btn || !btn.onclick) return;
+    if(btn.dataset.frenoListo === '1') return; // ya envuelto, no envolver dos veces
+    btn.dataset.frenoListo = '1';
+    btn.onclick = envolverConFreno(btn.onclick, btn);
+  }, true); // captura: corre ANTES de que el propio onclick del boton se dispare
+})();
+
 // ══════ BODEGAS ══════
 // Se leen de la tabla ubicaciones de Supabase. Estos valores son solo el
 // respaldo para el primer arranque sin señal: en cuanto la app sincroniza,
@@ -416,7 +462,7 @@ function stockVacio(){ const o={}; LOCS.forEach(l=>o[l]=0); return o; }
 // fijo de cuatro y las bodegas nuevas salían como "undefined".
 // Versión visible en la pantalla de entrada. Sirve para saber de un vistazo si
 // el teléfono tiene el archivo nuevo o quedó con uno viejo en caché.
-const APP_VERSION = 'v18 · 08-09-2026';
+const APP_VERSION = 'v19 · 24-09-2026';
 
 function abrev(l){
   const fijas = {'Bodega Central':'Bodega','Caseta Cerrillos':'Cerrillos'};
