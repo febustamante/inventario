@@ -156,6 +156,53 @@
 const SUPABASE_URL='https://cmfvnluppvqyqwpfjrbs.supabase.co';
 const SUPABASE_KEY='sb_publishable_TvfWNvrb2AitDfwvW5YNww_QsR_gjD1';
 const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+
+// ═══════════════════════════════════════════════════════════════════
+// FRENO ANTI DOBLE-CLIC — aplica a TODOS los botones de la app.
+// Bloquea el boton apenas se hace clic y lo libera recien cuando la
+// accion termina (si es async, espera a que termine de verdad; si es
+// instantanea, lo libera rapido). Asi no importa si el guardado tarda
+// unos segundos por mala señal: el segundo tap no vuelve a disparar
+// la misma accion mientras la primera sigue en curso.
+// Nacio del error de la Orden #167 (quedo duplicada por doble tap).
+// ═══════════════════════════════════════════════════════════════════
+(function(){
+  function envolverConFreno(fnOriginal, btn){
+    return function(...args){
+      if(btn.dataset.frenoActivo === '1') return;
+      btn.dataset.frenoActivo = '1';
+      const prevOpacity = btn.style.opacity, prevCursor = btn.style.cursor;
+      btn.style.opacity = '0.55';
+      btn.style.cursor = 'not-allowed';
+      const liberar = ()=>{
+        btn.dataset.frenoActivo = '';
+        btn.style.opacity = prevOpacity;
+        btn.style.cursor = prevCursor;
+      };
+      let resultado;
+      try{
+        resultado = fnOriginal.apply(this, args);
+      }catch(err){
+        liberar();
+        throw err;
+      }
+      if(resultado && typeof resultado.then === 'function'){
+        resultado.then(liberar, liberar);
+      }else{
+        setTimeout(liberar, 400);
+      }
+      return resultado;
+    };
+  }
+  document.addEventListener('click', function(e){
+    const btn = e.target.closest('button');
+    if(!btn || !btn.onclick) return;
+    if(btn.dataset.frenoListo === '1') return;
+    btn.dataset.frenoListo = '1';
+    btn.onclick = envolverConFreno(btn.onclick, btn);
+  }, true);
+})();
+
 // Las bodegas se leen de la tabla ubicaciones. Esto es el respaldo.
 let ID_UBIC={1:'Bodega Central',2:'Caseta Cerrillos',3:'Rulo',4:'Paine'};
 let LOCS_G=['Bodega Central','Caseta Cerrillos','Rulo','Paine'];
