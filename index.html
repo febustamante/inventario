@@ -462,7 +462,7 @@ function stockVacio(){ const o={}; LOCS.forEach(l=>o[l]=0); return o; }
 // fijo de cuatro y las bodegas nuevas salían como "undefined".
 // Versión visible en la pantalla de entrada. Sirve para saber de un vistazo si
 // el teléfono tiene el archivo nuevo o quedó con uno viejo en caché.
-const APP_VERSION = 'v22 · 24-09-2026';
+const APP_VERSION = 'v23 · 27-09-2026';
 
 function abrev(l){
   const fijas = {'Bodega Central':'Bodega','Caseta Cerrillos':'Cerrillos'};
@@ -2749,29 +2749,99 @@ function abrirExportarPetroleo(){
   div.innerHTML = `
     <div style="background:#fff;width:100%;max-width:420px;border-radius:18px 18px 0 0;padding:20px;max-height:88vh;overflow-y:auto">
       <div style="font-size:17px;font-weight:800;margin-bottom:2px">Exportar vales</div>
-      <div style="font-size:12px;color:var(--tx3);margin-bottom:16px">Elige el rango de fechas (déjalo vacío para exportar todo)</div>
+      <div style="font-size:12px;color:var(--tx3);margin-bottom:14px">Elige el rango de fechas (déjalo vacío para exportar todo)</div>
 
-      <label style="${lbl}">Desde</label>
-      <input id="exp-pet-desde" type="date" style="${inp}">
-
-      <label style="${lbl}">Hasta</label>
-      <input id="exp-pet-hasta" type="date" style="${inp}">
-
-      <button type="button" class="btn-sec" style="width:100%;font-size:12.5px;padding:9px;margin-bottom:8px;display:flex;align-items:center;justify-content:center;gap:6px" onclick="rangoDesdeUltimaRecepcion()"><i class="ti ti-gas-station"></i> Desde la última recepción</button>
-      <div id="exp-pet-info" style="font-size:11px;color:var(--tx3);margin:-4px 0 10px;text-align:center"></div>
-
-      <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
-        <button type="button" class="btn-sec" style="flex:1;min-width:100px;font-size:12px;padding:8px" onclick="rangoRapidoPetroleo(7)">Últimos 7 días</button>
-        <button type="button" class="btn-sec" style="flex:1;min-width:100px;font-size:12px;padding:8px" onclick="rangoRapidoPetroleo(30)">Últimos 30 días</button>
-        <button type="button" class="btn-sec" style="flex:1;min-width:100px;font-size:12px;padding:8px" onclick="rangoRapidoPetroleo(0)">Todo</button>
+      <div style="display:flex;gap:8px;margin-bottom:16px">
+        <button type="button" class="btn-sec" style="flex:1;font-size:12px;padding:9px;display:flex;align-items:center;justify-content:center;gap:5px" onclick="exportarPetroleoExcel('','')"><i class="ti ti-download"></i> Descargar todo (Excel)</button>
+        <button type="button" class="btn-sec" style="flex:1;font-size:12px;padding:9px;display:flex;align-items:center;justify-content:center;gap:5px" onclick="descargarExcelUltimaRecepcion()"><i class="ti ti-download"></i> Solo última recepción</button>
       </div>
 
-      <div style="display:flex;gap:10px">
-        <button class="btn-sec" style="flex:1" onclick="document.getElementById('modal-exp-pet').remove()">Cancelar</button>
-        <button class="btn-primary" style="flex:1;margin:0;display:flex;align-items:center;justify-content:center;gap:5px" onclick="confirmarExportarPetroleo()"><i class="ti ti-download"></i> Descargar Excel + PDF</button>
+      <div style="border-top:1px solid var(--bd);margin:0 0 14px;padding-top:14px">
+        <label style="${lbl}">Litros a solicitar</label>
+        <input id="pet-litros-solicitar" type="number" min="0" step="1" inputmode="numeric" placeholder="Ej: 500" style="${inp}">
+        <button type="button" class="btn-primary" style="width:100%;margin:0 0 4px;display:flex;align-items:center;justify-content:center;gap:5px" onclick="armarCorreoPetroleo()"><i class="ti ti-mail"></i> Armar correo a Yanet</button>
+        <div style="font-size:11px;color:var(--tx3);text-align:center">Descarga el Excel y los vales firmados (desde la última recepción) y abre el correo ya redactado — solo falta adjuntar los dos archivos</div>
+      </div>
+
+      <div style="border-top:1px solid var(--bd);margin:14px 0 0;padding-top:14px">
+        <label style="${lbl}">Desde</label>
+        <input id="exp-pet-desde" type="date" style="${inp}">
+
+        <label style="${lbl}">Hasta</label>
+        <input id="exp-pet-hasta" type="date" style="${inp}">
+
+        <button type="button" class="btn-sec" style="width:100%;font-size:12.5px;padding:9px;margin-bottom:8px;display:flex;align-items:center;justify-content:center;gap:6px" onclick="rangoDesdeUltimaRecepcion()"><i class="ti ti-gas-station"></i> Desde la última recepción</button>
+        <div id="exp-pet-info" style="font-size:11px;color:var(--tx3);margin:-4px 0 10px;text-align:center"></div>
+
+        <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+          <button type="button" class="btn-sec" style="flex:1;min-width:100px;font-size:12px;padding:8px" onclick="rangoRapidoPetroleo(7)">Últimos 7 días</button>
+          <button type="button" class="btn-sec" style="flex:1;min-width:100px;font-size:12px;padding:8px" onclick="rangoRapidoPetroleo(30)">Últimos 30 días</button>
+          <button type="button" class="btn-sec" style="flex:1;min-width:100px;font-size:12px;padding:8px" onclick="rangoRapidoPetroleo(0)">Todo</button>
+        </div>
+
+        <div style="display:flex;gap:10px">
+          <button class="btn-sec" style="flex:1" onclick="document.getElementById('modal-exp-pet').remove()">Cancelar</button>
+          <button class="btn-primary" style="flex:1;margin:0;display:flex;align-items:center;justify-content:center;gap:5px" onclick="confirmarExportarPetroleo()"><i class="ti ti-download"></i> Descargar Excel + PDF</button>
+        </div>
       </div>
     </div>`;
   document.body.appendChild(div);
+}
+
+// Calcula el rango 'desde la ultima recepcion' de la bombona actual sin
+// depender de que los inputs de fecha del modal esten visibles/llenos.
+// Devuelve null si no hay ninguna recepcion registrada.
+function rangoUltimaRecepcionISO(){
+  const bExp = petBombonaActual();
+  const entradas = (petroleoMovs||[])
+    .filter(m=>m.tipo==='entrada' && m.estado!=='ANULADO' && bombonaDe(m)===bExp && m.fecha)
+    .sort((a,b)=> new Date(b.fecha) - new Date(a.fecha));
+  if(!entradas.length) return null;
+  return { desde: isoLocal(new Date(entradas[0].fecha)), hasta: isoLocal(new Date()), bombona:bExp, litros:entradas[0].litros, fecha:entradas[0].fecha };
+}
+
+function descargarExcelUltimaRecepcion(){
+  const r = rangoUltimaRecepcionISO();
+  if(!r){ showToast('No hay ninguna recepción registrada en esta bombona.','err'); return; }
+  exportarPetroleoExcel(r.desde, r.hasta);
+}
+
+// Arma el correo de solicitud de petróleo: descarga Excel + PDF (desde la
+// última recepción) y abre un borrador de correo con litros solicitados y
+// saldo actual. El navegador no permite adjuntar archivos automáticamente
+// a un correo por seguridad — por eso se descargan aparte para adjuntarlos
+// a mano, igual que en "Enviar pedido a compras".
+function armarCorreoPetroleo(){
+  const litrosInp = document.getElementById('pet-litros-solicitar');
+  const litros = parseFloat(litrosInp?.value) || 0;
+  if(litros<=0){ showToast('Ingresa cuántos litros vas a solicitar','err'); return; }
+
+  const r = rangoUltimaRecepcionISO();
+  const bExp = petBombonaActual();
+  const saldoActual = saldoPetroleo(bExp);
+
+  // Descargar Excel + PDF (desde la última recepción; si no hay recepción registrada, todo)
+  exportarPetroleoExcel(r?r.desde:'', r?r.hasta:'');
+  setTimeout(()=> exportarPetroleoPDF(r?r.desde:'', r?r.hasta:''), 400);
+
+  document.getElementById('modal-exp-pet')?.remove();
+
+  const asunto = 'Solicitud de petróleo - Agrícola San José';
+  const cuerpo = `Buenos días!\nYanet. Solicito por favor ${fmt(litros)} litros de petróleo. Actualmente quedan ${fmt(saldoActual)} litros.\n\n` +
+    `Bombona: ${bExp}\nSolicitado por: ${curUser?curUser.full||curUser.id:''}\nFecha: ${hoy()}\n\nGracias.`;
+
+  const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(EMAIL_COMPRAS)}&su=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
+  const mailtoUrl = `mailto:${EMAIL_COMPRAS}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
+
+  const html = `
+    <div style="font-size:13px;color:var(--tx2);margin-bottom:10px">Correo para <strong>${EMAIL_COMPRAS}</strong>. El Excel y el PDF de vales ya se están descargando — adjúntalos en el correo antes de enviar:</div>
+    <textarea id="compra-texto" readonly style="width:100%;min-height:160px;font-size:12px;padding:10px;border:1px solid var(--bd2);border-radius:8px;background:var(--surf2);color:var(--tx);margin-bottom:12px">${cuerpo}</textarea>
+    <button class="btn-primary" onclick="copiarPedido()" style="margin-bottom:8px">📋 Copiar texto</button>
+    <button class="btn-sec" onclick="window.open('${gmailUrl.replace(/'/g,"\\'")}','_blank')" style="width:100%;margin-bottom:8px">✉️ Abrir en Gmail (web)</button>
+    <a href="${mailtoUrl.replace(/"/g,'&quot;')}" class="btn-sec" style="width:100%;display:block;text-align:center;text-decoration:none;margin-bottom:8px">📧 Abrir app de correo</a>
+    <button class="btn-sec" onclick="cerrarModalCompra()" style="width:100%">Cerrar</button>
+  `;
+  mostrarModal('Enviar solicitud de petróleo', html);
 }
 
 function rangoRapidoPetroleo(dias){
