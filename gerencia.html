@@ -3569,22 +3569,14 @@ function descargarReportePDF(R, RP){
   doc.setFont('helvetica','normal'); doc.setFontSize(6.4); doc.setTextColor(...GR);
   doc.text('Valorizado a '+plata(PRECIO_PETROLEO_L)+' por litro.', M, y-4);
 
-  titulo('Petróleo por máquina');
+  titulo('Top 5 vehículos con más consumo de petróleo');
   tabla([
     { t:'Máquina',  w:CW*0.40, a:'left',  k:r=>r.maquina },
     { t:'Bombona',  w:CW*0.20, a:'left',  k:r=>r.bombona.charAt(0)+r.bombona.slice(1).toLowerCase(), gris:true },
     { t:'Vales',    w:CW*0.12, a:'right', k:r=>String(r.vales), gris:true },
     { t:'Litros',   w:CW*0.14, a:'right', k:r=>miles(r.litros), bold:true },
     { t:'Costo',    w:CW*0.14, a:'right', k:r=>plata(r.costo) },
-  ], R.petPorMaquina, 'Sin retiros de petróleo en el mes');
-
-  titulo('Consumo diario de petróleo');
-  tabla([
-    { t:'Máquina',  w:CW*0.44, a:'left',  k:r=>r.maquina },
-    { t:'Bombona',  w:CW*0.22, a:'left',  k:r=>r.bombona.charAt(0)+r.bombona.slice(1).toLowerCase(), gris:true },
-    { t:'Vales',    w:CW*0.14, a:'right', k:r=>String(r.vales), gris:true },
-    { t:'Litros',   w:CW*0.20, a:'right', k:r=>miles(r.litros), bold:true },
-  ], agruparPor(R.petPorDia,'fechaTxt'), 'Sin retiros de petróleo en el mes');
+  ], R.petPorMaquina.slice(0,5), 'Sin retiros de petróleo en el mes');
 
   titulo('Entradas de stock por producto');
   tabla([
