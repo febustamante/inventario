@@ -5747,6 +5747,7 @@ async function iniciarOrden(idOrden){
 async function completarOrdenReal(idOrden){
   const o = ordenes.find(x => String(x.idOrden) === String(idOrden));
   if(!o){ showToast('No se encontró la orden', 'err'); return; }
+  if(!bloquearAccion('completarOrden')) return; // evita doble envío / duplicados
 
   // Recolectar Real Aplicado de productos de la orden
   const lineas = [];
@@ -5787,6 +5788,7 @@ async function completarOrdenReal(idOrden){
 
   if(faltantes.length){
     alert('⚠️ No puedes confirmar: faltan campos por completar.\n\nDebes llenar TODO antes de enviar:\n\n• ' + faltantes.join('\n• '));
+    liberarAccion('completarOrden');
     return;
   }
 
@@ -5815,12 +5817,13 @@ async function completarOrdenReal(idOrden){
       '2) Cuando llegue el stock, vuelve aquí y cierra la orden normalmente.\n\n' +
       'Tus datos quedan guardados como borrador — no se pierden.'
     );
+    liberarAccion('completarOrden');
     return;
   }
 
   let msg = `Vas a descontar de ${campoDestino}:\n\n` + lineasDesc.map(l=>`• ${l.producto}: ${l.cantidad}`).join('\n');
   msg += `\n\n¿Confirmar?`;
-  if(!confirm(msg)) return;
+  if(!confirm(msg)){ liberarAccion('completarOrden'); return; }
 
   // Fecha y hora de término: automáticas (momento del cierre), NO editables
   const _ahora = new Date();
@@ -5857,7 +5860,8 @@ async function completarOrdenReal(idOrden){
     obs: `Orden ${o.detalle?.numeroOrden||o.idOrden} aplicada`
   });
 
-  if(!okCerrar){ showToast('No se pudo cerrar la orden. Revisa tu conexión y reintenta.','err'); return; }
+  if(!okCerrar){ liberarAccion('completarOrden'); showToast('No se pudo cerrar la orden. Revisa tu conexión y reintenta.','err'); return; }
+  liberarAccion('completarOrden');
   showToast('Aplicación registrada y stock descontado');
   limpiarBorrador(o.idOrden);
   await syncData();
