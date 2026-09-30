@@ -1719,6 +1719,7 @@ async function recibirOC(ocId){
     if(v>0){ if(v>falta)v=falta; recibidos.push({idx,cant:v,producto:it.producto,clase:String(it.clase||'producto')}); }
   });
   if(!recibidos.length){showToast('Ingresa al menos una cantidad recibida','err');return;}
+  if(!bloquearAccion('recibirOC')) return; // evita doble envío / duplicados
 
   showToast('Registrando recepción...','info');
   const noEncontrados=[];
@@ -1801,6 +1802,8 @@ async function recibirOC(ocId){
   }catch(e){
     console.error(e);
     showToast('Error al recibir: '+(e.message||''),'err');
+  }finally{
+    liberarAccion('recibirOC');
   }
 }
 
@@ -2278,6 +2281,7 @@ async function guardarEdicionMaterial(matId){
   const cantFinal = isNaN(nuevaCant) ? m.cantidad : nuevaCant;
   const huboAjuste = cantFinal !== m.cantidad;
   document.getElementById('modal-material').remove();
+  if(!bloquearAccion('matEditar')) return; // evita doble envío / duplicados
   showToast('Guardando cambios...','info');
   try{
     const { error } = await sb.from('materiales').update({
@@ -2296,6 +2300,8 @@ async function guardarEdicionMaterial(matId){
     await syncData();
   }catch(e){
     showToast('Error: '+(e.message||''),'err');
+  }finally{
+    liberarAccion('matEditar');
   }
 }
 
@@ -2303,6 +2309,7 @@ async function eliminarMaterial(matId){
   const m = materiales.find(x=>String(x.id)===String(matId));
   if(!m) return;
   if(!confirm('¿Eliminar "'+m.nombre+'"?\n\nEsto quita el material del catálogo. Su historial de movimientos se conserva.')) return;
+  if(!bloquearAccion('matEliminar')) return; // evita doble envío / duplicados
   showToast('Eliminando...','info');
   try{
     const { error } = await sb.from('materiales').delete().eq('id',m.id);
@@ -2312,9 +2319,12 @@ async function eliminarMaterial(matId){
     await syncData();
   }catch(e){
     showToast('Error: '+(e.message||''),'err');
+  }finally{
+    liberarAccion('matEliminar');
   }
 }
 async function guardarNuevoMaterial(nombre, unidad, categoria){
+  if(!bloquearAccion('matNuevo')) return; // evita doble envío / duplicados
   showToast('Agregando material...','info');
   try{
     const { error } = await sb.from('materiales').insert({nombre, unidad, categoria, cantidad:0});
@@ -2323,6 +2333,8 @@ async function guardarNuevoMaterial(nombre, unidad, categoria){
     await syncData();
   }catch(e){
     showToast('Error: '+(e.message||'')+' — ¿existe la tabla materiales?','err');
+  }finally{
+    liberarAccion('matNuevo');
   }
 }
 
@@ -2385,6 +2397,7 @@ async function confirmarMovMaterial(matId, tipo){
     : g('mm-motivo');
 
   const nuevaCant = tipo==='entrada' ? m.cantidad+cant : m.cantidad-cant;
+  if(!bloquearAccion('matMov')) return; // evita doble envío / duplicados
   showToast('Guardando...','info');
   try{
     const { error: e1 } = await sb.from('materiales').update({cantidad:nuevaCant}).eq('id',m.id);
@@ -2405,6 +2418,8 @@ async function confirmarMovMaterial(matId, tipo){
     await syncData();
   }catch(e){
     showToast('Error: '+(e.message||''),'err');
+  }finally{
+    liberarAccion('matMov');
   }
 }
 
@@ -2420,6 +2435,7 @@ async function editarMovMaterial(movId){
   if(nueva<=0){ showToast('Cantidad inválida','err'); return; }
   const delta = nueva - (parseFloat(mv.cantidad)||0);
   if(delta===0){ showToast('La cantidad es la misma','info'); return; }
+  if(!bloquearAccion('matMovEditar')) return; // evita doble envío / duplicados
   showToast('Guardando...','info');
   try{
     if(m){
@@ -2435,7 +2451,7 @@ async function editarMovMaterial(movId){
     if(e2) throw e2;
     showToast('Movimiento editado');
     await syncData();
-  }catch(e){ showToast('Error: '+(e.message||''),'err'); }
+  }catch(e){ showToast('Error: '+(e.message||''),'err'); }finally{ liberarAccion('matMovEditar'); }
 }
 
 async function anularMovMaterial(movId){
@@ -2445,6 +2461,7 @@ async function anularMovMaterial(movId){
   const cant = parseFloat(mv.cantidad)||0;
   if(!confirm('¿Anular este movimiento?\n\n'+(mv.material_nom||'')+' · '+(mv.tipo==='entrada'?'entrada':'salida')+' de '+fmt(cant)+
               '\n\nSe devuelve el stock y el movimiento se borra del listado de materiales.')) return;
+  if(!bloquearAccion('matMovAnular')) return; // evita doble envío / duplicados
   showToast('Anulando...','info');
   try{
     if(m){
@@ -2458,7 +2475,7 @@ async function anularMovMaterial(movId){
     if(e2) throw e2;
     showToast('Movimiento anulado · stock devuelto');
     await syncData();
-  }catch(e){ showToast('Error: '+(e.message||''),'err'); }
+  }catch(e){ showToast('Error: '+(e.message||''),'err'); }finally{ liberarAccion('matMovAnular'); }
 }
 
 // ══════════════════ PETRÓLEO (vales digitales de la bombona) ══════════════════
@@ -2716,26 +2733,28 @@ async function editarValePetroleo(movId){
   if(txt===null) return;
   const nueva = parseFloat(txt)||0;
   if(nueva<=0){ showToast('Cantidad inválida','err'); return; }
+  if(!bloquearAccion('valeEditar')) return; // evita doble envío / duplicados
   showToast('Guardando...','info');
   try{
     const { error } = await sb.from('petroleo_movs').update({litros:nueva}).eq('id',mv.id);
     if(error) throw error;
     showToast('Vale actualizado');
     await syncData();
-  }catch(e){ showToast('Error: '+(e.message||''),'err'); }
+  }catch(e){ showToast('Error: '+(e.message||''),'err'); }finally{ liberarAccion('valeEditar'); }
 }
 
 async function anularValePetroleo(movId){
   const mv = petroleoMovs.find(x=>String(x.id)===String(movId));
   if(!mv){ showToast('No encontré el vale','err'); return; }
   if(!confirm('¿Anular este '+(mv.tipo==='entrada'?'ingreso':'vale')+' de '+fmt(mv.litros)+' L?\n\nNo se borra, queda marcado como anulado y deja de contar en el saldo.')) return;
+  if(!bloquearAccion('valeAnular')) return; // evita doble envío / duplicados
   showToast('Anulando...','info');
   try{
     const { error } = await sb.from('petroleo_movs').update({estado:'ANULADO'}).eq('id',mv.id);
     if(error) throw error;
     showToast('Anulado');
     await syncData();
-  }catch(e){ showToast('Error: '+(e.message||''),'err'); }
+  }catch(e){ showToast('Error: '+(e.message||''),'err'); }finally{ liberarAccion('valeAnular'); }
 }
 
 // Modal para elegir el rango de fechas antes de exportar (para adjuntar solo lo del período que corresponde)
@@ -3471,11 +3490,13 @@ async function doPerdida(){
   const p=products.find(x=>x.id===pid);
   const costo=cant*(p.precio||0);
   if(!confirm(`Vas a registrar como PÉRDIDA:\n\n${p.nombre}: ${cant} (${motivo})\nUbicación: ${ubic}\nValor: ${plata(costo)}\n\nEsto DESCONTARÁ el stock. ¿Confirmar?`)) return;
+  if(!bloquearAccion('perdida')) return; // evita doble envío / duplicados
   addStock(pid,ubic,-cant);
   movimientos.push({id:nextMov++,tipo:'perdida',producto:p.nombre,cantidad:cant,origen:ubic,destino:'',obs:motivo+(obs?' · '+obs:''),fecha:hoy(),usuario:curUser.id});
   showToast('Guardando...','info');
   const okPer=await postSheets({action:'perdida',fecha:hoy(),producto:p.nombre,cantidad:cant,origen:ubic,usuario:curUser.id,motivo:motivo+(obs?' · '+obs:'')});
-  if(!okPer){ showToast('No se pudo guardar. Revisa tu conexión y reintenta.','err'); return; }
+  if(!okPer){ liberarAccion('perdida'); showToast('No se pudo guardar. Revisa tu conexión y reintenta.','err'); return; }
+  liberarAccion('perdida');
   showToast('Pérdida registrada: '+cant+' de '+p.nombre);
   refresh();
 }
@@ -5554,6 +5575,7 @@ async function devolverOrden(idOrden){
   if(!motivo.trim()){ showToast('Debes escribir un motivo','err'); return; }
 
   if(!confirm('Se devolverá la orden al dosificador y se REVERTIRÁ el stock aplicado en '+o.campo+'.\n\nEl dosificador la corregirá y volverá a cerrarla. ¿Continuar?')) return;
+  if(!bloquearAccion('devolverOrden')) return; // evita doble envío / duplicados
 
   try{
     // Revertir movimientos de aplicación de esta orden
@@ -5584,6 +5606,8 @@ async function devolverOrden(idOrden){
   }catch(e){
     console.error(e);
     showToast('Error al devolver: '+(e.message||''),'err');
+  }finally{
+    liberarAccion('devolverOrden');
   }
 }
 
@@ -5601,6 +5625,7 @@ async function anularOrden(idOrden, terminada){
   let msg = `¿Anular la orden N°${o.detalle?.numeroOrden||o.idOrden}?`;
   if(terminada) msg += `\n\nEsta orden ya descontó stock. Al anularla, se DEVOLVERÁ al stock de ${o.campo} lo que se había aplicado.`;
   if(!confirm(msg)) return;
+  if(!bloquearAccion('anularOrden')) return; // evita doble envío / duplicados
 
   try{
     // Si está terminada, revertir los movimientos de aplicación de esta orden
@@ -5627,6 +5652,8 @@ async function anularOrden(idOrden, terminada){
   }catch(e){
     console.error(e);
     showToast('Error al anular: '+(e.message||'desconocido'),'err');
+  }finally{
+    liberarAccion('anularOrden');
   }
 }
 
@@ -5702,10 +5729,11 @@ async function quitarCuartelOrden(idOrden, c){
   const cuarts = (o.detalle.cuarteles||[]);
   if(cuarts.length<=1){ showToast('La orden debe tener al menos un cuartel','err'); return; }
   if(!confirm(`¿Quitar el cuartel ${c} de esta orden?\n\nSe recalcularán las hectáreas y los totales.`)) return;
+  if(!bloquearAccion('cuartelOrden')) return; // evita doble envío / duplicados
   try{
     await actualizarCuartelesOrden(o, cuarts.filter(q=>q.c!==c));
     showToast('Cuartel '+c+' quitado');
-  }catch(e){ showToast('Error: '+(e.message||''),'err'); }
+  }catch(e){ showToast('Error: '+(e.message||''),'err'); }finally{ liberarAccion('cuartelOrden'); }
 }
 
 async function agregarCuartelOrden(idOrden){
@@ -5718,10 +5746,11 @@ async function agregarCuartelOrden(idOrden){
   const q = (CUARTELES[fundoKey]||[]).find(x=>x.c===c);
   if(!q){ showToast('Cuartel no encontrado','err'); return; }
   if(!confirm(`¿Agregar el cuartel ${c} (${q.ha} ha) a esta orden?\n\nSe recalcularán las hectáreas y los totales.`)) return;
+  if(!bloquearAccion('cuartelOrden')) return; // evita doble envío / duplicados
   try{
     await actualizarCuartelesOrden(o, [...(o.detalle.cuarteles||[]), {c:q.c, ha:q.ha}]);
     showToast('Cuartel '+c+' agregado');
-  }catch(e){ showToast('Error: '+(e.message||''),'err'); }
+  }catch(e){ showToast('Error: '+(e.message||''),'err'); }finally{ liberarAccion('cuartelOrden'); }
 }
 
 // El dosificador inicia la aplicación: registra fecha/hora automática
@@ -5732,6 +5761,7 @@ async function iniciarOrden(idOrden){
   const fecha = ahora.toISOString().slice(0,10);
   const hora = ahora.toTimeString().slice(0,5);
   if(!confirm(`▶️ Iniciar la aplicación de la Orden N°${o.detalle?.numeroOrden||o.idOrden}?\n\nSe registrará el inicio: ${fecha} a las ${hora}`)) return;
+  if(!bloquearAccion('iniciarOrden')) return; // evita doble envío / duplicados
   try{
     const detalleActualizado = Object.assign({}, o.detalle||{}, { inicioReal:{fecha, hora} });
     const { error } = await sb.from('ordenes').update({ estado:'INICIADA', detalle: detalleActualizado }).eq('id', o.idOrden);
@@ -5741,6 +5771,8 @@ async function iniciarOrden(idOrden){
   }catch(e){
     console.error(e);
     showToast('Error al iniciar: '+(e.message||''),'err');
+  }finally{
+    liberarAccion('iniciarOrden');
   }
 }
 
@@ -5999,6 +6031,7 @@ for (const l of lineas) {
 }
   if(!lineas.length) return showToast('Ingresa al menos una cantidad', 'err');
 
+  if(!bloquearAccion('ordenLista')) return; // evita doble envío / duplicados
   showToast('Cerrando orden...', 'info');
 
   const resp = await postSheets({
@@ -6010,7 +6043,8 @@ for (const l of lineas) {
     lineas: lineas
   });
 
-  if(!resp){ showToast('No se pudo terminar la orden. Revisa tu conexión y reintenta.','err'); return; }
+  if(!resp){ liberarAccion('ordenLista'); showToast('No se pudo terminar la orden. Revisa tu conexión y reintenta.','err'); return; }
+  liberarAccion('ordenLista');
   showToast('Orden terminada correctamente');
   await syncData();
 
@@ -6551,6 +6585,7 @@ async function editarMovimiento(idRegistro, tipo){
   if(tipo === 'aplicacion') datos = { CANTIDAD_APLICADA: cant };
   if(tipo === 'devolucion') datos = { CANTIDAD: cant };
 
+  if(!bloquearAccion('editarMovimiento')) return; // evita doble envío / duplicados
   showToast('Guardando edicion...', 'info');
 
   await postSheets({
@@ -6561,6 +6596,7 @@ async function editarMovimiento(idRegistro, tipo){
     usuario: curUser ? curUser.id : ''
   });
 
+  liberarAccion('editarMovimiento');
   showToast('Registro editado correctamente');
 }
 
@@ -6571,6 +6607,7 @@ async function anularMovimiento(idRegistro, tipo){
   }
 
   if(!confirm('¿Seguro que quieres anular este movimiento?')) return;
+  if(!bloquearAccion('anularMovimiento')) return; // evita doble envío / duplicados
 
   const hoja = hojaPorTipo(tipo);
 
@@ -6589,6 +6626,7 @@ async function anularMovimiento(idRegistro, tipo){
 
   // Solo confirmar si la base realmente guardó la anulación
   if(!ok){
+    liberarAccion('anularMovimiento');
     showToast('No se pudo anular. Revisa tu conexión y reintenta.', 'err');
     return;
   }
@@ -6599,6 +6637,7 @@ async function anularMovimiento(idRegistro, tipo){
     catch(e){ console.error('No se pudo revertir la OC:', e); showToast('Stock revertido, pero revisa la orden de compra','err'); }
   }
 
+  liberarAccion('anularMovimiento');
   showToast('Movimiento anulado');
 }
 
