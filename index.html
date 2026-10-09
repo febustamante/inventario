@@ -3655,7 +3655,7 @@ function renderFertilizante(){
 // No escriben cantidades: marcan lo que pusieron y se descuenta la cantidad
 // planificada de SU bodega. Lo que queda sin marcar no se descuenta.
 let _fertChk = {};       // idOrden -> { nombreProducto: true }
-let _fertAbierta = null; // orden desplegada
+let _fertAbiertas = {};  // idOrden -> true si está desplegada (por defecto todas minimizadas)
 
 function fertMisOrdenes(){
   return (ordenes||[]).filter(o =>
@@ -3669,8 +3669,11 @@ function fertChkToggle(idOrden, nombre){
   _fertChk[idOrden][nombre] = !_fertChk[idOrden][nombre];
   refresh();
 }
+function fertEstaAbierta(idOrden){
+  return !!_fertAbiertas[idOrden];   // todas vienen minimizadas hasta que se tocan
+}
 function fertAbrir(idOrden){
-  _fertAbierta = (String(_fertAbierta)===String(idOrden)) ? null : idOrden;
+  _fertAbiertas[idOrden] = !fertEstaAbierta(idOrden);
   refresh();
 }
 
@@ -3688,7 +3691,7 @@ function renderFertChecklist(){
     <div class="empty-text">No tienes órdenes de fertilización pendientes.</div></div>`
   : mias.map(o=>{
     const d = o.detalle||{};
-    const abierta = String(_fertAbierta)===String(o.idOrden) || mias.length===1;
+    const abierta = fertEstaAbierta(o.idOrden);
     const marcas = _fertChk[o.idOrden]||{};
     const prods = d.productos||[];
     const nMarc = prods.filter(p=>marcas[p.nombre]).length;
@@ -3823,7 +3826,7 @@ async function cerrarFertilizante(idOrden){
   if(!ok) return showToast('El cierre quedó guardado pero no se pudo descontar. Avisa a Felipe.','err');
   showToast('Orden N°'+(d.numeroOrden||o.idOrden)+' cerrada · '+lineas.length+' producto'+(lineas.length>1?'s':'')+' descontado'+(lineas.length>1?'s':''));
   delete _fertChk[idOrden];
-  _fertAbierta = null;
+  delete _fertAbiertas[idOrden];
   await syncData();
 }
 
