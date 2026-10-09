@@ -755,7 +755,7 @@ function notificarOrdenesNuevas(){
     nuevas.forEach(o=>{
       const d=o.detalle||{};
       const titulo = '📋 Nueva orden N°'+(d.numeroOrden||o.idOrden);
-      const cuerpo = (d.tipo==='herbicida'?'Herbicida':'Fitosanitario')+' · '+(d.fundo||o.campo)+' · '+(d.hectareas||'?')+' ha';
+      const cuerpo = (d.tipo==='herbicida'?'Herbicida':(d.tipo==='fertilizante'?'Fertilizante':'Fitosanitario'))+' · '+(d.fundo||o.campo)+' · '+(d.hectareas||'?')+' ha';
       // Notificación del sistema (si dio permiso)
       if('Notification' in window && Notification.permission==='granted'){
         try{ new Notification(titulo,{body:cuerpo,icon:'',tag:'orden-'+o.idOrden}); }catch(_){}
@@ -5292,7 +5292,7 @@ function exportarRespaldo(){
       // Cruzar con la orden para obtener correlativo y tipo
       const ord = ordenes.find(o=>String(o.idOrden)===String(m.ordenNum));
       const numOrden = ord?.detalle?.numeroOrden || m.ordenNum || '';
-      const tipoOrden = ord?.detalle?.tipo === 'herbicida' ? 'Herbicida' : 'Fitosanitario';
+      const tipoOrden = ord?.detalle?.tipo === 'herbicida' ? 'Herbicida' : (ord?.detalle?.tipo === 'fertilizante' ? 'Fertilizante' : 'Fitosanitario');
       aplRows.push([m.fecha||'', m.producto||'', m.cantidad||0,
         m.origen||'', m.usuario||'', numOrden, tipoOrden]);
     });
