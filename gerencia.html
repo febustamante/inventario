@@ -2494,10 +2494,11 @@ function exportarVales(){
   let numVale = parseInt(document.getElementById('v-vale').value)||1026;
   // Lo Valdés retira de la misma bodega del Rulo (B3); solo cambia el centro de costo
   const BOD_FUNDO = { 'CERRILLOS':'B1', 'PAINE':'B2', 'RULO':'B3', 'LO VALDES':'B3' };
-  // ⚠ PENDIENTE: los códigos de bodega del ERP de las tres bodegas nuevas.
-  // Mientras estén en blanco, las filas de fertilizante salen sin bodega y la
-  // exportación te avisa al final en vez de mandarlas a una bodega equivocada.
-  const BOD_FERT = { 'FERTILIZANTES CERRILLOS':'', 'FERTILIZANTES RULO':'', 'FERTILIZANTES PAINE':'' };
+  // Fertilizantes: la bodega del vale depende del dosificador que cerró la orden
+  // (omar = Cerrillos → B1, juan = Paine → B2, gerardo = Rulo → B3).
+  const BOD_FERT_DOSIF = { 'omar':'B1', 'juan':'B2', 'gerardo':'B3' };
+  // Respaldo por nombre de bodega, por si una orden no trae dosificador.
+  const BOD_FERT = { 'FERTILIZANTES CERRILLOS':'B1', 'FERTILIZANTES PAINE':'B2', 'FERTILIZANTES RULO':'B3' };
   // La cuenta contable de los fertilizantes la completa el ERP solo: se deja en blanco.
   const CTA_FERTILIZANTES = '';
   // Centro de costo general de cada fundo (respaldo si la orden no lo trae guardado)
@@ -2553,7 +2554,8 @@ function exportarVales(){
     const fundo=(d.fundo||o.campo||'').toUpperCase();
     // Un fertilizante sale de la bodega del dosificador que lo cerró, no del fundo
     const esFert = (d.tipo==='fertilizante');
-    const bodegaFert = esFert ? (BOD_FERT[String((d.infoAplicacion||{}).bodega||'').toUpperCase()] || '') : '';
+    const bodegaFert = esFert ? (BOD_FERT_DOSIF[String(o.dosificador||'').trim().toLowerCase()]
+                                 || BOD_FERT[String((d.infoAplicacion||{}).bodega||'').toUpperCase()] || '') : '';
     const bodega= esConsumo ? (d.bodegaVale||'')
                 : esFert    ? (bodegaFert || d.bodegaVale || '')
                 :             (d.bodegaVale || BOD_FUNDO[fundo] || '');
