@@ -157,6 +157,79 @@ const SUPABASE_URL='https://cmfvnluppvqyqwpfjrbs.supabase.co';
 const SUPABASE_KEY='sb_publishable_TvfWNvrb2AitDfwvW5YNww_QsR_gjD1';
 const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
+// ── AVISO DE GUARDADO (confirmado por la base) ─────────────────────
+// Al empezar a guardar: cartel azul "Guardando…". Cuando la BASE responde:
+//   • verde  = la base confirmó que la fila quedó escrita (se verifica que devolvió filas)
+//   • rojo   = error, sin conexión, o la base respondió pero NO escribió nada (0 filas)
+// Cubre todas las escrituras (insert/update/delete/upsert/rpc) de la app.
+(function(){
+  const ETQ = {ordenes:'Orden', ordenes_compra:'Orden de compra', materiales:'Material', materiales_mov:'Movimiento de material',
+               petroleo_movs:'Vale de petróleo', productos:'Producto', movimientos:'Movimiento', stock:'Stock'};
+  const RPC = {registrar_movimiento:'Movimiento', anular_movimiento:'Anulación'};
+  let inflight = 0, oks = [], fails = [], hideT = null;
+  function el(){
+    let e = document.getElementById('aviso-bd');
+    if(!e){
+      e = document.createElement('div'); e.id = 'aviso-bd';
+      e.style.cssText = 'position:fixed;top:calc(12px + env(safe-area-inset-top,0px));left:12px;right:12px;z-index:100000;padding:14px 16px;border-radius:12px;color:#fff;font:600 15px/1.35 system-ui,sans-serif;text-align:center;box-shadow:0 6px 28px rgba(0,0,0,.35);display:none;pointer-events:none';
+      document.body.appendChild(e);
+    }
+    return e;
+  }
+  function pintar(bg, titulo, detalle, ms){
+    const e = el(); clearTimeout(hideT);
+    e.style.background = bg;
+    e.innerHTML = titulo + (detalle ? '<div style="font-weight:400;font-size:12.5px;opacity:.92;margin-top:2px">'+detalle+'</div>' : '');
+    e.style.display = 'block';
+    if(ms) hideT = setTimeout(()=>{ e.style.display = 'none'; }, ms);
+  }
+  function inicio(){ inflight++; if(!fails.length) pintar('#2a5db0','⏳ Guardando en la base de datos…','',0); }
+  function fin(okk, etq, motivo){
+    inflight = Math.max(0, inflight-1);
+    if(okk) oks.push(etq); else fails.push(etq+': '+motivo);
+    if(inflight > 0) return;
+    if(fails.length) pintar('#b3261e','❌ NO se guardó en la base de datos', fails.join('<br>')+'<br>Reintenta y avisa si se repite.', 9000);
+    else pintar('#1f7a3a','✅ Registrado en la base de datos', [...new Set(oks)].join(' · '), 4500);
+    oks = []; fails = [];
+  }
+  function vigilar(b, etq, verificarFilas){
+    if(!b || typeof b.then !== 'function') return b;
+    let pidioSelect = false, listo = false;
+    if(verificarFilas && typeof b.select === 'function'){
+      const os = b.select.bind(b);
+      b.select = function(){ pidioSelect = true; return os.apply(null, arguments); };
+    }
+    const ot = b.then.bind(b);
+    b.then = function(res, rej){
+      if(verificarFilas && !pidioSelect && typeof b.select === 'function'){ pidioSelect = true; try{ b.select(); }catch(_){} }
+      if(!listo){ listo = true; inicio(); }
+      return ot(function(r){
+        let okk = !!r && !r.error, motivo = (r && r.error && (r.error.message || r.error.details)) || 'sin respuesta';
+        if(okk && verificarFilas){
+          const d = r.data, n = Array.isArray(d) ? d.length : (d ? 1 : 0);
+          if(n === 0){ okk = false; motivo = 'la base respondió pero no escribió ninguna fila'; }
+        }
+        fin(okk, etq, motivo);
+        return res ? res(r) : r;
+      }, function(err){
+        fin(false, etq, (err && err.message) || 'sin conexión');
+        if(rej) return rej(err); throw err;
+      });
+    };
+    return b;
+  }
+  const oFrom = sb.from.bind(sb), oRpc = sb.rpc.bind(sb);
+  sb.from = function(t){
+    const q = oFrom(t);
+    ['insert','update','delete','upsert'].forEach(m=>{
+      const o = q[m].bind(q);
+      q[m] = function(){ return vigilar(o.apply(null, arguments), ETQ[t] || t, true); };
+    });
+    return q;
+  };
+  sb.rpc = function(n){ return vigilar(oRpc.apply(null, arguments), RPC[n] || n, false); };
+})();
+
 // ═══════════════════════════════════════════════════════════════════
 // FRENO ANTI DOBLE-CLIC — aplica a TODOS los botones de la app.
 // Bloquea el boton apenas se hace clic y lo libera recien cuando la
@@ -3632,6 +3705,12 @@ function descargarTexto(contenido, nombre){
 }
 
 // ══════ TRAZABILIDAD (hoja Aplic. Pesticidas) ══════
+// Las órdenes NR ("NO REGISTRAR, SOLO INVENTARIO") descuentan inventario y SÍ van al
+// export de vales del ERP, pero quedan FUERA de la hoja de trazabilidad.
+function esOrdenNR(o){
+  const d=o&&o.detalle||{};
+  return /NO REGISTRAR/i.test(String(d.observaciones||'')) || /^NR\d+/i.test(String(d.numeroOrden||''));
+}
 let tDesde=null, tHasta=null;
 function renderTraza(){
   const hoyD=new Date();
@@ -3641,6 +3720,7 @@ function renderTraza(){
     if(String(o.estado||'').toUpperCase()!=='TERMINADA')return false;
     if((o.detalle?.tipo)==='consumo') return false;
     if((o.detalle?.destino)==='general') return false;
+    if(esOrdenNR(o)) return false; // NR: fuera de trazabilidad (pero sí van a vales ERP)
     const fin=(o.detalle?.infoAplicacion?.fechaTermino)||o.detalle?.fecha||(o.creado_en?isoLocalG(new Date(o.creado_en)):'');
     if(!fin) return true;
     return fin>=tDesde && fin<=tHasta;
@@ -3653,7 +3733,7 @@ function renderTraza(){
   <div class="panel" style="max-width:700px">
     <div style="font-size:14px;margin-bottom:6px"><b>${term.length}</b> órdenes terminadas en el rango</div>
     <div style="font-size:12.5px;color:#80868b;margin-bottom:16px">
-      Genera la hoja de trazabilidad (Aplic. Pesticidas): una fila por producto, con todos los cuarteles juntos, variedad, hectáreas, fechas de inicio y término, ingrediente activo, dosis, equipo, método, tractorista, kilos totales y objetivo. Las columnas A-D quedan vacías para tus fórmulas.
+      Genera la hoja de trazabilidad (Aplic. Pesticidas): una fila por producto, con todos los cuarteles juntos, variedad, hectáreas, fechas de inicio y término, ingrediente activo, dosis, equipo, método, tractorista, kilos totales y objetivo. Las columnas A-D quedan vacías para tus fórmulas. Las órdenes NR no se incluyen (esas sí salen en Exportar vales).
     </div>
     <button class="btn green" onclick="exportarTraza()" ${term.length?'':'disabled'}>
       <i class="ti ti-file-spreadsheet"></i> Generar hoja de trazabilidad
@@ -3672,6 +3752,7 @@ function exportarTraza(){
     if(String(o.estado||'').toUpperCase()!=='TERMINADA')return false;
     if((o.detalle?.tipo)==='consumo') return false; // los consumos no van en trazabilidad de aplicaciones
     if((o.detalle?.destino)==='general') return false; // las aplicaciones generales del fundo tampoco
+    if(esOrdenNR(o)) return false; // las NR van a vales del ERP pero NO a trazabilidad
     // usar fechaTermino; si no hay, usar la fecha de la orden o la de creación
     const fin=(o.detalle?.infoAplicacion?.fechaTermino)||o.detalle?.fecha||(o.creado_en?isoLocalG(new Date(o.creado_en)):'');
     if(!fin) return true; // si no tiene ninguna fecha, incluirla igual (no perder datos)
