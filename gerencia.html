@@ -342,7 +342,7 @@ async function cargar(){
     products.forEach(p=>stockByLoc[p.id]=stockVacioG());
     (stk||[]).forEach(s=>{const l=ID_UBIC[s.ubicacion_id];if(stockByLoc[s.producto_id]&&l)stockByLoc[s.producto_id][l]=parseFloat(s.cantidad)||0;});
     movimientos=(movs||[]).map(m=>{const pr=(prods||[]).find(p=>p.id===m.producto_id);return{tipo:String(m.tipo||'').toLowerCase(),producto:pr?String(pr.nombre).trim():'',cantidad:parseFloat(m.cantidad)||0,origen:ID_UBIC[m.origen_id]||'',destino:ID_UBIC[m.destino_id]||'',usuario:m.usuario||'',ordenNum:m.orden_id||'',obs:m.observaciones||'',fechaRaw:m.fecha,fecha:m.fecha?new Date(m.fecha).toLocaleDateString('es-CL'):''};});
-    ordenes=(ords||[]).map(o=>({idOrden:o.id,fecha:o.creado_en?new Date(o.creado_en).toLocaleDateString('es-CL'):'',fechaISO:o.creado_en?isoLocalG(new Date(o.creado_en)):'',campo:ID_UBIC[o.campo_id]||'',dosificador:o.dosificador||'',estado:String(o.estado||'EN CURSO').toUpperCase(),detalle:o.detalle||{}}));
+    ordenes=(ords||[]).map(o=>({idOrden:o.id,fecha:o.creado_en?new Date(o.creado_en).toLocaleDateString('es-CL'):'',fechaISO:o.creado_en?isoLocalG(new Date(o.creado_en)):'',campo:ID_UBIC[o.campo_id]||'',dosificador:o.dosificador||'',estado:String(o.estado||'EN CURSO').toUpperCase(),trazaExp:o.traza_exportada_en||null,detalle:o.detalle||{}}));
     // Órdenes de compra (tabla nueva; si aún no existe, no rompe el resto)
     try{
       const {data:ocs,error:eOc}=await sb.from('ordenes_compra').select('*').order('creado_en',{ascending:false});
@@ -3714,31 +3714,85 @@ function esOrdenNR(o){
   return /NO REGISTRAR/i.test(String(d.observaciones||'')) || /^NR\d+/i.test(String(d.numeroOrden||''));
 }
 let tDesde=null, tHasta=null;
+// ¿La orden va en la hoja de trazabilidad? (terminada, no consumo, no general, no NR)
+function trazaValida(o){
+  if(String(o.estado||'').toUpperCase()!=='TERMINADA')return false;
+  if((o.detalle?.tipo)==='consumo') return false; // los consumos no van en trazabilidad de aplicaciones
+  if((o.detalle?.destino)==='general') return false; // las aplicaciones generales del fundo tampoco
+  if(esOrdenNR(o)) return false; // las NR van a vales del ERP pero NO a trazabilidad
+  return true;
+}
+// Tipo de orden para la columna ORDEN: FITO / HERB / FERT (según el tipo de la orden, sin fórmulas)
+function trazaTipo(d){
+  const t=String((d&&d.tipo)||'').toLowerCase();
+  if(t==='fertilizante') return 'FERT';
+  if(t==='herbicida') return 'HERB';
+  return 'FITO';
+}
+function trazaFin(o){
+  return (o.detalle?.infoAplicacion?.fechaTermino)||o.detalle?.fecha||(o.creado_en?isoLocalG(new Date(o.creado_en)):'');
+}
+function trazaNumSort(o){
+  const n=String(o.detalle?.numeroOrden||o.idOrden); const m=n.match(/\d+/);
+  return (m?parseInt(m[0],10):0)*10 + (/[A-Za-z]$/.test(n)?1:0);
+}
+function trazaOrdenar(arr){
+  // Orden DETERMINISTA: fecha de término, luego tipo, luego N° de orden (nunca depende de cómo bajes el archivo)
+  return arr.slice().sort((a,b)=>{
+    const fa=trazaFin(a), fb=trazaFin(b);
+    if(fa!==fb) return fa.localeCompare(fb);
+    const ta=a.detalle?.tipo||'', tb=b.detalle?.tipo||'';
+    if(ta!==tb) return ta.localeCompare(tb);
+    return trazaNumSort(a)-trazaNumSort(b) || (a.idOrden-b.idOrden);
+  });
+}
+function trazaPendientes(){ return trazaOrdenar(ordenes.filter(o=>trazaValida(o) && !o.trazaExp)); }
 function renderTraza(){
   const hoyD=new Date();
   if(tDesde===null)tDesde='2024-01-01';
   if(tHasta===null)tHasta=isoLocalG(hoyD);
-  const term = ordenes.filter(o=>{
-    if(String(o.estado||'').toUpperCase()!=='TERMINADA')return false;
-    if((o.detalle?.tipo)==='consumo') return false;
-    if((o.detalle?.destino)==='general') return false;
-    if(esOrdenNR(o)) return false; // NR: fuera de trazabilidad (pero sí van a vales ERP)
-    const fin=(o.detalle?.infoAplicacion?.fechaTermino)||o.detalle?.fecha||(o.creado_en?isoLocalG(new Date(o.creado_en)):'');
+  const pend=trazaPendientes();
+  const enRango = ordenes.filter(o=>{
+    if(!trazaValida(o))return false;
+    const fin=trazaFin(o);
     if(!fin) return true;
     return fin>=tDesde && fin<=tHasta;
   });
+  const filasPend=pend.map(o=>{
+    const d=o.detalle||{};
+    const cu=(d.cuartelesFinales||d.cuarteles||[]).filter(c=>c&&c.c).map(c=>c.c).join(' ');
+    const lp=((d.infoAplicacion&&d.infoAplicacion.realAplicado&&d.infoAplicacion.realAplicado.length)?d.infoAplicacion.realAplicado.map(r=>r.producto):(d.productos||[]).map(p=>p.nombre));
+    return `<tr><td>${numOrden(o)}</td><td>${trazaFin(o)}</td><td>${d.fundo||o.campo||''}</td><td>${cu}</td><td>${lp.length} prod.</td>
+      <td><button class="btn line" style="padding:3px 8px;font-size:11px" onclick="trazaMarcar([${o.idOrden}])" title="Ya la tengo en mi Excel: no volver a exportarla">Ya está en mi Excel</button></td></tr>`;
+  }).join('');
+  const nExp=ordenes.filter(o=>trazaValida(o)&&o.trazaExp).length;
   return `
-  <div class="filters">
-    <div class="fbox"><label>Desde (término)</label><input type="date" id="t-desde" value="${tDesde}" onchange="tFechas()" style="border:none;font-size:13px"></div>
-    <div class="fbox"><label>Hasta (término)</label><input type="date" id="t-hasta" value="${tHasta}" onchange="tFechas()" style="border:none;font-size:13px"></div>
-  </div>
-  <div class="panel" style="max-width:700px">
-    <div style="font-size:14px;margin-bottom:6px"><b>${term.length}</b> órdenes terminadas en el rango</div>
-    <div style="font-size:12.5px;color:#80868b;margin-bottom:16px">
-      Genera la hoja de trazabilidad (Aplic. Pesticidas): una fila por producto, con todos los cuarteles juntos, variedad, hectáreas, fechas de inicio y término, ingrediente activo, dosis, equipo, método, tractorista, kilos totales y objetivo. Las columnas A-D quedan vacías para tus fórmulas. Las órdenes NR no se incluyen (esas sí salen en Exportar vales).
+  <div class="panel" style="max-width:900px;margin-bottom:14px">
+    <div style="font-size:15px;margin-bottom:4px"><b>${pend.length}</b> órdenes terminadas aún no exportadas a trazabilidad</div>
+    <div style="font-size:12.5px;color:#80868b;margin-bottom:12px">
+      Genera SOLO las órdenes nuevas (las que todavía no pasaron a tu Excel) y las marca como exportadas. Así no se pierde ninguna ni se repite otra, aunque cambie el orden de descarga. Las NR no se incluyen (esas van en Exportar vales).
+      Pega las columnas <b>E a U</b> (CUARTELES … OBJETIVO, ORDEN) al final de tu tabla; la columna <b>W</b> (N° ORDEN) es solo de referencia. La columna ORDEN sale como FITO, HERB o FERT según el tipo de orden.
     </div>
-    <button class="btn green" onclick="exportarTraza()" ${term.length?'':'disabled'}>
-      <i class="ti ti-file-spreadsheet"></i> Generar hoja de trazabilidad
+    <button class="btn green" onclick="exportarTraza('nuevas')" ${pend.length?'':'disabled'}>
+      <i class="ti ti-file-spreadsheet"></i> Generar hoja con las ${pend.length} nuevas
+    </button>
+    <span style="font-size:11.5px;color:#80868b;margin-left:10px">${nExp} órdenes ya marcadas como exportadas</span>
+    ${pend.length?`<div style="overflow:auto;margin-top:14px;max-height:340px"><table style="width:100%;font-size:12px;border-collapse:collapse">
+      <thead><tr style="text-align:left;color:#80868b"><th>Orden</th><th>Término</th><th>Fundo</th><th>Cuarteles</th><th>Productos</th><th></th></tr></thead>
+      <tbody>${filasPend}</tbody></table></div>`:''}
+  </div>
+  <div class="panel" style="max-width:900px">
+    <div style="font-size:14px;margin-bottom:6px"><b>Re-exportar un rango</b> (no cambia las marcas)</div>
+    <div class="filters">
+      <div class="fbox"><label>Desde (término)</label><input type="date" id="t-desde" value="${tDesde}" onchange="tFechas()" style="border:none;font-size:13px"></div>
+      <div class="fbox"><label>Hasta (término)</label><input type="date" id="t-hasta" value="${tHasta}" onchange="tFechas()" style="border:none;font-size:13px"></div>
+    </div>
+    <div style="font-size:12.5px;color:#80868b;margin:8px 0 12px"><b>${enRango.length}</b> órdenes terminadas en el rango (exportadas o no). Útil para rehacer un período completo.</div>
+    <button class="btn line" onclick="exportarTraza('rango')" ${enRango.length?'':'disabled'}>
+      <i class="ti ti-file-spreadsheet"></i> Re-exportar rango
+    </button>
+    <button class="btn line" style="margin-left:8px" onclick="trazaDesmarcarRango()" ${enRango.length?'':'disabled'} title="Vuelve a dejar como pendientes las órdenes del rango">
+      Desmarcar rango (volver a pendientes)
     </button>
   </div>`;
 }
@@ -3748,25 +3802,36 @@ function tFechas(){
   if(tDesde>tHasta){const t=tDesde;tDesde=tHasta;tHasta=t;}
   render();
 }
-function exportarTraza(){
+async function trazaMarcar(ids, valor){
+  const v = (valor===null) ? null : new Date().toISOString();
+  const {error}=await sb.from('ordenes').update({traza_exportada_en:v}).in('id',ids);
+  if(error){ alert('No se pudo actualizar la marca de exportación: '+(error.message||error)); return false; }
+  ordenes.forEach(o=>{ if(ids.includes(o.idOrden)) o.trazaExp=v; });
+  render();
+  return true;
+}
+async function trazaDesmarcarRango(){
+  const ids=ordenes.filter(o=>{
+    if(!trazaValida(o))return false;
+    const fin=trazaFin(o); return !fin || (fin>=tDesde && fin<=tHasta);
+  }).map(o=>o.idOrden);
+  if(!ids.length) return;
+  if(!confirm('¿Volver a dejar como pendientes '+ids.length+' órdenes del rango?')) return;
+  await trazaMarcar(ids,null);
+}
+async function exportarTraza(modo){
   if(typeof XLSX==='undefined'){ alert('La librería Excel no cargó'); return; }
-  const term = ordenes.filter(o=>{
-    if(String(o.estado||'').toUpperCase()!=='TERMINADA')return false;
-    if((o.detalle?.tipo)==='consumo') return false; // los consumos no van en trazabilidad de aplicaciones
-    if((o.detalle?.destino)==='general') return false; // las aplicaciones generales del fundo tampoco
-    if(esOrdenNR(o)) return false; // las NR van a vales del ERP pero NO a trazabilidad
-    // usar fechaTermino; si no hay, usar la fecha de la orden o la de creación
-    const fin=(o.detalle?.infoAplicacion?.fechaTermino)||o.detalle?.fecha||(o.creado_en?isoLocalG(new Date(o.creado_en)):'');
+  modo = modo||'nuevas';
+  const term = (modo==='nuevas') ? trazaPendientes() : trazaOrdenar(ordenes.filter(o=>{
+    if(!trazaValida(o))return false;
+    const fin=trazaFin(o);
     if(!fin) return true; // si no tiene ninguna fecha, incluirla igual (no perder datos)
     return fin>=tDesde && fin<=tHasta;
-  }).sort((a,b)=>{
-    const fa=a.detalle?.infoAplicacion?.fechaInicio||a.detalle?.fecha||'', fb=b.detalle?.infoAplicacion?.fechaInicio||b.detalle?.fecha||'';
-    return fa.localeCompare(fb);
-  });
+  }));
 
-  // Encabezados: A-D fórmulas (vacías), luego el resto
-  const headers=['','','','','CUARTELES','VARIEDAD','HECTAREAS','FECHA INICIO','FECHA TERMINO','PRODUCTO','ING. ACTIVO','DOSIS','UNIDAD','EQUIPO','METODO','COD. MAQUINARIA','IMPLEMENTO','TRACTORISTA','KILOS TOTALES','OBJETIVO'];
-  const filas=[];
+  // Encabezados: A-D fórmulas (vacías), E-T datos, U = ORDEN (FITO/HERB/FERT, valor fijo), V vacía, W = N° ORDEN (referencia)
+  const headers=['','','','','CUARTELES','VARIEDAD','HECTAREAS','FECHA INICIO','FECHA TERMINO','PRODUCTO','ING. ACTIVO','DOSIS','UNIDAD','EQUIPO','METODO','COD. MAQUINARIA','IMPLEMENTO','TRACTORISTA','KILOS TOTALES','OBJETIVO','ORDEN','','N° ORDEN'];
+  const aoa=[headers];
 
   term.forEach(o=>{
     const d=o.detalle||{};
@@ -3800,28 +3865,24 @@ function exportarTraza(){
       const unidad = prodPlan.unidad || rp.unidad || '';
       const kilosTot = (rp.cantidad!=null? rp.cantidad : prodPlan.totalTeorico) || '';
       const objetivo = prodPlan.objetivo || objetivoOrden || '';
-      filas.push({
-        '':'', 'CUARTELES':cuartelesTxt, 'VARIEDAD':variedad, 'HECTAREAS':totHa,
-        'FECHA INICIO':fInicio, 'FECHA TERMINO':fTermino, 'PRODUCTO':nombreProd,
-        'ING. ACTIVO':ingAct, 'DOSIS':dosis, 'UNIDAD':unidad, 'EQUIPO':equipo,
-        'METODO':metodo, 'COD. MAQUINARIA':codMaq, 'IMPLEMENTO':implemento, 'TRACTORISTA':tractorista,
-        'KILOS TOTALES':kilosTot, 'OBJETIVO':objetivo
-      });
+      aoa.push(['','','','', cuartelesTxt,variedad,totHa,fInicio,fTermino,nombreProd,ingAct,dosis,unidad,equipo,metodo,codMaq,implemento,tractorista,kilosTot,objetivo,trazaTipo(d),'',numOrden(o)]);
     });
   });
 
-  if(!filas.length){ alert('No hay datos para exportar en este rango.'); return; }
+  if(aoa.length<2){ alert('No hay datos para exportar.'); return; }
 
-  // Construir matriz respetando las 4 columnas vacías A-D al inicio
-  const aoa=[headers];
-  filas.forEach(f=>{
-    aoa.push(['','','','', f['CUARTELES'],f['VARIEDAD'],f['HECTAREAS'],f['FECHA INICIO'],f['FECHA TERMINO'],f['PRODUCTO'],f['ING. ACTIVO'],f['DOSIS'],f['UNIDAD'],f['EQUIPO'],f['METODO'],f['COD. MAQUINARIA'],f['IMPLEMENTO'],f['TRACTORISTA'],f['KILOS TOTALES'],f['OBJETIVO']]);
-  });
   const ws=XLSX.utils.aoa_to_sheet(aoa);
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,'Aplic. Pesticidas');
-  XLSX.writeFile(wb,'Trazabilidad_'+tDesde+'_a_'+tHasta+'.xlsx');
-  alert('Hoja de trazabilidad generada con '+filas.length+' filas.\nLas columnas A-D quedaron vacías para tus fórmulas.');
+  const nombre = (modo==='nuevas') ? ('Trazabilidad_nuevas_'+isoLocalG(new Date())+'.xlsx') : ('Trazabilidad_'+tDesde+'_a_'+tHasta+'.xlsx');
+  XLSX.writeFile(wb,nombre);
+
+  if(modo==='nuevas'){
+    const ok = await trazaMarcar(term.map(o=>o.idOrden));
+    alert('Hoja generada: '+(aoa.length-1)+' filas de '+term.length+' órdenes.\n'+(ok?'Quedaron marcadas como exportadas.':'OJO: no se pudieron marcar como exportadas.')+'\nPega las columnas E a U al final de tu tabla.');
+  } else {
+    alert('Hoja generada con '+(aoa.length-1)+' filas ('+term.length+' órdenes).\nNo se cambiaron las marcas de exportación.');
+  }
 }
 </script>
 </body>
