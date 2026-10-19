@@ -341,7 +341,7 @@ async function cargar(){
     stockByLoc={};
     products.forEach(p=>stockByLoc[p.id]=stockVacioG());
     (stk||[]).forEach(s=>{const l=ID_UBIC[s.ubicacion_id];if(stockByLoc[s.producto_id]&&l)stockByLoc[s.producto_id][l]=parseFloat(s.cantidad)||0;});
-    movimientos=(movs||[]).map(m=>{const pr=(prods||[]).find(p=>p.id===m.producto_id);return{tipo:String(m.tipo||'').toLowerCase(),producto:pr?String(pr.nombre).trim():'',cantidad:parseFloat(m.cantidad)||0,origen:ID_UBIC[m.origen_id]||'',destino:ID_UBIC[m.destino_id]||'',usuario:m.usuario||'',ordenNum:m.orden_id||'',obs:m.observaciones||'',fechaRaw:m.fecha,fecha:m.fecha?new Date(m.fecha).toLocaleDateString('es-CL'):''};});
+    movimientos=(movs||[]).map(m=>{const pr=(prods||[]).find(p=>p.id===m.producto_id);return{id:m.id,estado:String(m.estado||'ACTIVO').toUpperCase(),tipo:String(m.tipo||'').toLowerCase(),producto:pr?String(pr.nombre).trim():'',cantidad:parseFloat(m.cantidad)||0,origen:ID_UBIC[m.origen_id]||'',destino:ID_UBIC[m.destino_id]||'',usuario:m.usuario||'',ordenNum:m.orden_id||'',obs:m.observaciones||'',fechaRaw:m.fecha,fecha:m.fecha?new Date(m.fecha).toLocaleDateString('es-CL'):''};});
     ordenes=(ords||[]).map(o=>({idOrden:o.id,fecha:o.creado_en?new Date(o.creado_en).toLocaleDateString('es-CL'):'',fechaISO:o.creado_en?isoLocalG(new Date(o.creado_en)):'',campo:ID_UBIC[o.campo_id]||'',dosificador:o.dosificador||'',estado:String(o.estado||'EN CURSO').toUpperCase(),trazaExp:o.traza_exportada_en||null,detalle:o.detalle||{}}));
     // Órdenes de compra (tabla nueva; si aún no existe, no rompe el resto)
     try{
@@ -2435,6 +2435,27 @@ function renderProdCuartel(){
     '<div class="panel" style="text-align:center;color:#80868b;max-width:700px">Este producto no tiene aplicaciones registradas en cuarteles.</div>'}`;
 }
 
+// ══════ PÉRDIDAS EN LOS VALES ══════
+// Las pérdidas (derrame, rotura, vencimiento) salen en el vale del ERP como SALIDA
+// al centro de costo GENERAL del campo al que pertenecen. El campo viene marcado en
+// la observación ("Campo: CERRILLOS"); las pérdidas antiguas, sin marca, se deducen
+// de la ubicación (Caseta Cerrillos / Paine / Rulo). Las de Bodega Central sin marca
+// no se pueden deducir y se avisan al exportar.
+const LOC_A_CAMPO = {'Caseta Cerrillos':'CERRILLOS','Paine':'PAINE','Rulo':'RULO'};
+function campoDePerdida(m){
+  const t=/Campo:\s*(CERRILLOS|PAINE|RULO|LO VALD[EÉ]S)/i.exec(m.obs||'');
+  if(t) return t[1].toUpperCase().replace('É','E');
+  return LOC_A_CAMPO[m.origen]||'';
+}
+function perdidasRango(desde,hasta){
+  return (movimientos||[]).filter(m=>{
+    if(m.tipo!=='perdida' || m.estado==='ANULADO') return false;
+    if(String(m.obs||'').startsWith('Consumo directo')) return false; // esos ya salen como consumo
+    if(!m.fechaRaw) return false;
+    const dia=isoLocalG(new Date(m.fechaRaw));
+    return dia>=desde && dia<=hasta;
+  });
+}
 // ══════ EXPORTAR VALES AL ERP ══════
 let vDesde=null, vHasta=null;
 function renderVales(){
@@ -2457,7 +2478,8 @@ function renderVales(){
     return dia && dia>=vDesde && dia<=vHasta;
   });
   const petDias = new Set(petRango.map(mv=>String(mv.fecha).slice(0,10))).size;
-  const hayAlgo = term.length || petRango.length;
+  const perdRango = perdidasRango(vDesde,vHasta);
+  const hayAlgo = term.length || petRango.length || perdRango.length;
 
   return `
   <div class="filters">
@@ -2467,8 +2489,9 @@ function renderVales(){
   <div class="panel" style="max-width:700px">
     <div style="font-size:14px;margin-bottom:6px"><b>${term.length}</b> órdenes terminadas en el rango</div>
     <div style="font-size:14px;margin-bottom:6px"><b>${petRango.length}</b> cargas de petróleo en el rango${petDias?' · '+petDias+(petDias===1?' vale':' vales'):''}</div>
+    <div style="font-size:14px;margin-bottom:6px"><b>${perdRango.length}</b> pérdidas en el rango (salen como GENERAL del campo)</div>
     <div style="font-size:12.5px;color:#80868b;margin-bottom:16px">
-      Genera el XLS para el ERP + un CSV de verificación: una fila por producto por cuartel. N° de vale desde el que indiques, glosa en palabras (Orden herbicidas N° · Orden fitosanitario N° · Consumo · Combustibles), movimiento SALIDA, sucursal 1, bodega según el fundo (B1 Cerrillos · B2 Paine · B3 Rulo). Los consumos del mismo día van en un solo vale, y el petróleo también: una fila por bombona dentro del mismo número.
+      Genera el XLS para el ERP + un CSV de verificación: una fila por producto por cuartel. N° de vale desde el que indiques, glosa en palabras (Orden herbicidas N° · Orden fitosanitario N° · Consumo · Combustibles), movimiento SALIDA, sucursal 1, bodega según el fundo (B1 Cerrillos · B2 Paine · B3 Rulo). Los consumos del mismo día van en un solo vale, las pérdidas también (glosa Pérdida, centro de costo general del campo), y el petróleo también: una fila por bombona dentro del mismo número.
     </div>
     <div class="fbox" style="max-width:220px;margin-bottom:14px">
       <label>N° de vale inicial</label>
@@ -2770,6 +2793,53 @@ function exportarVales(){
     numVale++;   // el número avanza una vez por DÍA, no por bombona
   });
 
+  // ── PÉRDIDAS: una fila por pérdida, cantidad completa, centro de costo GENERAL
+  // del campo al que pertenece. Un vale por día (como los consumos). ──
+  const perdidasSinCampo = [];
+  const perdPorDia = {};
+  perdidasRango(vDesde,vHasta).forEach(m=>{
+    const dia = isoLocalG(new Date(m.fechaRaw));
+    (perdPorDia[dia]=perdPorDia[dia]||[]).push(m);
+  });
+  Object.keys(perdPorDia).sort().forEach(dia=>{
+    const [y,mm,dd] = dia.split('-');
+    let hubo=false;
+    perdPorDia[dia].forEach(m=>{
+      const cant = +(Number(m.cantidad)||0).toFixed(2);
+      if(cant<=0) return;
+      const campo = campoDePerdida(m);
+      const prodObj = products.find(x=>x.nombre===m.producto);
+      const codigo = prodObj?.codigo || '';
+      if(!codigo) sinCodigo.add(m.producto);
+      const ccosto = campo ? (CCOSTO_GENERAL[campo]||'') : '';
+      if(!campo) perdidasSinCampo.push(m.producto+' ('+m.cantidad+', '+(m.origen||'sin ubicación')+')');
+      else if(!ccosto) sinCcosto.add('GENERAL '+campo);
+      filas.push({
+        'NUMERO VALE':numVale,
+        'FECHA VALE':dd+'-'+mm+'-'+y,
+        'MOVIMIENTO':'SALIDA',
+        'TIPO VALE':'',
+        'SUCURSAL':1,
+        'GLOSAS':'Pérdida',
+        'CODIGOS':codigo,
+        'CANTIDAD':cant,
+        'BODEGA':campo ? (BOD_FUNDO[campo]||'') : '',
+        'COSTO':'',
+        'NUMERO OT':'',
+        'NUMERO OP':'',
+        'NUMERO LOTE':'',
+        'VENCIMIENTO':'',
+        'NUMERO SERIE':'',
+        'CTA CONTABLE':prodObj ? (CTA_POR_ID[String(prodObj.id)]||'') : '',
+        'CENTRO COSTO':ccosto,
+        'BODEGA TRASPASO':'',
+        'PRODUCTO (verificación)':m.producto+' · PÉRDIDA GENERAL '+(campo||'¿campo?')
+      });
+      hubo=true;
+    });
+    if(hubo) numVale++;
+  });
+
   if(!filas.length){ alert('No hay filas para exportar en este rango (¿las órdenes tienen real aplicado y cuarteles?)'); return; }
 
   // Columnas OFICIALES del importador (A a R) + nombre del producto al final para verificar
@@ -2785,6 +2855,7 @@ function exportarVales(){
   let aviso='Excel generado con '+filas.length+' filas.\n\nRevisa la última columna (nombre del producto) para verificar que está todo. Luego copia las columnas A a R (sin la de verificación) y pégalas en el importador oficial (clave 2026).';
   if(sinCodigo.size) aviso+='\n\n⚠️ Productos SIN código:\n'+[...sinCodigo].join('\n');
   if(sinCcosto.size) aviso+='\n\n⚠️ Cuarteles SIN centro de costo:\n'+[...sinCcosto].join(', ');
+  if(perdidasSinCampo.length) aviso+='\n\n⚠️ Pérdidas SIN campo (salieron de Bodega Central sin indicar el campo; quedaron sin bodega ni centro de costo, complétalas a mano):\n'+perdidasSinCampo.join('\n');
   if(sinBodegaBomb.size) aviso+='\n\n⚠️ Bombonas sin bodega asignada (quedaron en '+PETROLEO_BODEGA_DEFAULT+'):\n'+[...sinBodegaBomb].join(', ');
   const fertSinBodega = filas.filter(f=>String(f['GLOSAS']||'').indexOf('Orden fertilizantes')===0 && !f['BODEGA']).length;
   if(fertSinBodega) aviso+='\n\n\u26a0\ufe0f '+fertSinBodega+' fila(s) de fertilizante SIN bodega: falta el codigo del ERP de las bodegas nuevas. No las subas asi.';
