@@ -598,7 +598,9 @@ function vehiculoPetroleoOpts(){
     return '<option value="">— Tractor / camioneta —</option>' + TRACTORES.map(t=>`<option>${t}</option>`).join('');
   }
   const grupos = {};
-  maqMaquinas.forEach(m=>{
+  // Máquinas que ya no se ofrecen para retirar petróleo (siguen en la base y en el historial)
+  const MAQ_OCULTAS = ['ARRIENDO1'];
+  maqMaquinas.filter(m=>!MAQ_OCULTAS.includes(String(m.maq||'').trim().toUpperCase())).forEach(m=>{
     const tipoNorm = String(m.tipo||'').trim().toUpperCase();
     const etiqueta = tipoNorm==='TRACTOR' ? 'Tractores' : (tipoNorm==='VEHICULO' ? 'Camionetas' : (m.tipo||'Otros'));
     (grupos[etiqueta] = grupos[etiqueta]||[]).push(m);
@@ -3539,7 +3541,14 @@ function renderPerdida(){
     <div class="form-group"><label class="form-label">Producto <span class="required">*</span></label><select class="form-control" id="pr-p">${prodOpts()}</select></div>
     <div class="form-row">
       <div class="form-group"><label class="form-label">Cantidad <span class="required">*</span></label><input type="number" class="form-control" id="pr-c" min="0.01" step="0.01" placeholder="0" inputmode="decimal"/></div>
-      <div class="form-group"><label class="form-label">Dónde se perdió <span class="required">*</span></label><select class="form-control" id="pr-ub">${LOCS.map(l=>`<option value="${l}">${l}</option>`).join('')}</select></div>
+      <div class="form-group"><label class="form-label">Dónde se perdió <span class="required">*</span></label><select class="form-control" id="pr-ub" onchange="prSugerirCampo()">${LOCS.map(l=>`<option value="${l}">${l}</option>`).join('')}</select></div>
+    </div>
+    <div class="form-group"><label class="form-label">Campo al que corresponde <span class="required">*</span></label>
+      <select class="form-control" id="pr-campo">
+        <option value="">— Elegir campo —</option>
+        <option value="CERRILLOS">Cerrillos</option><option value="PAINE">Paine</option><option value="RULO">Rulo</option><option value="LO VALDES">Lo Valdés</option>
+      </select>
+      <div style="font-size:11px;color:var(--tx3);margin-top:4px">Va a la exportación de vales como pérdida GENERAL de este campo.</div>
     </div>
     <div class="form-group"><label class="form-label">Motivo <span class="required">*</span></label>
       <select class="form-control" id="pr-motivo">
@@ -3554,6 +3563,14 @@ function renderPerdida(){
   <div class="card">${perds.length?perds.map(m=>`<div class="move-item"><div class="move-dot" style="background:var(--red)"></div><div class="move-body"><div class="move-prod">${m.producto}</div><div class="move-detail">${m.origen} · ${m.obs||''}</div></div><div class="move-right"><div class="move-qty" style="color:var(--red)">-${m.cantidad}</div><div class="move-date">${m.fecha}</div></div></div>`).join(''):`<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">Sin pérdidas registradas</div></div>`}</div>`;
 }
 
+// Al elegir la ubicación, el campo se sugiere solo (la caseta ya dice de qué campo es).
+// Bodega Central no tiene campo propio: ahí hay que elegirlo.
+function prSugerirCampo(){
+  const ub=document.getElementById('pr-ub'), ca=document.getElementById('pr-campo');
+  if(!ub||!ca) return;
+  const mapa={'Caseta Cerrillos':'CERRILLOS','Paine':'PAINE','Rulo':'RULO'};
+  ca.value = mapa[ub.value] || '';
+}
 async function doPerdida(){
   const pid=parseInt(document.getElementById('pr-p').value);
   const cant=parseFloat(document.getElementById('pr-c').value)||0;
@@ -3562,16 +3579,19 @@ async function doPerdida(){
   const obs=document.getElementById('pr-obs').value.trim();
   if(cant<=0) return showToast('Ingresa una cantidad válida','err');
   if(!motivo) return showToast('Elige el motivo de la pérdida','err');
+  const campo=(document.getElementById('pr-campo')||{}).value||'';
+  if(!campo) return showToast('Elige el campo al que corresponde la pérdida','err');
+  const motivoFull=motivo+(obs?' · '+obs:'')+' · Campo: '+campo;
   const disp=stockAt(pid,ubic);
   if(cant>disp) return showToast('Insuficiente en '+ubic+': '+fmt(disp)+' disp.','err');
   const p=products.find(x=>x.id===pid);
   const costo=cant*(p.precio||0);
-  if(!confirm(`Vas a registrar como PÉRDIDA:\n\n${p.nombre}: ${cant} (${motivo})\nUbicación: ${ubic}\nValor: ${plata(costo)}\n\nEsto DESCONTARÁ el stock. ¿Confirmar?`)) return;
+  if(!confirm(`Vas a registrar como PÉRDIDA:\n\n${p.nombre}: ${cant} (${motivo})\nUbicación: ${ubic}\nCampo: ${campo}\nValor: ${plata(costo)}\n\nEsto DESCONTARÁ el stock. ¿Confirmar?`)) return;
   if(!bloquearAccion('perdida')) return; // evita doble envío / duplicados
   addStock(pid,ubic,-cant);
-  movimientos.push({id:nextMov++,tipo:'perdida',producto:p.nombre,cantidad:cant,origen:ubic,destino:'',obs:motivo+(obs?' · '+obs:''),fecha:hoy(),usuario:curUser.id});
+  movimientos.push({id:nextMov++,tipo:'perdida',producto:p.nombre,cantidad:cant,origen:ubic,destino:'',obs:motivoFull,fecha:hoy(),usuario:curUser.id});
   showToast('Guardando...','info');
-  const okPer=await postSheets({action:'perdida',fecha:hoy(),producto:p.nombre,cantidad:cant,origen:ubic,usuario:curUser.id,motivo:motivo+(obs?' · '+obs:'')});
+  const okPer=await postSheets({action:'perdida',fecha:hoy(),producto:p.nombre,cantidad:cant,origen:ubic,usuario:curUser.id,motivo:motivoFull});
   if(!okPer){ liberarAccion('perdida'); showToast('No se pudo guardar. Revisa tu conexión y reintenta.','err'); return; }
   liberarAccion('perdida');
   showToast('Pérdida registrada: '+cant+' de '+p.nombre);
@@ -4881,6 +4901,19 @@ function addProdOrden(){
   recalcOrden();
 }
 
+
+// Productos de una lista de nombres que NO tienen ingrediente activo cargado (ni en la base ni en el diccionario legado)
+function productosSinIA(nombres){
+  const out=[];
+  (nombres||[]).forEach(n=>{
+    if(!n) return;
+    const p=products.find(x=>x.nombre===n);
+    const ia=(p&&p.ingActivo)?p.ingActivo:((typeof INGREDIENTE_ACTIVO!=='undefined'&&INGREDIENTE_ACTIVO[n])||'');
+    if(!String(ia||'').trim() && !out.includes(n)) out.push(n);
+  });
+  return out;
+}
+
 function onProdOrdenChange(id){
   const sel = document.getElementById('opa-prod-'+id);
   const nombre = sel.options[sel.selectedIndex]?.text || '';
@@ -4890,6 +4923,11 @@ function onProdOrdenChange(id){
   if(iaEl){
     const ia = (prodObj && prodObj.ingActivo) ? prodObj.ingActivo : (typeof INGREDIENTE_ACTIVO!=='undefined' ? INGREDIENTE_ACTIVO[nombre] : '') || '';
     iaEl.textContent = ia || '—';
+    if(!ia && nombre){
+      iaEl.textContent = '⚠️ SIN ING. ACTIVO';
+      iaEl.style.color = 'var(--red)';
+      showToast('⚠️ '+nombre+' no tiene ingrediente activo cargado. Pídele a gerencia que lo complete.','err');
+    } else { iaEl.style.color = ''; }
   }
   // Autocompletar OBJETIVO y CARENCIA según el historial de este producto
   if(nombre){
@@ -5188,6 +5226,14 @@ async function crearOrdenNueva(){
   if(faltan.length){
     const seguir = confirm('⚠️ Faltan datos por completar:\n\n• ' + faltan.join('\n• ') + '\n\n¿Continuar de todas formas?');
     if(!seguir) return;
+  }
+
+  // ── PRODUCTOS SIN INGREDIENTE ACTIVO (aviso, permite seguir) ──
+  const sinIA = productosSinIA(detalleProds.map(d=>d.nombre));
+  if(sinIA.length){
+    const seguirIA = confirm('⚠️ Estos productos NO tienen ingrediente activo cargado:\n\n• ' + sinIA.join('\n• ') +
+      '\n\nLa orden saldrá sin ese dato (trazabilidad). Avisa a gerencia para completarlo.\n\n¿Continuar de todas formas?');
+    if(!seguirIA) return;
   }
 
   // ── VALIDACION DE STOCK contra Bodega Central ──
@@ -5840,7 +5886,9 @@ async function iniciarOrden(idOrden){
   const ahora = new Date();
   const fecha = ahora.toISOString().slice(0,10);
   const hora = ahora.toTimeString().slice(0,5);
-  if(!confirm(`▶️ Iniciar la aplicación de la Orden N°${o.detalle?.numeroOrden||o.idOrden}?\n\nSe registrará el inicio: ${fecha} a las ${hora}`)) return;
+  const sinIAini = productosSinIA((o.detalle?.productos||[]).map(x=>x.nombre));
+  const avisoIA = sinIAini.length ? `\n\n⚠️ Sin ingrediente activo cargado: ${sinIAini.join(', ')}` : '';
+  if(!confirm(`▶️ Iniciar la aplicación de la Orden N°${o.detalle?.numeroOrden||o.idOrden}?\n\nSe registrará el inicio: ${fecha} a las ${hora}${avisoIA}`)) return;
   if(!bloquearAccion('iniciarOrden')) return; // evita doble envío / duplicados
   try{
     const detalleActualizado = Object.assign({}, o.detalle||{}, { inicioReal:{fecha, hora} });
@@ -5906,6 +5954,14 @@ async function completarOrdenReal(idOrden){
 
   // solo cantidades > 0 para descontar
   const lineasDesc = lineas.filter(l=>l.cantidad>0);
+
+  // Aviso: productos sin ingrediente activo (permite seguir)
+  const sinIAcierre = productosSinIA(lineasDesc.map(l=>l.producto));
+  if(sinIAcierre.length){
+    const seguirIA = confirm('⚠️ Estos productos NO tienen ingrediente activo cargado:\n\n• ' + sinIAcierre.join('\n• ') +
+      '\n\nLa orden se enviará igual, pero avisa a gerencia para completarlo.\n\n¿Enviar de todas formas?');
+    if(!seguirIA){ liberarAccion('completarOrden'); return; }
+  }
 
   // Validar stock en el campo destino (de donde se descuenta)
   const campoDestino = o.campo;
