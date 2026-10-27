@@ -1931,13 +1931,14 @@ function renderMiStock(){
     </div>`).join('') : '<div class="card" style="text-align:center;padding:30px;color:var(--tx3)">Sin productos con ese nombre</div>'}`;
 }
 
-// ══════ TRACTORISTAS: horas por tractorista + hectáreas por partes iguales ══════
+// ══════ TRACTORISTAS: una hora de inicio y una de término por día + hectáreas por partes iguales ══════
 // Pestaña solo para Eduardo (cerrillos), Héctor (paine) y José (rulo).
-// Las horas se registran aparte de las órdenes. Las hectáreas de cada orden TERMINADA
-// se reparten en partes iguales entre los tractoristas que figuran en esa orden.
+// La hora del día se asigna a todos los tractoristas de las órdenes TERMINADAS de esa fecha.
+// Las hectáreas del día se reparten en partes iguales entre esos tractoristas.
+// Se guarda una fila por tractorista en tractorista_horas (misma hora para todos).
 const TRACT_DESDE_DEFECTO = '2026-09-01';
 let tractHoras = [];          // filas de tractorista_horas del dosificador actual
-let tractHorasUser = null;    // dosificador para el que se intentó cargar
+let tractHorasUser = null;
 let tractCargando = false;
 
 const tr2 = n => (Number(n)||0).toLocaleString('es-CL',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -1945,6 +1946,7 @@ const trHoyISO = () => new Date().toLocaleDateString('sv-SE',{timeZone:'America/
 const trHoraDecimal = t => { const [h,m]=String(t||'00:00').slice(0,5).split(':').map(Number); return h + (m||0)/60; };
 // Horas entre inicio y término; si el término es menor, se asume que cruzó medianoche
 function trHorasEntre(hi, ht){ let d = trHoraDecimal(ht) - trHoraDecimal(hi); if(d<0) d += 24; return d; }
+const trFechaLarga = iso => String(iso).split('-').reverse().join('-');
 function trRango(){
   return {
     desde: document.getElementById('tr-desde')?.value || TRACT_DESDE_DEFECTO,
@@ -1952,32 +1954,72 @@ function trRango(){
   };
 }
 
-function trResumen(desde, hasta){
+// Órdenes TERMINADAS del dosificador actual agrupadas por fecha de aplicación (consumos fuera), más reciente primero
+function trDias(desde, hasta){
   const yo = String(curUser.id).toLowerCase();
-  const ords = ordenes.filter(o =>
-    String(o.dosificador||'').toLowerCase() === yo &&
-    String(o.estado||'').trim().toUpperCase() === 'TERMINADA' &&
-    (o.detalle?.fecha||'') >= desde && (o.detalle?.fecha||'') <= hasta);
+  const porDia = {};
+  ordenes.forEach(o => {
+    const fch = o.detalle?.fecha || '';
+    if(String(o.dosificador||'').toLowerCase() !== yo) return;
+    if(String(o.estado||'').trim().toUpperCase() !== 'TERMINADA') return;
+    if(String(o.detalle?.tipo||'') === 'consumo') return;
+    if(!fch || fch < desde || fch > hasta) return;
+    (porDia[fch] = porDia[fch] || []).push(o);
+  });
+  return Object.keys(porDia).sort().reverse().map(fch => ({fecha: fch, ordenes: porDia[fch]}));
+}
+const trDiasConOrdenes = (desde, hasta) => trDias(desde, hasta).slice(0,10);
+
+// Fila(s) de horas guardadas para una fecha (todas comparten la misma hora)
+function trHorasDelDia(fecha){
+  return tractHoras.find(r => r.fecha === fecha) || null;
+}
+function trTractoresDelDia(ords){
+  return [...new Set(ords.flatMap(o => ((o.detalle?.infoAplicacion?.equipos)||[])
+    .map(e => String(e.tractorista||'').trim()).filter(Boolean)))].sort();
+}
+
+function trDatosDia(fecha, ords){
+  const filas = ords.map(o => ({
+    num: o.detalle?.numeroOrden || o.id,
+    ha: parseFloat(o.detalle?.hectareas) || 0,
+    nombres: [...new Set(((o.detalle?.infoAplicacion?.equipos)||[]).map(e => String(e.tractorista||'').trim()).filter(Boolean))]
+  })).sort((a,b) => String(a.num).localeCompare(String(b.num), 'es', {numeric:true}));
+  const haTotal = filas.reduce((s,x) => s + x.ha, 0);
+  const haConTractor = filas.filter(x => x.nombres.length).reduce((s,x) => s + x.ha, 0);
+  const trabajadores = trTractoresDelDia(ords);
+  const parte = trabajadores.length ? haConTractor / trabajadores.length : 0;
+  const hd = trHorasDelDia(fecha);
+  const horasDia = hd ? trHorasEntre(hd.hora_inicio, hd.hora_termino) : 0;
+  const detalle = hd ? `${String(hd.hora_inicio).slice(0,5)}–${String(hd.hora_termino).slice(0,5)}` : '';
+  const horas = trabajadores.map(n => ({nombre: n, horas: horasDia, hayRegistro: !!hd, detalle}));
+  const sinTractor = filas.filter(x => !x.nombres.length).length;
+  return {filas, haTotal, haConTractor, trabajadores, parte, horas, sinTractor};
+}
+
+function trResumen(desde, hasta){
+  const dias = trDias(desde, hasta);
   const mapa = {};
-  const get = n => (mapa[n] = mapa[n] || {nombre:n, ha:0, horas:0, ordenes:[]});
-  let totalHa = 0, sinTractorHa = 0;
-  ords.forEach(o => {
-    const ha = parseFloat(o.detalle?.hectareas) || 0;
-    totalHa += ha;
-    const nombres = [...new Set(((o.detalle?.infoAplicacion?.equipos)||[])
-      .map(e => String(e.tractorista||'').trim()).filter(Boolean))];
-    if(!nombres.length){ sinTractorHa += ha; return; }
-    const parte = ha / nombres.length;
-    nombres.forEach(n => {
+  const get = n => (mapa[n] = mapa[n] || {nombre:n, ha:0, horas:0, dias:[]});
+  let totalHa = 0, sinTractorHa = 0, nOrdenes = 0;
+  dias.forEach(({fecha, ordenes: ords}) => {
+    const d = trDatosDia(fecha, ords);
+    nOrdenes += ords.length;
+    totalHa += d.haTotal;
+    sinTractorHa += d.haTotal - d.haConTractor;
+    d.trabajadores.forEach(n => {
       const t = get(n);
-      t.ha += parte;
-      t.ordenes.push({num: o.detalle?.numeroOrden || o.id, fecha: o.detalle?.fecha || '', ha, parte, acomp: nombres.length-1});
+      const h = d.horas.find(x => x.nombre === n);
+      t.ha += d.parte;
+      t.horas += h ? h.horas : 0;
+      t.dias.push({
+        fecha, parte: d.parte, horas: h ? h.horas : 0, detalle: h ? h.detalle : '',
+        ordenes: d.filas.filter(x => x.nombres.includes(n)).map(x => x.num)
+      });
     });
   });
-  tractHoras.filter(r => r.fecha >= desde && r.fecha <= hasta)
-    .forEach(r => { const t = get(r.tractorista); t.horas += trHorasEntre(r.hora_inicio, r.hora_termino); });
   const lista = Object.values(mapa).sort((a,b) => (b.ha - a.ha) || a.nombre.localeCompare(b.nombre));
-  return {lista, totalHa, sinTractorHa, nOrdenes: ords.length};
+  return {lista, totalHa, sinTractorHa, nOrdenes};
 }
 
 async function cargarTractoristas(){
@@ -2001,80 +2043,95 @@ function tractCargarSiFalta(){
   if(curUser && tractHorasUser !== curUser.id) cargarTractoristas();
 }
 
+// Guarda UNA hora para el día: reemplaza lo que hubiera de esa fecha y asigna la hora a todos los tractoristas del día
 async function tractGuardarHoras(){
   const fecha = document.getElementById('tr-f-fecha')?.value;
-  const tractorista = document.getElementById('tr-f-tra')?.value;
   const hi = document.getElementById('tr-f-hi')?.value;
   const ht = document.getElementById('tr-f-ht')?.value;
-  if(!fecha || !tractorista || !hi || !ht){ showToast('Faltan fecha, tractorista, hora de inicio o de término','err'); return; }
+  if(!fecha || !hi || !ht){ showToast('Faltan fecha, hora de inicio o de término','err'); return; }
   if(hi === ht){ showToast('La hora de inicio y la de término son iguales','err'); return; }
-  const { error } = await sb.from('tractorista_horas').insert({
-    fecha, dosificador: curUser.id, tractorista, hora_inicio: hi, hora_termino: ht
-  });
+  const ords = (trDias(fecha, fecha)[0]||{}).ordenes || [];
+  const nombres = trTractoresDelDia(ords);
+  if(!nombres.length){ showToast('Ese día no tiene órdenes terminadas con tractorista','err'); return; }
+  const { error: eDel } = await sb.from('tractorista_horas').delete()
+    .eq('dosificador', curUser.id).eq('fecha', fecha);
+  if(eDel){ showToast('No se pudo actualizar: '+eDel.message,'err'); return; }
+  const filas = nombres.map(t => ({fecha, dosificador: curUser.id, tractorista: t, hora_inicio: hi, hora_termino: ht}));
+  const { error } = await sb.from('tractorista_horas').insert(filas);
   if(error){ showToast('No se guardó: '+error.message,'err'); return; }
-  showToast('Horas guardadas');
+  showToast('Horas guardadas para '+nombres.length+' tractoristas');
   await cargarTractoristas();
 }
 
-async function tractEliminarHoras(id){
-  if(!confirm('¿Eliminar este registro de horas?')) return;
-  const { error } = await sb.from('tractorista_horas').delete().eq('id', id);
+async function tractEliminarDia(fecha){
+  if(!confirm('¿Eliminar las horas de este día?')) return;
+  const { error } = await sb.from('tractorista_horas').delete()
+    .eq('dosificador', curUser.id).eq('fecha', fecha);
   if(error){ showToast('No se pudo eliminar: '+error.message,'err'); return; }
-  showToast('Registro eliminado');
+  showToast('Horas del día eliminadas');
   await cargarTractoristas();
 }
 
 function renderTractoristas(){
   const {desde, hasta} = trRango();
   const {lista, totalHa, sinTractorHa, nOrdenes} = trResumen(desde, hasta);
-  const enRango = tractHoras.filter(r => r.fecha >= desde && r.fecha <= hasta);
-  const opts = '<option value="">— Tractorista —</option>' + OPERADORES.map(t=>`<option>${t}</option>`).join('');
-  const inp = 'width:100%;padding:10px;border:1px solid var(--bd2);border-radius:10px;font-size:14px;box-sizing:border-box';
+  const fSel = document.getElementById('tr-f-fecha')?.value || trHoyISO();
+  const hdSel = trHorasDelDia(fSel);
+  const inp = 'display:block;width:100%;min-width:0;max-width:100%;box-sizing:border-box;padding:10px;border:1px solid var(--bd2);border-radius:10px;font-size:14px;background:#fff';
+  const lab = 'display:block;min-width:0;font-size:12px;color:var(--tx3)';
+  const grid2 = 'display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;margin-bottom:10px';
   const btn = 'padding:10px 16px;border:none;border-radius:10px;background:var(--vino);color:#fff;font-weight:700;font-size:14px;cursor:pointer';
+
+  // Registros de horas por día (una hora por día, con sus tractoristas)
+  const porFecha = {};
+  tractHoras.forEach(r => { (porFecha[r.fecha] = porFecha[r.fecha] || []).push(r); });
+  const registros = Object.keys(porFecha).filter(f => f >= desde && f <= hasta).sort().reverse();
+  const filasHoras = registros.length ? registros.map(f => {
+    const rs = porFecha[f]; const r0 = rs[0];
+    return `<div style="padding:8px 0;border-bottom:1px solid var(--bd2);font-size:13px">
+      <div style="display:flex;justify-content:space-between;gap:8px;align-items:center">
+        <span><b>${trFechaLarga(f)}</b> · ${String(r0.hora_inicio).slice(0,5)} – ${String(r0.hora_termino).slice(0,5)} · ${tr2(trHorasEntre(r0.hora_inicio, r0.hora_termino))} h</span>
+        <button onclick="tractEliminarDia('${f}')" style="border:none;background:none;color:#b00;cursor:pointer;font-size:12px">Eliminar</button>
+      </div>
+      <div style="color:var(--tx3);font-size:12px;margin-top:2px">${rs.map(r => r.tractorista).join(', ')}</div>
+    </div>`;
+  }).join('') : '<div style="color:var(--tx3);font-size:13px;padding:8px 0">Sin horas registradas en el período.</div>';
 
   const filasTract = lista.length ? lista.map(t => `
     <details class="card" style="padding:12px 14px;margin-bottom:8px">
       <summary style="display:flex;justify-content:space-between;align-items:center;gap:10px;cursor:pointer;list-style:none">
-        <div style="font-weight:700;font-size:15px">${t.nombre}</div>
+        <div style="font-weight:700;font-size:15px;min-width:0">${t.nombre}</div>
         <div style="text-align:right;flex-shrink:0">
           <div style="font-size:18px;font-weight:800;color:var(--vino)">${tr2(t.ha)} ha</div>
-          <div style="font-size:11px;color:var(--tx3)">${tr2(t.horas)} h · ${t.ordenes.length} órdenes</div>
+          <div style="font-size:11px;color:var(--tx3)">${tr2(t.horas)} h · ${t.dias.length} días</div>
         </div>
       </summary>
       <div style="margin-top:10px;font-size:12px">
-        ${t.ordenes.length ? t.ordenes.slice().sort((a,b)=> a.fecha < b.fecha ? -1 : 1).map(x => `
-          <div style="display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-bottom:1px solid var(--bd2)">
-            <span>N° ${x.num} · ${x.fecha}</span>
-            <span style="text-align:right">${tr2(x.parte)} ha de ${tr2(x.ha)} (${x.acomp ? 'con '+x.acomp+(x.acomp===1?' compañero':' compañeros') : 'solo'})</span>
-          </div>`).join('') : '<div style="color:var(--tx3)">Sin órdenes en el período.</div>'}
+        ${t.dias.slice().sort((a,b) => a.fecha < b.fecha ? -1 : 1).map(x => `
+          <div style="padding:6px 0;border-bottom:1px solid var(--bd2)">
+            <div style="display:flex;justify-content:space-between;gap:8px"><span>${trFechaLarga(x.fecha)}</span><span>${tr2(x.parte)} ha${x.detalle ? ' · '+x.detalle+' · '+tr2(x.horas)+' h' : ' · sin horas'}</span></div>
+            <div style="color:var(--tx3)">Órdenes ${x.ordenes.join(', ')}</div>
+          </div>`).join('')}
       </div>
     </details>`).join('')
     : '<div class="card" style="text-align:center;padding:24px;color:var(--tx3)">Sin órdenes con tractorista en el período.</div>';
 
-  const filasHoras = enRango.length ? enRango.map(r => `
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--bd2);font-size:13px">
-      <span><b>${r.tractorista}</b> · ${r.fecha}</span>
-      <span>${String(r.hora_inicio).slice(0,5)} – ${String(r.hora_termino).slice(0,5)} · ${tr2(trHorasEntre(r.hora_inicio, r.hora_termino))} h
-        <button onclick="tractEliminarHoras('${r.id}')" style="margin-left:8px;border:none;background:none;color:#b00;cursor:pointer;font-size:12px">Eliminar</button></span>
-    </div>`).join('')
-    : '<div style="color:var(--tx3);font-size:13px;padding:8px 0">Sin horas registradas en el período.</div>';
-
   return `
-  <div class="section-header"><div class="section-title">Tractoristas</div><div class="section-sub">${curUser.desc} · ${desde} al ${hasta}</div></div>
+  <div class="section-header"><div class="section-title">Tractoristas</div><div class="section-sub">${curUser.desc} · ${trFechaLarga(desde)} al ${trFechaLarga(hasta)}</div></div>
 
   <div class="card" style="padding:14px;margin-bottom:12px">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
-      <label style="font-size:12px;color:var(--tx3)">Desde<input type="date" id="tr-desde" value="${desde}" onchange="refresh()" style="${inp}"></label>
-      <label style="font-size:12px;color:var(--tx3)">Hasta<input type="date" id="tr-hasta" value="${hasta}" onchange="refresh()" style="${inp}"></label>
+    <div style="${grid2}">
+      <label style="${lab}">Desde<input type="date" id="tr-desde" value="${desde}" onchange="refresh()" style="${inp}"></label>
+      <label style="${lab}">Hasta<input type="date" id="tr-hasta" value="${hasta}" onchange="refresh()" style="${inp}"></label>
     </div>
-    <div style="font-weight:700;margin-bottom:8px">Registrar horas de tractorista</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
-      <label style="font-size:12px;color:var(--tx3)">Fecha<input type="date" id="tr-f-fecha" value="${trHoyISO()}" style="${inp}"></label>
-      <label style="font-size:12px;color:var(--tx3)">Tractorista<select id="tr-f-tra" style="${inp}">${opts}</select></label>
-      <label style="font-size:12px;color:var(--tx3)">Hora inicio<input type="time" id="tr-f-hi" style="${inp}"></label>
-      <label style="font-size:12px;color:var(--tx3)">Hora término<input type="time" id="tr-f-ht" style="${inp}"></label>
+    <div style="font-weight:700;margin-bottom:4px">Horas del día</div>
+    <div style="font-size:12px;color:var(--tx3);margin-bottom:10px">Una hora de inicio y una de término por día. Se asigna a todos los tractoristas de las órdenes terminadas de esa fecha.</div>
+    <label style="${lab};margin-bottom:10px">Fecha<input type="date" id="tr-f-fecha" value="${fSel}" onchange="refresh()" style="${inp}"></label>
+    <div style="${grid2}">
+      <label style="${lab}">Hora inicio<input type="time" id="tr-f-hi" value="${hdSel ? String(hdSel.hora_inicio).slice(0,5) : ''}" style="${inp}"></label>
+      <label style="${lab}">Hora término<input type="time" id="tr-f-ht" value="${hdSel ? String(hdSel.hora_termino).slice(0,5) : ''}" style="${inp}"></label>
     </div>
-    <button onclick="tractGuardarHoras()" style="${btn}">Guardar horas</button>
+    <button onclick="tractGuardarHoras()" style="${btn}">Guardar horas del día</button>
   </div>
 
   <div class="card" style="padding:14px;margin-bottom:12px;background:var(--vino);color:#fff">
@@ -2088,52 +2145,13 @@ function renderTractoristas(){
   <div style="font-weight:700;margin:6px 0 8px">Hectáreas y horas por tractorista</div>
   ${filasTract}
 
-  <div style="font-weight:700;margin:14px 0 6px">Registros de horas</div>
+  <div style="font-weight:700;margin:14px 0 6px">Horas registradas por día</div>
   <div class="card" style="padding:6px 14px">${filasHoras}</div>`;
 }
 
 // ══════ PDF POR DÍA (tractoristas): últimos 10 días con órdenes terminadas ══════
-// El reparto es: hectáreas del día ÷ número de tractoristas del día (partes iguales).
-// Las horas salen de tractorista_horas (inicio y término registrados en esta pestaña).
+// Reparto: hectáreas del día ÷ número de tractoristas del día. Horas: las del día para cada tractorista.
 let trPdfActual = null;
-const trFechaLarga = iso => String(iso).split('-').reverse().join('-');
-
-function trDiasConOrdenes(desde, hasta){
-  const yo = String(curUser.id).toLowerCase();
-  const porDia = {};
-  ordenes.forEach(o => {
-    const fch = o.detalle?.fecha || '';
-    if(String(o.dosificador||'').toLowerCase() !== yo) return;
-    if(String(o.estado||'').trim().toUpperCase() !== 'TERMINADA') return;
-    if(String(o.detalle?.tipo||'') === 'consumo') return;
-    if(!fch || fch < desde || fch > hasta) return;
-    (porDia[fch] = porDia[fch] || []).push(o);
-  });
-  return Object.keys(porDia).sort().reverse().slice(0,10).map(fch => ({fecha: fch, ordenes: porDia[fch]}));
-}
-
-function trDatosDia(fecha, ords){
-  const filas = ords.map(o => ({
-    num: o.detalle?.numeroOrden || o.id,
-    ha: parseFloat(o.detalle?.hectareas) || 0,
-    nombres: [...new Set(((o.detalle?.infoAplicacion?.equipos)||[]).map(e => String(e.tractorista||'').trim()).filter(Boolean))]
-  })).sort((a,b) => String(a.num).localeCompare(String(b.num), 'es', {numeric:true}));
-  const haTotal = filas.reduce((s,x) => s + x.ha, 0);
-  const haConTractor = filas.filter(x => x.nombres.length).reduce((s,x) => s + x.ha, 0);
-  const trabajadores = [...new Set(filas.flatMap(x => x.nombres))].sort();
-  const parte = trabajadores.length ? haConTractor / trabajadores.length : 0;
-  const horas = trabajadores.map(n => {
-    const regs = tractHoras.filter(r => r.fecha === fecha && r.tractorista === n);
-    return {
-      nombre: n,
-      n: regs.length,
-      horas: regs.reduce((s,r) => s + trHorasEntre(r.hora_inicio, r.hora_termino), 0),
-      detalle: regs.map(r => `${String(r.hora_inicio).slice(0,5)}–${String(r.hora_termino).slice(0,5)}`).join(' · ')
-    };
-  });
-  const sinTractor = filas.filter(x => !x.nombres.length).length;
-  return {filas, haTotal, haConTractor, trabajadores, parte, horas, sinTractor};
-}
 
 function trArmarPDF(fecha, ords){
   const { jsPDF } = window.jspdf;
@@ -2174,7 +2192,7 @@ function trArmarPDF(fecha, ords){
   y += 7;
   cab(y, [{t:'Tractorista',x:16},{t:'Ha',x:120,align:'right'},{t:'Horas (inicio–término)',x:194,align:'right'}]); y += 6;
   d.horas.forEach((h,i) => {
-    const txtH = h.n ? `${tr2(h.horas)} h  (${h.detalle})` : 'Sin registro';
+    const txtH = h.hayRegistro ? `${tr2(h.horas)} h  (${h.detalle})` : 'Sin registro';
     fila(y, [{t:h.nombre,x:16},{t:tr2(d.parte),x:120,align:'right'},{t:txtH,x:194,align:'right'}], i%2===1);
     y += 6;
   });
@@ -2200,7 +2218,7 @@ function trListaPDF(desde, hasta){
 }
 
 function trVerPDF(fecha){
-  const dias = trDiasConOrdenes(fecha, fecha);
+  const dias = trDias(fecha, fecha);
   if(!dias.length){ showToast('Ese día no tiene órdenes terminadas','err'); return; }
   if(typeof window.jspdf === 'undefined'){ showToast('La librería de PDF no cargó. Recarga la página.','err'); return; }
   let doc;
