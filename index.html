@@ -1382,6 +1382,7 @@ function getTabs(role) {
     {k:'orden',    icon:'ti-droplet',        label:'Aplicar',  roles:['maestro','dosificador','gerencia'], render:renderOrden,     prim:true},
     {k:'mistock',  icon:'ti-box',            label:'Mi Stock', roles:['dosificador'],                     render:renderMiStock,   prim:true},
     {k:'pedir',    icon:'ti-shopping-cart',  label:'Pedir',    roles:['maestro','dosificador'],           render:renderPedir,     prim:false},
+    {k:'horastrac',icon:'ti-users',          label:'Tractoristas',roles:['dosificador'],                  render:renderTractoristas, prim:false},
     {k:'historial',icon:'ti-clipboard-list', label:'Historial',roles:['maestro','bodeguero','gerencia'], render:renderHistorial,   prim:true},
     {k:'gerencia', icon:'ti-chart-bar',      label:'Gerencia', roles:['maestro','gerencia'],             render:renderGerencia,    prim:true},
     {k:'materiales',icon:'ti-tool',          label:'Materiales',roles:['maestro','bodeguero','gerencia'],render:renderMateriales,  prim:false},
@@ -1398,6 +1399,8 @@ function getTabs(role) {
     // Fertiliz. La pantalla de Aplicar pide mojamiento, tractorista y clima, que
     // no aplican, y descontaría de la bodega del campo en vez de la suya.
     if(t.k==='orden' && esDosifFert() && role!=='maestro' && role!=='gerencia') return false;
+    // Pestaña de tractoristas: solo Eduardo (cerrillos), Héctor (paine) y José (rulo)
+    if(t.k==='horastrac') return ['cerrillos','paine','rulo'].includes(curUser.id);
     return t.roles.includes(role);
   });
 }
@@ -1502,6 +1505,7 @@ function renderPanel(i) {
     setTimeout(restaurarBorradores,80);
     if(tabs[i].k==='orden' && (curUser.role==='maestro'||curUser.role==='gerencia')) setTimeout(initOrdenForm,100);
     if(tabs[i].k==='fert') setTimeout(initFertForm,100);
+    if(tabs[i].k==='horastrac') setTimeout(tractCargarSiFalta,50);
   }
 }
 
@@ -1925,6 +1929,165 @@ function renderMiStock(){
         <div style="font-size:20px;font-weight:800;color:var(--vino)">${fmt(x.cant)}</div>
       </div>
     </div>`).join('') : '<div class="card" style="text-align:center;padding:30px;color:var(--tx3)">Sin productos con ese nombre</div>'}`;
+}
+
+// ══════ TRACTORISTAS: horas por tractorista + hectáreas por partes iguales ══════
+// Pestaña solo para Eduardo (cerrillos), Héctor (paine) y José (rulo).
+// Las horas se registran aparte de las órdenes. Las hectáreas de cada orden TERMINADA
+// se reparten en partes iguales entre los tractoristas que figuran en esa orden.
+const TRACT_DESDE_DEFECTO = '2026-09-01';
+let tractHoras = [];          // filas de tractorista_horas del dosificador actual
+let tractHorasUser = null;    // dosificador para el que se intentó cargar
+let tractCargando = false;
+
+const tr2 = n => (Number(n)||0).toLocaleString('es-CL',{minimumFractionDigits:2,maximumFractionDigits:2});
+const trHoyISO = () => new Date().toLocaleDateString('sv-SE',{timeZone:'America/Santiago'});
+const trHoraDecimal = t => { const [h,m]=String(t||'00:00').slice(0,5).split(':').map(Number); return h + (m||0)/60; };
+// Horas entre inicio y término; si el término es menor, se asume que cruzó medianoche
+function trHorasEntre(hi, ht){ let d = trHoraDecimal(ht) - trHoraDecimal(hi); if(d<0) d += 24; return d; }
+function trRango(){
+  return {
+    desde: document.getElementById('tr-desde')?.value || TRACT_DESDE_DEFECTO,
+    hasta: document.getElementById('tr-hasta')?.value || trHoyISO()
+  };
+}
+
+function trResumen(desde, hasta){
+  const yo = String(curUser.id).toLowerCase();
+  const ords = ordenes.filter(o =>
+    String(o.dosificador||'').toLowerCase() === yo &&
+    String(o.estado||'').trim().toUpperCase() === 'TERMINADA' &&
+    (o.detalle?.fecha||'') >= desde && (o.detalle?.fecha||'') <= hasta);
+  const mapa = {};
+  const get = n => (mapa[n] = mapa[n] || {nombre:n, ha:0, horas:0, ordenes:[]});
+  let totalHa = 0, sinTractorHa = 0;
+  ords.forEach(o => {
+    const ha = parseFloat(o.detalle?.hectareas) || 0;
+    totalHa += ha;
+    const nombres = [...new Set(((o.detalle?.infoAplicacion?.equipos)||[])
+      .map(e => String(e.tractorista||'').trim()).filter(Boolean))];
+    if(!nombres.length){ sinTractorHa += ha; return; }
+    const parte = ha / nombres.length;
+    nombres.forEach(n => {
+      const t = get(n);
+      t.ha += parte;
+      t.ordenes.push({num: o.detalle?.numeroOrden || o.id, fecha: o.detalle?.fecha || '', ha, parte, acomp: nombres.length-1});
+    });
+  });
+  tractHoras.filter(r => r.fecha >= desde && r.fecha <= hasta)
+    .forEach(r => { const t = get(r.tractorista); t.horas += trHorasEntre(r.hora_inicio, r.hora_termino); });
+  const lista = Object.values(mapa).sort((a,b) => (b.ha - a.ha) || a.nombre.localeCompare(b.nombre));
+  return {lista, totalHa, sinTractorHa, nOrdenes: ords.length};
+}
+
+async function cargarTractoristas(){
+  if(!curUser || tractCargando) return;
+  tractCargando = true;
+  const usuario = curUser.id;
+  try{
+    const { data, error } = await sb.from('tractorista_horas').select('*')
+      .eq('dosificador', usuario).order('fecha', {ascending:false});
+    if(error) throw error;
+    tractHoras = data || [];
+  }catch(e){
+    showToast('No se pudieron cargar las horas: '+(e.message||e), 'err');
+  }finally{
+    tractHorasUser = usuario;   // se marca aunque falle, para no reintentar en bucle
+    tractCargando = false;
+  }
+  refresh();
+}
+function tractCargarSiFalta(){
+  if(curUser && tractHorasUser !== curUser.id) cargarTractoristas();
+}
+
+async function tractGuardarHoras(){
+  const fecha = document.getElementById('tr-f-fecha')?.value;
+  const tractorista = document.getElementById('tr-f-tra')?.value;
+  const hi = document.getElementById('tr-f-hi')?.value;
+  const ht = document.getElementById('tr-f-ht')?.value;
+  if(!fecha || !tractorista || !hi || !ht){ showToast('Faltan fecha, tractorista, hora de inicio o de término','err'); return; }
+  if(hi === ht){ showToast('La hora de inicio y la de término son iguales','err'); return; }
+  const { error } = await sb.from('tractorista_horas').insert({
+    fecha, dosificador: curUser.id, tractorista, hora_inicio: hi, hora_termino: ht
+  });
+  if(error){ showToast('No se guardó: '+error.message,'err'); return; }
+  showToast('Horas guardadas');
+  await cargarTractoristas();
+}
+
+async function tractEliminarHoras(id){
+  if(!confirm('¿Eliminar este registro de horas?')) return;
+  const { error } = await sb.from('tractorista_horas').delete().eq('id', id);
+  if(error){ showToast('No se pudo eliminar: '+error.message,'err'); return; }
+  showToast('Registro eliminado');
+  await cargarTractoristas();
+}
+
+function renderTractoristas(){
+  const {desde, hasta} = trRango();
+  const {lista, totalHa, sinTractorHa, nOrdenes} = trResumen(desde, hasta);
+  const enRango = tractHoras.filter(r => r.fecha >= desde && r.fecha <= hasta);
+  const opts = '<option value="">— Tractorista —</option>' + OPERADORES.map(t=>`<option>${t}</option>`).join('');
+  const inp = 'width:100%;padding:10px;border:1px solid var(--bd2);border-radius:10px;font-size:14px;box-sizing:border-box';
+  const btn = 'padding:10px 16px;border:none;border-radius:10px;background:var(--vino);color:#fff;font-weight:700;font-size:14px;cursor:pointer';
+
+  const filasTract = lista.length ? lista.map(t => `
+    <details class="card" style="padding:12px 14px;margin-bottom:8px">
+      <summary style="display:flex;justify-content:space-between;align-items:center;gap:10px;cursor:pointer;list-style:none">
+        <div style="font-weight:700;font-size:15px">${t.nombre}</div>
+        <div style="text-align:right;flex-shrink:0">
+          <div style="font-size:18px;font-weight:800;color:var(--vino)">${tr2(t.ha)} ha</div>
+          <div style="font-size:11px;color:var(--tx3)">${tr2(t.horas)} h · ${t.ordenes.length} órdenes</div>
+        </div>
+      </summary>
+      <div style="margin-top:10px;font-size:12px">
+        ${t.ordenes.length ? t.ordenes.slice().sort((a,b)=> a.fecha < b.fecha ? -1 : 1).map(x => `
+          <div style="display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-bottom:1px solid var(--bd2)">
+            <span>N° ${x.num} · ${x.fecha}</span>
+            <span style="text-align:right">${tr2(x.parte)} ha de ${tr2(x.ha)} (${x.acomp ? 'con '+x.acomp+(x.acomp===1?' compañero':' compañeros') : 'solo'})</span>
+          </div>`).join('') : '<div style="color:var(--tx3)">Sin órdenes en el período.</div>'}
+      </div>
+    </details>`).join('')
+    : '<div class="card" style="text-align:center;padding:24px;color:var(--tx3)">Sin órdenes con tractorista en el período.</div>';
+
+  const filasHoras = enRango.length ? enRango.map(r => `
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--bd2);font-size:13px">
+      <span><b>${r.tractorista}</b> · ${r.fecha}</span>
+      <span>${String(r.hora_inicio).slice(0,5)} – ${String(r.hora_termino).slice(0,5)} · ${tr2(trHorasEntre(r.hora_inicio, r.hora_termino))} h
+        <button onclick="tractEliminarHoras('${r.id}')" style="margin-left:8px;border:none;background:none;color:#b00;cursor:pointer;font-size:12px">Eliminar</button></span>
+    </div>`).join('')
+    : '<div style="color:var(--tx3);font-size:13px;padding:8px 0">Sin horas registradas en el período.</div>';
+
+  return `
+  <div class="section-header"><div class="section-title">Tractoristas</div><div class="section-sub">${curUser.desc} · ${desde} al ${hasta}</div></div>
+
+  <div class="card" style="padding:14px;margin-bottom:12px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+      <label style="font-size:12px;color:var(--tx3)">Desde<input type="date" id="tr-desde" value="${desde}" onchange="refresh()" style="${inp}"></label>
+      <label style="font-size:12px;color:var(--tx3)">Hasta<input type="date" id="tr-hasta" value="${hasta}" onchange="refresh()" style="${inp}"></label>
+    </div>
+    <div style="font-weight:700;margin-bottom:8px">Registrar horas de tractorista</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+      <label style="font-size:12px;color:var(--tx3)">Fecha<input type="date" id="tr-f-fecha" value="${trHoyISO()}" style="${inp}"></label>
+      <label style="font-size:12px;color:var(--tx3)">Tractorista<select id="tr-f-tra" style="${inp}">${opts}</select></label>
+      <label style="font-size:12px;color:var(--tx3)">Hora inicio<input type="time" id="tr-f-hi" style="${inp}"></label>
+      <label style="font-size:12px;color:var(--tx3)">Hora término<input type="time" id="tr-f-ht" style="${inp}"></label>
+    </div>
+    <button onclick="tractGuardarHoras()" style="${btn}">Guardar horas</button>
+  </div>
+
+  <div class="card" style="padding:14px;margin-bottom:12px;background:var(--vino);color:#fff">
+    <div style="font-size:12px;opacity:.85">Total de la cuenta en el período</div>
+    <div style="font-size:26px;font-weight:800">${tr2(totalHa)} ha</div>
+    <div style="font-size:12px;opacity:.85">${nOrdenes} órdenes terminadas${sinTractorHa>0 ? ' · '+tr2(sinTractorHa)+' ha sin tractorista asignado' : ''}</div>
+  </div>
+
+  <div style="font-weight:700;margin:6px 0 8px">Hectáreas y horas por tractorista</div>
+  ${filasTract}
+
+  <div style="font-weight:700;margin:14px 0 6px">Registros de horas</div>
+  <div class="card" style="padding:6px 14px">${filasHoras}</div>`;
 }
 
 // ══════ EXCEL DE MIS ÓRDENES (dosificador) ══════
