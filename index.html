@@ -2083,11 +2083,152 @@ function renderTractoristas(){
     <div style="font-size:12px;opacity:.85">${nOrdenes} órdenes terminadas${sinTractorHa>0 ? ' · '+tr2(sinTractorHa)+' ha sin tractorista asignado' : ''}</div>
   </div>
 
+  ${trListaPDF(desde, hasta)}
+
   <div style="font-weight:700;margin:6px 0 8px">Hectáreas y horas por tractorista</div>
   ${filasTract}
 
   <div style="font-weight:700;margin:14px 0 6px">Registros de horas</div>
   <div class="card" style="padding:6px 14px">${filasHoras}</div>`;
+}
+
+// ══════ PDF POR DÍA (tractoristas): últimos 10 días con órdenes terminadas ══════
+// El reparto es: hectáreas del día ÷ número de tractoristas del día (partes iguales).
+// Las horas salen de tractorista_horas (inicio y término registrados en esta pestaña).
+let trPdfActual = null;
+const trFechaLarga = iso => String(iso).split('-').reverse().join('-');
+
+function trDiasConOrdenes(desde, hasta){
+  const yo = String(curUser.id).toLowerCase();
+  const porDia = {};
+  ordenes.forEach(o => {
+    const fch = o.detalle?.fecha || '';
+    if(String(o.dosificador||'').toLowerCase() !== yo) return;
+    if(String(o.estado||'').trim().toUpperCase() !== 'TERMINADA') return;
+    if(String(o.detalle?.tipo||'') === 'consumo') return;
+    if(!fch || fch < desde || fch > hasta) return;
+    (porDia[fch] = porDia[fch] || []).push(o);
+  });
+  return Object.keys(porDia).sort().reverse().slice(0,10).map(fch => ({fecha: fch, ordenes: porDia[fch]}));
+}
+
+function trDatosDia(fecha, ords){
+  const filas = ords.map(o => ({
+    num: o.detalle?.numeroOrden || o.id,
+    ha: parseFloat(o.detalle?.hectareas) || 0,
+    nombres: [...new Set(((o.detalle?.infoAplicacion?.equipos)||[]).map(e => String(e.tractorista||'').trim()).filter(Boolean))]
+  })).sort((a,b) => String(a.num).localeCompare(String(b.num), 'es', {numeric:true}));
+  const haTotal = filas.reduce((s,x) => s + x.ha, 0);
+  const haConTractor = filas.filter(x => x.nombres.length).reduce((s,x) => s + x.ha, 0);
+  const trabajadores = [...new Set(filas.flatMap(x => x.nombres))].sort();
+  const parte = trabajadores.length ? haConTractor / trabajadores.length : 0;
+  const horas = trabajadores.map(n => {
+    const regs = tractHoras.filter(r => r.fecha === fecha && r.tractorista === n);
+    return {
+      nombre: n,
+      n: regs.length,
+      horas: regs.reduce((s,r) => s + trHorasEntre(r.hora_inicio, r.hora_termino), 0),
+      detalle: regs.map(r => `${String(r.hora_inicio).slice(0,5)}–${String(r.hora_termino).slice(0,5)}`).join(' · ')
+    };
+  });
+  const sinTractor = filas.filter(x => !x.nombres.length).length;
+  return {filas, haTotal, haConTractor, trabajadores, parte, horas, sinTractor};
+}
+
+function trArmarPDF(fecha, ords){
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({unit:'mm', format:'a4'});
+  const d = trDatosDia(fecha, ords);
+  const V = [110,36,48], W = [255,255,255];
+  const at = c => c.align ? {align:c.align} : {};
+  const T = (txt, x, y, size, bold, rgb) => {
+    doc.setFont('helvetica', bold ? 'bold' : 'normal'); doc.setFontSize(size);
+    doc.setTextColor(...(rgb || [40,40,40])); doc.text(String(txt), x, y);
+  };
+  const cab = (yy, cols) => {
+    doc.setFillColor(...V); doc.rect(14, yy-4.5, 182, 6.5, 'F');
+    doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(...W);
+    cols.forEach(c => doc.text(c.t, c.x, yy, at(c)));
+  };
+  const fila = (yy, cols, zebra) => {
+    if(zebra){ doc.setFillColor(244,241,239); doc.rect(14, yy-4, 182, 6, 'F'); }
+    doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(40,40,40);
+    cols.forEach(c => doc.text(String(c.t), c.x, yy, at(c)));
+  };
+
+  let y = 18;
+  T(curUser.full, 14, y, 15, true, V); y += 7;
+  T(`Resumen de hectáreas · ${trFechaLarga(fecha)}`, 14, y, 10, false, [90,90,90]); y += 4;
+  T('Órdenes de fitosanitarios TERMINADAS · consumos excluidos', 14, y+3, 7.5, false, [120,120,120]); y += 11;
+
+  cab(y, [{t:'Orden',x:16},{t:'Tractoristas',x:40},{t:'Ha',x:194,align:'right'}]); y += 6;
+  d.filas.forEach((r,i) => {
+    fila(y, [{t:r.num,x:16},{t:r.nombres.join(', ')||'Sin tractorista',x:40},{t:tr2(r.ha),x:194,align:'right'}], i%2===1);
+    y += 6;
+  });
+  doc.setDrawColor(200,200,200); doc.line(14, y-3.5, 196, y-3.5);
+  fila(y+0.5, [{t:'Total',x:16},{t:tr2(d.haTotal),x:194,align:'right'}], false);
+  y += 12;
+
+  T(`Por tractorista: ${tr2(d.haConTractor)} ha ÷ ${d.trabajadores.length} = ${tr2(d.parte)} ha cada uno`, 14, y, 10.5, true, V);
+  y += 7;
+  cab(y, [{t:'Tractorista',x:16},{t:'Ha',x:120,align:'right'},{t:'Horas (inicio–término)',x:194,align:'right'}]); y += 6;
+  d.horas.forEach((h,i) => {
+    const txtH = h.n ? `${tr2(h.horas)} h  (${h.detalle})` : 'Sin registro';
+    fila(y, [{t:h.nombre,x:16},{t:tr2(d.parte),x:120,align:'right'},{t:txtH,x:194,align:'right'}], i%2===1);
+    y += 6;
+  });
+  y += 3;
+  if(d.sinTractor){
+    T(`Órdenes sin tractorista: ${d.sinTractor} · ${tr2(d.haTotal - d.haConTractor)} ha (no entran en el reparto)`, 14, y, 8, false, [120,120,120]);
+  }
+  return doc;
+}
+
+function trListaPDF(desde, hasta){
+  const dias = trDiasConOrdenes(desde, hasta);
+  const btn = 'padding:8px 14px;border:none;border-radius:10px;background:var(--vino);color:#fff;font-weight:700;font-size:13px;cursor:pointer';
+  const filas = dias.map(x => {
+    const ha = x.ordenes.reduce((s,o) => s + (parseFloat(o.detalle?.hectareas)||0), 0);
+    return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--bd2);font-size:13px">
+      <span><b>${trFechaLarga(x.fecha)}</b> · ${x.ordenes.length} órdenes · ${tr2(ha)} ha</span>
+      <button onclick="trVerPDF('${x.fecha}')" style="${btn}">PDF</button></div>`;
+  }).join('');
+  return `
+  <div style="font-weight:700;margin:6px 0 8px">PDF por día (últimos 10 días del período)</div>
+  <div class="card" style="padding:6px 14px;margin-bottom:12px">${filas || '<div style="color:var(--tx3);font-size:13px;padding:8px 0">Sin días con órdenes terminadas en el período.</div>'}</div>`;
+}
+
+function trVerPDF(fecha){
+  const dias = trDiasConOrdenes(fecha, fecha);
+  if(!dias.length){ showToast('Ese día no tiene órdenes terminadas','err'); return; }
+  if(typeof window.jspdf === 'undefined'){ showToast('La librería de PDF no cargó. Recarga la página.','err'); return; }
+  let doc;
+  try{ doc = trArmarPDF(fecha, dias[0].ordenes); }
+  catch(e){ showToast('No se pudo armar el PDF: '+e.message,'err'); return; }
+  trPdfActual = { doc, fecha };
+  const url = doc.output('bloburl');
+  let m = document.getElementById('tr-pdf-modal');
+  if(!m){
+    m = document.createElement('div'); m.id = 'tr-pdf-modal';
+    m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;flex-direction:column;padding:12px;box-sizing:border-box';
+    document.body.appendChild(m);
+  }
+  const b = 'padding:8px 14px;border:none;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer';
+  m.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+      <b style="color:#fff">Resumen ${trFechaLarga(fecha)}</b>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <a href="${url}" target="_blank" style="${b};background:#fff;color:var(--vino);text-decoration:none">Abrir</a>
+        <button onclick="trDescargarPDF()" style="${b};background:var(--vino);color:#fff">Descargar</button>
+        <button onclick="document.getElementById('tr-pdf-modal').style.display='none'" style="${b};background:#ccc">Cerrar</button>
+      </div>
+    </div>
+    <iframe src="${url}" style="flex:1;width:100%;border:0;background:#fff;border-radius:8px"></iframe>`;
+  m.style.display = 'flex';
+}
+function trDescargarPDF(){
+  if(trPdfActual) trPdfActual.doc.save(`resumen_${trPdfActual.fecha}.pdf`);
 }
 
 // ══════ EXCEL DE MIS ÓRDENES (dosificador) ══════
