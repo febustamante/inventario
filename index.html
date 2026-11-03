@@ -667,6 +667,8 @@ const USERS = [
   {id:'omar',    name:'Omar',    full:'OMAR TERÁN · Cerrillos',      role:'dosificador', pin:'7777', av:'av-d', desc:'Fertilizantes Cerrillos'},
   {id:'gerardo', name:'Gerardo', full:'GERARDO · Rulo',              role:'dosificador', pin:'8888', av:'av-d', desc:'Fertilizantes Rulo'},
   {id:'juan',    name:'Juan',    full:'JUAN VILLABLANCA · Paine',    role:'dosificador', pin:'9999', av:'av-d', desc:'Fertilizantes Paine'},
+  // Solo ve la pestaña Reingreso (lectura). Cambia el PIN si quieres.
+  {id:'reingreso', name:'Reingreso', full:'REINGRESO · Cuarteles',      role:'reingreso',   pin:'1111', av:'av-d', desc:'Solo reingreso a cuarteles'},
 ];
 
 // ══════ BOMBONAS DE PETRÓLEO ══════
@@ -1328,6 +1330,15 @@ function attemptLogin() {
         setTimeout(()=>Notification.requestPermission(), 1500);
       }
 
+      // Rol 'reingreso': solo lectura de su pestaña. No carga cache, ni sincroniza,
+      // ni abre tiempo real: nada del resto de la app llega a este usuario.
+      if(curUser.role==='reingreso'){
+        const sb_=document.querySelector('.sync-bar'); if(sb_) sb_.style.display='none';
+        buildApp();
+        reingresoIniciar();
+        return;
+      }
+
       // 1. Cargar cache local al instante
       const hayCache = cargarCacheLocal();
       buildApp();
@@ -1355,6 +1366,8 @@ function attemptLogin() {
 }
 
 function doLogout() {
+  reingresoDetener();
+  const sb_=document.querySelector('.sync-bar'); if(sb_) sb_.style.display='';
   curUser=null; selUser=null; pinBuffer='';
   document.body.classList.add('login-activo');
   document.getElementById('sa').classList.remove('active');
@@ -1388,6 +1401,7 @@ function getTabs(role) {
     {k:'materiales',icon:'ti-tool',          label:'Materiales',roles:['maestro','bodeguero','gerencia'],render:renderMateriales,  prim:false},
     {k:'petroleo', icon:'ti-gas-station',    label:'Petróleo', roles:['maestro','bodeguero'],            render:renderPetroleo,    prim:false},
     {k:'admin',    icon:'ti-settings',       label:'Admin',    roles:['maestro'],                        render:renderAdmin,       prim:false},
+    {k:'reingreso',icon:'ti-clock-hour-4',   label:'Reingreso',roles:['reingreso'],                      render:renderReingreso,   prim:true},
   ];
   return all.filter(t=>{
     // Petróleo no va por rol sino por bombona asignada: así Hector (dosificador
@@ -7141,6 +7155,121 @@ function activarTiempoReal(){
 function programarResync(){
   clearTimeout(resyncTimer);
   resyncTimer = setTimeout(() => { syncData(); }, 500);
+}
+
+// ══ REINGRESO A CUARTELES (rol 'reingreso', solo lectura) ══
+// Reingreso del cuartel = hora de cierre de la orden + horas del producto MAS restrictivo
+// de esa orden (tabla reingreso_productos). Solo se listan los cuarteles aun bloqueados.
+let rgOrdenes=[], rgHoras={}, rgCampo='Todos', rgTxt='', rgCargado=false, rgError='';
+let rgTimerPintar=null, rgTimerCargar=null, rgVisHook=false;
+const RG_CAMPOS={2:'Cerrillos',3:'Rulo',4:'Paine'};
+const rgFmt=new Intl.DateTimeFormat('es-CL',{timeZone:'America/Santiago',weekday:'short',hour:'2-digit',minute:'2-digit',hour12:false});
+
+async function reingresoCargar(){
+  try{
+    const desde=new Date(Date.now()-7*24*3600e3).toISOString();
+    const [a,b]=await Promise.all([
+      sb.from('ordenes').select('id,campo_id,estado,cerrado_en,detalle').eq('estado','TERMINADA').gte('cerrado_en',desde),
+      sb.from('reingreso_productos').select('producto_id,producto,horas')
+    ]);
+    if(a.error) throw a.error;
+    if(b.error) throw b.error;
+    rgHoras={};
+    (b.data||[]).forEach(r=>{ rgHoras[r.producto_id]={h:+r.horas||0, n:r.producto}; });
+    rgOrdenes=a.data||[];
+    rgCargado=true; rgError='';
+  }catch(e){
+    rgError='Sin conexión. Se muestra el último dato recibido.';
+  }
+  reingresoPintar();
+}
+
+function rgFilas(){
+  const now=Date.now(), mapa={};
+  rgOrdenes.forEach(o=>{
+    const d=o.detalle||{};
+    if(!['fitosanitario','herbicida'].includes(d.tipo) || !o.cerrado_en) return;
+    let h=0, prod='';
+    (d.productos||[]).forEach(p=>{
+      const r=rgHoras[p.productoId];
+      if(r && r.h>h){ h=r.h; prod=r.n; }
+    });
+    if(!h) return;
+    const lib=new Date(o.cerrado_en).getTime()+h*3600e3;
+    if(lib<=now) return;
+    (d.cuarteles||[]).forEach(c=>{
+      const campo=RG_CAMPOS[o.campo_id]||'';
+      const k=campo+'|'+c.c;
+      // si un cuartel tiene dos aplicaciones recientes, vale la que lo bloquea mas tiempo
+      if(!mapa[k] || mapa[k].lib<lib){
+        mapa[k]={c:c.c,campo,num:d.numeroOrden,tipo:d.tipo==='herbicida'?'Herbicida':'Fito',prod,h,lib,cierre:o.cerrado_en};
+      }
+    });
+  });
+  return Object.values(mapa);
+}
+function rgDur(ms){ const m=Math.max(0,Math.ceil(ms/60000)); return Math.floor(m/60)+' h '+String(m%60).padStart(2,'0')+' min'; }
+function rgColor(ms){ const h=ms/3600e3; return h>12?'var(--red)':h>3?'#c76a00':'var(--gold)'; }
+
+function reingresoPintar(){
+  const lista=document.getElementById('rg-lista'); if(!lista) return;
+  const now=Date.now();
+  const vis=rgFilas().filter(r=>(rgCampo==='Todos'||r.campo===rgCampo) && r.c.toLowerCase().includes(rgTxt)).sort((a,b)=>a.lib-b.lib);
+  const sub=document.getElementById('rg-sub');
+  if(sub) sub.textContent = !rgCargado ? 'Cargando…' : (vis.length+' cuarteles bloqueados · '+(rgError||'se actualiza solo'));
+  const chips=document.getElementById('rg-chips');
+  if(chips) chips.innerHTML=['Todos','Cerrillos','Rulo','Paine'].map(c=>
+    `<button onclick="rgSetCampo('${c}')" style="flex:none;padding:9px 16px;border-radius:999px;border:1px solid var(--bd2);font-size:14px;cursor:pointer;background:${c===rgCampo?'var(--vino)':'var(--surf)'};color:${c===rgCampo?'#fff':'var(--tx)'}">${c}</button>`).join('');
+  const abiertas=[...lista.querySelectorAll('.rg-card.open')].map(x=>x.dataset.k);
+  if(!rgCargado){ lista.innerHTML='<div style="text-align:center;color:var(--tx3);padding:30px 10px">Cargando…</div>'; return; }
+  lista.innerHTML = vis.length ? vis.map(r=>{
+    const ms=r.lib-now, k=r.campo+r.c, col=rgColor(ms);
+    return `<div class="rg-card${abiertas.includes(k)?' open':''}" data-k="${k}" onclick="this.classList.toggle('open')"
+      style="background:var(--surf);border:1px solid var(--bd);border-left:6px solid ${col};border-radius:14px;padding:14px;margin-bottom:10px;box-shadow:var(--shadow)">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+        <div style="min-width:0">
+          <div style="font-size:20px;font-weight:700">${r.c}</div>
+          <div style="font-size:13px;color:var(--tx2)">${r.campo} · Orden ${r.tipo} ${r.num||''}</div>
+          <div style="display:inline-block;margin-top:8px;padding:5px 10px;border-radius:8px;background:var(--surf3);border:1px solid ${col};font-size:14px">Producto: <b style="color:${col}">${r.prod}</b> · ${r.h} h</div>
+        </div>
+        <div style="text-align:right;font-weight:800;font-size:21px;color:${col};font-variant-numeric:tabular-nums;white-space:nowrap">${rgDur(ms)}<div style="font-size:12px;font-weight:500;color:var(--tx3)">libre ${rgFmt.format(new Date(r.lib))}</div></div>
+      </div>
+      <div class="rg-det" style="display:none;margin-top:10px;padding-top:10px;border-top:1px dashed var(--bd2);font-size:14px;color:var(--tx2)">Cerrada ${rgFmt.format(new Date(r.cierre))}</div>
+    </div>`;
+  }).join('') : '<div style="text-align:center;color:var(--green);padding:30px 10px;font-size:18px;font-weight:700">Todos los cuarteles libres</div>';
+  lista.querySelectorAll('.rg-card.open .rg-det').forEach(x=>x.style.display='block');
+}
+function rgSetCampo(c){ rgCampo=c; reingresoPintar(); }
+function rgBuscar(v){ rgTxt=(v||'').trim().toLowerCase(); reingresoPintar(); }
+
+function renderReingreso(){
+  return `<style>.rg-card.open .rg-det{display:block !important}</style>
+  <div style="padding:2px 0 8px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <div style="font-size:20px;font-weight:700">Reingreso a cuarteles</div>
+      <button onclick="reingresoCargar()" aria-label="Actualizar" style="border:1px solid var(--bd2);background:var(--surf);border-radius:10px;padding:8px 12px;cursor:pointer"><i class="ti ti-refresh"></i></button>
+    </div>
+    <div id="rg-sub" style="color:var(--tx3);font-size:13px;margin:2px 0 12px">Cargando…</div>
+    <input id="rg-q" class="form-control" placeholder="Buscar cuartel (ej. C27)" autocomplete="off" oninput="rgBuscar(this.value)" style="margin-bottom:10px" value="${rgTxt}">
+    <div id="rg-chips" style="display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;margin-bottom:12px"></div>
+    <div id="rg-lista"></div>
+  </div>`;
+}
+
+function reingresoIniciar(){
+  reingresoDetener();
+  rgCargado=false; rgError=''; rgCampo='Todos'; rgTxt='';
+  reingresoCargar();
+  rgTimerPintar=setInterval(reingresoPintar,30000);
+  rgTimerCargar=setInterval(reingresoCargar,120000);
+  if(!rgVisHook){
+    rgVisHook=true;
+    document.addEventListener('visibilitychange',()=>{ if(!document.hidden && curUser && curUser.role==='reingreso') reingresoCargar(); });
+  }
+}
+function reingresoDetener(){
+  clearInterval(rgTimerPintar); clearInterval(rgTimerCargar);
+  rgTimerPintar=null; rgTimerCargar=null;
 }
 
 // ══ INIT ══
