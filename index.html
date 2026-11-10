@@ -700,6 +700,10 @@ let stockByLoc = {};
 let products = [];
 let movimientos = [], ordenes = [], compras = [], materiales = [], materialesMov = [], petroleoMovs = [], maqMaquinas = [], maqOperadores = [], maqImplementos = [],
     fertSectores = [], fertSectorCuarteles = [], fertProductos = [], tractoresOrden = [];
+// Envíos entre bodegas: salen EN_TRANSITO y solo suman al destino cuando quien recibe confirma
+let envios = [];
+// Quién recibe en cada ubicación (id de usuario -> ids de ubicación)
+const RECEPTOR_UBIC = {cerrillos:[2], omar:[5], rulo:[3], gerardo:[6], paine:[4], juan:[7]};
 // Captura de firma vectorial (trazo, no imagen) para vales de petróleo
 let _firmaStrokes = [], _firmaActual = null, _firmaDrawing = false;
 let nextMov = 1, nextOrden = 1;
@@ -939,6 +943,13 @@ async function syncData() {
       if(!e14) fFue = fData||[];
     }catch(_){ fSec=[]; fSecCu=[]; fFue=[]; }
 
+    // Envíos pendientes de confirmar (tabla nueva; si no existe, no rompe)
+    let envs=[];
+    try{
+      const { data: evData, error: e17 } = await sb.from('envios').select('*').order('id',{ascending:false}).limit(400);
+      if(!e17) envs = evData||[];
+    }catch(_){ envs=[]; }
+
     // ── Armar products y stockByLoc con el formato que usa la app ──
     const nuevosProducts = [];
     const nuevoStockByLoc = {};
@@ -1013,6 +1024,7 @@ async function syncData() {
     fertSectorCuarteles = fSecCu;
     fertProductos = fFue;
     tractoresOrden = tractOrd;
+    envios = envs;
 
     sheetsConnected = true;
     setSyncStatus('on', 'Conectado · ' + products.length + ' productos');
@@ -1388,6 +1400,7 @@ function getTabs(role) {
     {k:'stock',    icon:'ti-box',            label:'Stock',    roles:['maestro','bodeguero','gerencia'], render:renderStock,       prim:true},
     {k:'recibir',  icon:'ti-package-import', label:'Recepción',  roles:['maestro','bodeguero'],            render:renderRecibir,     prim:false},
     {k:'transfer', icon:'ti-arrows-exchange',label:'Despacho',    roles:['maestro','bodeguero'],            render:renderTransferir,  prim:false},
+    {k:'envios',   icon:'ti-truck-delivery', label:'Envíos',   roles:['maestro','bodeguero','gerencia','dosificador'], render:renderEnvios, prim:true},
     {k:'devol',    icon:'ti-arrow-back-up',  label:'Devolución', roles:['maestro','bodeguero'],            render:renderDevolucion,  prim:false},
     {k:'perdida',  icon:'ti-alert-triangle', label:'Pérdida',  roles:['maestro'],                        render:renderPerdida,     prim:false},
     {k:'consumo',  icon:'ti-clipboard-check',label:'Consumo',  roles:['maestro'],                        render:renderConsumo,     prim:false},
@@ -1407,6 +1420,8 @@ function getTabs(role) {
     // Petróleo no va por rol sino por bombona asignada: así Hector (dosificador
     // de Paine) entra, pero los demás dosificadores no.
     if(t.k==='petroleo') return bombonasDe(curUser).length>0;
+    // Envíos: los dosificadores solo si tienen una bodega a su cargo donde recibir
+    if(t.k==='envios') return role==='maestro'||role==='bodeguero'||role==='gerencia'||!!RECEPTOR_UBIC[curUser.id];
     // Fertilizantes: gerencia y el maestro la crean; Omar, Gerardo y Juan la cierran
     if(t.k==='fert') return role==='maestro' || role==='gerencia' || esDosifFert();
     // Omar, Gerardo y Juan NO hacen aplicaciones: su cierre es el checklist de
@@ -1431,7 +1446,7 @@ function buildApp() {
 
   let nav = prim.map(({t,i})=>`
     <button class="nav-item${i===0?' active':''}" onclick="switchTab(${i})" aria-label="${t.label}" style="position:relative">
-      <span class="nav-icon"><i class="ti ${t.icon}"></i>${t.k==='orden'&&curUser.role==='dosificador'?`<span id="badge-ordenes" style="display:none;position:absolute;top:2px;right:14px;background:#d33;color:#fff;font-size:10px;font-weight:700;border-radius:10px;padding:1px 6px;min-width:16px"></span>`:''}</span>
+      <span class="nav-icon"><i class="ti ${t.icon}"></i>${t.k==='orden'&&curUser.role==='dosificador'?`<span id="badge-ordenes" style="display:none;position:absolute;top:2px;right:14px;background:#d33;color:#fff;font-size:10px;font-weight:700;border-radius:10px;padding:1px 6px;min-width:16px"></span>`:''}${t.k==='envios'?`<span id="badge-envios" style="display:none;position:absolute;top:2px;right:14px;background:#d33;color:#fff;font-size:10px;font-weight:700;border-radius:10px;padding:1px 6px;min-width:16px"></span>`:''}</span>
       <span class="nav-label">${t.label}</span>
     </button>`).join('');
 
@@ -1575,6 +1590,7 @@ function refresh(){
     const n=ordenes.filter(o=>String(o.dosificador).toLowerCase()===String(curUser.id).toLowerCase()&&['EN CURSO','INICIADA'].includes(String(o.estado).toUpperCase())).length;
     b.textContent=n; b.style.display=n?'block':'none';
   }
+  actualizarBadgeEnvios();
 }
 
 // ── BORRADOR AUTOMÁTICO: lo que llena el dosificador se guarda al instante ──
@@ -3618,7 +3634,8 @@ function renderTransferir(){
 <button class="btn-sec" onclick="addLineaTransfer()" style="width:100%;margin-bottom:.75rem">
   + Agregar producto
 </button>
-    <button class="btn-primary" onclick="doTransferir()"><i class="ti ti-arrows-exchange"></i> Confirmar transferencia</button>
+    <button class="btn-primary" id="btn-transferir" onclick="doTransferir()"><i class="ti ti-arrows-exchange"></i> Enviar (queda por confirmar)</button>
+    <div style="font-size:12px;color:var(--tx3,#888);margin-top:.5rem">El producto sale de la bodega de origen y queda en tránsito. Suma al destino solo cuando quien recibe lo confirma en la pestaña Envíos.</div>
   </div>
   <div class="section-label">Últimas transferencias</div>
   <div class="card">${ts.length?ts.map(m=>`<div class="move-item"><div class="move-dot" style="background:var(--blue)"></div><div class="move-body"><div class="move-prod">${m.producto}</div><div class="move-detail">${m.origen} → ${m.destino}</div></div><div class="move-right"><div class="move-qty" style="color:var(--blue)">${m.cantidad}</div><div class="move-date">${m.fecha}</div></div></div>`).join(''):`<div class="empty-state"><div class="empty-icon">↔️</div><div class="empty-text">Sin transferencias</div></div>`}</div>`;
@@ -3721,42 +3738,36 @@ async function doTransferir(){
   }
 
   if(!bloquearAccion('transferir')){ return; } // evita doble envío
-  showToast('Guardando transferencias...', 'info');
+  const btnT = document.getElementById('btn-transferir');
+  if(btnT){ btnT.disabled = true; btnT.style.opacity = '.6'; }
+  showToast('Registrando envío...', 'info');
 
-  let _falloTransfer = false;
-  for(const l of lineas){
-    addStock(l.pid, origen, -l.cantidad);
-    addStock(l.pid, dest, l.cantidad);
-
-    movimientos.push({
-      id: nextMov++,
-      tipo: 'transferencia',
-      producto: l.producto,
-      cantidad: l.cantidad,
-      origen: origen,
-      destino: dest,
-      fecha: hoy(),
-      usuario: curUser.id
+  // El envío sale del origen y queda EN TRÁNSITO: solo suma al destino cuando
+  // quien recibe lo confirma. El token evita duplicados si se repite el click
+  // o se reintenta tras un corte de conexión.
+  let _falloTransfer = false, _msgFallo = '';
+  for(let i=0; i<lineas.length; i++){
+    const l = lineas[i];
+    const sig = origen+'|'+dest+'|'+l.pid+'|'+l.cantidad+'|'+i;
+    const { error } = await sb.rpc('crear_envio', {
+      p_token: tokenEnvio(sig),
+      p_producto_id: l.pid,
+      p_cantidad: l.cantidad,
+      p_origen_id: UBIC_ID[origen],
+      p_destino_id: UBIC_ID[dest],
+      p_usuario: curUser.id,
+      p_obs: ''
     });
-
-    const okTr=await postSheets({
-      action: 'transferencia',
-      fecha: hoy(),
-      producto: l.producto,
-      cantidad: l.cantidad,
-      origen: origen,
-      destino: dest,
-      usuario: curUser.id,
-      instrucciones: ''
-    });
-    if(!okTr){ _falloTransfer = true; }
+    if(error){ _falloTransfer = true; _msgFallo = error.message || ''; break; }
   }
   if(_falloTransfer){
     liberarAccion('transferir');
-    showToast('Algún producto no se guardó. Revisa tu conexión y el historial.','err');
+    if(btnT){ btnT.disabled = false; btnT.style.opacity = ''; }
+    showToast('No se registró todo: ' + _msgFallo + '. Revisa la pestaña Envíos antes de reintentar (lo ya enviado no se duplica).','err');
     await syncData();
     return;
   }
+  lineas.forEach((l,i)=>olvidarTokenEnvio(origen+'|'+dest+'|'+l.pid+'|'+l.cantidad+'|'+i));
 
   // Alerta: productos movidos que NO tienen ninguna orden de aplicación pendiente
   try{
@@ -3809,8 +3820,170 @@ async function doTransferir(){
   }catch(_){ /* la alerta nunca debe romper la transferencia */ }
 
   liberarAccion('transferir');
-  showToast('Transferencia guardada correctamente');
+  showToast('Envío registrado. Queda pendiente hasta que '+dest+' lo confirme');
   await syncData();
+}
+
+// ══ ENVÍOS CON CONFIRMACIÓN ══
+const _tokEnvio = {};
+function tokenEnvio(sig){
+  const n = Date.now(), t = _tokEnvio[sig];
+  if(t && n - t.t < 600000) return t.k;
+  const k = 'env-' + ((window.crypto && crypto.randomUUID) ? crypto.randomUUID() : n + '-' + Math.random().toString(36).slice(2));
+  _tokEnvio[sig] = {k, t:n};
+  return k;
+}
+function olvidarTokenEnvio(sig){ delete _tokEnvio[sig]; }
+
+function horasEnvio(e){ return (Date.now() - new Date(e.creado_en).getTime()) / 36e5; }
+function edadEnvioTxt(h){
+  if(h < 1) return 'hace ' + Math.max(1, Math.round(h*60)) + ' min';
+  if(h < 24) return 'hace ' + Math.round(h) + ' h';
+  return 'hace ' + Math.round(h/24) + ' d';
+}
+function nomUsuarioEnvio(id){ const u = USERS.find(x=>x.id===id); return u ? u.name : (id||''); }
+function nomProdEnvio(id){ const p = products.find(x=>x.id===id); return p ? p.nombre : ('#'+id); }
+function enviosVisiblesPara(e){
+  const mis = RECEPTOR_UBIC[curUser.id] || [];
+  return curUser.role==='maestro' || curUser.role==='bodeguero' || curUser.role==='gerencia' || mis.includes(e.destino_id);
+}
+function actualizarBadgeEnvios(){
+  const b = document.getElementById('badge-envios');
+  if(!b || !curUser) return;
+  const mis = RECEPTOR_UBIC[curUser.id] || [];
+  const tr = envios.filter(e=>e.estado==='EN_TRANSITO');
+  let n;
+  if(curUser.role==='maestro') n = tr.length + envios.filter(e=>e.estado==='DIFERENCIA').length;
+  else if(curUser.role==='bodeguero' || curUser.role==='gerencia') n = tr.filter(e=>horasEnvio(e) > 24).length;
+  else n = tr.filter(e=>mis.includes(e.destino_id)).length;
+  b.textContent = n; b.style.display = n ? 'block' : 'none';
+}
+
+function renderEnvios(){
+  const esAdm = curUser.role==='maestro';
+  const mis = RECEPTOR_UBIC[curUser.id] || [];
+  const ubic = id => ID_UBIC[id] || ('#'+id);
+  const tr = envios.filter(e=>e.estado==='EN_TRANSITO');
+  const porRecibir = tr.filter(e=> esAdm || mis.includes(e.destino_id));
+  const enCamino = (curUser.role==='bodeguero' || curUser.role==='gerencia') ? tr : [];
+  const difs = envios.filter(e=>e.estado==='DIFERENCIA' && (esAdm || curUser.role==='gerencia' || curUser.role==='bodeguero' || mis.includes(e.destino_id)));
+  const hist = envios.filter(e=>e.estado!=='EN_TRANSITO' && e.estado!=='DIFERENCIA' && enviosVisiblesPara(e)).slice(0,12);
+
+  const puedeAnular = e => esAdm || curUser.id === e.creado_por;
+  const cabecera = e => {
+    const h = horasEnvio(e), tarde = h > 24;
+    return `<div style="font-weight:700;font-size:15px">${nomProdEnvio(e.producto_id)}</div>
+      <div style="color:var(--tx2);font-size:13px;margin:2px 0">${ubic(e.origen_id)} → ${ubic(e.destino_id)} · enviado <b>${fmt(e.cantidad)}</b></div>
+      <div style="font-size:12px;color:${tarde?'#d33':'var(--tx3,#888)'};${tarde?'font-weight:700':''}">${tarde?'⚠ SIN CONFIRMAR · ':''}${nomUsuarioEnvio(e.creado_por)} lo envió ${edadEnvioTxt(h)}</div>`;
+  };
+
+  const cardRecibir = e => `
+    <div class="card" style="padding:.9rem;margin-bottom:.6rem;border-left:4px solid ${horasEnvio(e)>24?'#d33':'var(--blue,#3d5a80)'}">
+      ${cabecera(e)}
+      <div style="display:flex;gap:8px;margin-top:.6rem">
+        <input type="number" id="env-rec-${e.id}" min="0" step="0.01" inputmode="decimal" placeholder="¿Cuánto llegó?" class="form-control" style="flex:1">
+        <button class="btn-primary" id="env-btn-${e.id}" onclick="confirmarEnvioUI(${e.id})" style="white-space:nowrap">Confirmar</button>
+      </div>
+      <input type="text" id="env-obs-${e.id}" placeholder="Observación (obligatoria si llegó distinto)" class="form-control" style="margin-top:6px">
+      <div style="display:flex;gap:8px;margin-top:6px">
+        <button class="btn-sec" onclick="llegoTodoEnvio(${e.id})" style="flex:1">Llegó todo (${fmt(e.cantidad)})</button>
+        ${puedeAnular(e)?`<button class="btn-sec" onclick="anularEnvioUI(${e.id})" style="flex:1;color:#d33">Anular envío</button>`:''}
+      </div>
+    </div>`;
+
+  const cardCamino = e => `
+    <div class="card" style="padding:.9rem;margin-bottom:.6rem;border-left:4px solid ${horasEnvio(e)>24?'#d33':'#999'}">
+      ${cabecera(e)}
+      ${puedeAnular(e)?`<button class="btn-sec" onclick="anularEnvioUI(${e.id})" style="margin-top:.5rem;color:#d33">Anular envío</button>`:''}
+    </div>`;
+
+  const cardDif = e => `
+    <div class="card" style="padding:.9rem;margin-bottom:.6rem;border-left:4px solid #d98a00">
+      <div style="font-weight:700">${nomProdEnvio(e.producto_id)} · faltan ${fmt(e.diferencia)}</div>
+      <div style="color:var(--tx2);font-size:13px">${ubic(e.origen_id)} → ${ubic(e.destino_id)} · enviado ${fmt(e.cantidad)}, recibido ${fmt(e.cantidad_recibida)}</div>
+      <div style="font-size:12px;margin:2px 0">${nomUsuarioEnvio(e.confirmado_por)}: ${(e.obs_recepcion||'').replace(/</g,'&lt;')}</div>
+      ${esAdm?`<div style="display:flex;gap:8px;margin-top:.5rem">
+        <button class="btn-sec" onclick="resolverDifUI(${e.id},'devolver')" style="flex:1">Devolver al origen</button>
+        <button class="btn-sec" onclick="resolverDifUI(${e.id},'perdida')" style="flex:1;color:#d33">Dar de baja</button>
+      </div>`:`<div style="font-size:12px;color:var(--tx3,#888)">Pendiente de resolver por Felipe</div>`}
+    </div>`;
+
+  const filaHist = e => `<div class="move-item"><div class="move-dot" style="background:${e.estado==='ANULADO'?'#999':e.estado==='CONFIRMADO'?'#2d6b3a':'#d98a00'}"></div>
+    <div class="move-body"><div class="move-prod">${nomProdEnvio(e.producto_id)}</div>
+    <div class="move-detail">${ubic(e.origen_id)} → ${ubic(e.destino_id)} · ${e.estado.replace('_',' ').toLowerCase()}${e.confirmado_por?' · '+nomUsuarioEnvio(e.confirmado_por):''}</div></div>
+    <div class="move-right"><div class="move-qty">${fmt(e.cantidad_recibida!=null?e.cantidad_recibida:e.cantidad)}</div><div class="move-date">${new Date(e.confirmado_en||e.resuelto_en||e.creado_en).toLocaleDateString('es-CL')}</div></div></div>`;
+
+  return `
+  <div class="section-header"><div class="section-title">Envíos</div><div class="section-sub">Lo que sale de una bodega queda en tránsito hasta que quien recibe lo confirma</div></div>
+  ${(porRecibir.length||!enCamino.length)?`<div class="section-label">Por recibir${porRecibir.length?' ('+porRecibir.length+')':''}</div>
+  ${porRecibir.length?porRecibir.map(cardRecibir).join(''):`<div class="card"><div class="empty-state"><div class="empty-icon">✅</div><div class="empty-text">No tienes envíos pendientes de confirmar</div></div></div>`}`:''}
+  ${enCamino.length?`<div class="section-label">En camino (${enCamino.length})</div>${enCamino.map(cardCamino).join('')}`:''}
+  ${difs.length?`<div class="section-label">Con diferencia (${difs.length})</div>${difs.map(cardDif).join('')}`:''}
+  ${hist.length?`<div class="section-label">Últimos envíos cerrados</div><div class="card">${hist.map(filaHist).join('')}</div>`:''}`;
+}
+
+function llegoTodoEnvio(id){
+  const e = envios.find(x=>x.id===id); if(!e) return;
+  const inp = document.getElementById('env-rec-'+id);
+  if(inp) inp.value = e.cantidad;
+  confirmarEnvioUI(id);
+}
+
+async function confirmarEnvioUI(id){
+  const e = envios.find(x=>x.id===id); if(!e) return;
+  const v = parseFloat(document.getElementById('env-rec-'+id)?.value);
+  const obs = (document.getElementById('env-obs-'+id)?.value || '').trim();
+  if(isNaN(v) || v < 0) return showToast('Escribe cuánto llegó','err');
+  if(v > e.cantidad) return showToast('No puede llegar más de lo enviado ('+fmt(e.cantidad)+'). Pide corregir el envío','err');
+  if(v < e.cantidad){
+    if(!obs) return showToast('Llegó menos de lo enviado: escribe una observación','err');
+    if(!confirm('Enviaron '+fmt(e.cantidad)+' y tú recibes '+fmt(v)+'.\nFaltan '+fmt(e.cantidad - v)+'.\n\n¿Confirmas?')) return;
+  }
+  if(!bloquearAccion('envio-'+id)) return; // evita doble click
+  const btn = document.getElementById('env-btn-'+id);
+  if(btn){ btn.disabled = true; btn.style.opacity = '.6'; }
+  try{
+    const { data, error } = await sb.rpc('confirmar_envio', {
+      p_envio_id: id, p_cantidad_recibida: v, p_usuario: curUser.id, p_obs: obs
+    });
+    if(error){
+      showToast(error.message || 'No se pudo confirmar','err');
+      if(btn){ btn.disabled = false; btn.style.opacity = ''; }
+      await syncData();
+      return;
+    }
+    showToast(data==='CONFIRMADO' ? 'Recepción confirmada' : 'Recepción con diferencia registrada','ok');
+    await syncData();
+  } finally {
+    liberarAccion('envio-'+id);
+  }
+}
+
+async function anularEnvioUI(id){
+  const e = envios.find(x=>x.id===id); if(!e) return;
+  if(!confirm('¿Anular el envío de '+fmt(e.cantidad)+' de '+nomProdEnvio(e.producto_id)+'?\nEl producto vuelve a '+(ID_UBIC[e.origen_id]||'origen')+'.')) return;
+  if(!bloquearAccion('envio-'+id)) return;
+  try{
+    const { error } = await sb.rpc('anular_envio', { p_envio_id: id, p_usuario: curUser.id });
+    if(error){ showToast(error.message || 'No se pudo anular','err'); await syncData(); return; }
+    showToast('Envío anulado, producto devuelto al origen');
+    await syncData();
+  } finally { liberarAccion('envio-'+id); }
+}
+
+async function resolverDifUI(id, accion){
+  const e = envios.find(x=>x.id===id); if(!e) return;
+  const txt = accion==='devolver'
+    ? 'Los '+fmt(e.diferencia)+' vuelven a '+(ID_UBIC[e.origen_id]||'origen')+'.'
+    : 'Los '+fmt(e.diferencia)+' se dan de baja como pérdida.';
+  if(!confirm(txt+'\n\n¿Confirmas?')) return;
+  if(!bloquearAccion('envio-'+id)) return;
+  try{
+    const { error } = await sb.rpc('resolver_diferencia', { p_envio_id: id, p_accion: accion, p_usuario: curUser.id, p_obs: '' });
+    if(error){ showToast(error.message || 'No se pudo resolver','err'); await syncData(); return; }
+    showToast('Diferencia resuelta');
+    await syncData();
+  } finally { liberarAccion('envio-'+id); }
 }
 function renderDevolucion(){
   const locDef=curUser.id==='rulo'?'Rulo':curUser.id==='paine'?'Paine':'Caseta Cerrillos';
@@ -7247,7 +7420,7 @@ function renderReingreso(){
   <div style="padding:2px 0 8px">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
       <div style="font-size:20px;font-weight:700">Reingreso a cuarteles</div>
-      <button onclick="reingresoCargar()" aria-label="Actualizar" style="border:1px solid var(--bd2);background:var(--surf);border-radius:10px;padding:8px 12px;cursor:pointer"><i class="ti ti-refresh"></i></button>
+      <button onclick="reingresoCargar()" aria-label="Actualizar" style="border:1px solid #2ecc71;background:transparent;color:#1f8f4e;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:13px;font-weight:600;white-space:nowrap"><i class="ti ti-refresh"></i> Actualizar</button>
     </div>
     <div id="rg-sub" style="color:var(--tx3);font-size:13px;margin:2px 0 12px">Cargando…</div>
     <input id="rg-q" class="form-control" placeholder="Buscar cuartel (ej. C27)" autocomplete="off" oninput="rgBuscar(this.value)" style="margin-bottom:10px" value="${rgTxt}">
